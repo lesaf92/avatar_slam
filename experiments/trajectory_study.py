@@ -73,6 +73,7 @@ def main() -> None:
                 row[f"ate_alone_{agent}_m"] = ind["ate_local_m"][i]
                 row[f"ate_fused_{agent}_m"] = dec["ate_fused_m"][i]
                 row[f"ate_team_{agent}_m"] = dec["ate_team_per_agent_m"].get(i, float("nan"))
+                row[f"ate_oracle_{agent}_m"] = cen["ate_team_per_agent_m"].get(i, float("nan"))
             rows.append(row)
             alone = {a: round(ind["ate_local_m"][i], 3) for i, a in dec["agents"].items()}
             print(
