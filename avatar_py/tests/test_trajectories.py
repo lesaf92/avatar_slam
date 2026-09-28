@@ -103,3 +103,10 @@ def test_surfacing_window_uses_rf_only_at_the_surface():
     for e in rf_tx:
         k = int(np.searchsorted(times, e["t"], side="right") - 1)
         assert sim.agents[uuv0].gt[k, 2] >= -0.3  # only while surfaced
+
+
+def test_polyline_is_a_one_way_path_from_start():
+    spec = TrajectorySpec("polyline", start=(12.0, 42.0), z=-5.0, loop=False,
+                          params={"points": [[0, 0], [10, 0], [10, -5, -3]]})  # fmt: skip
+    wp = spec.waypoints()
+    assert np.allclose(wp, [[12, 42, -5], [22, 42, -5], [22, 37, -3]])

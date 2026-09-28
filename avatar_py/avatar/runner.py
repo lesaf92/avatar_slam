@@ -26,7 +26,7 @@ from avatar.agent import DEFAULT_LINK_RECEIVERS, AvatarAgent, AvatarParams
 from avatar.backend.graph import FactorGraph, VarType
 from avatar.comm.gateway import Gateway
 from avatar.comm.network import Network
-from avatar.eval.metrics import ate_rmse, chain_frames, frame_error, team_ate
+from avatar.eval.metrics import ate_rmse, frame_error, team_ate
 from avatar.geometry import compose, inverse, transform_poses
 from avatar.sim.measurements import SimData, generate_measurements
 from avatar.sim.scenarios import SCENARIOS, Scenario
@@ -199,9 +199,8 @@ def run_decentralized(
                 for j in ag.alignments:
                     first_align[i].setdefault(j, float(t))
             if team_connected_s is None:
-                known = agents[anchor_id].consistent_frames()
-                edges = {kk: (fe.T, fe.sigma_xy) for kk, fe in known.items()}
-                if slam_ids <= set(chain_frames(anchor_id, edges)):
+                # chain over every consistent estimate, incl. neighbours' estimates of the anchor
+                if slam_ids <= set(agents[anchor_id].team_frames(fuse=False)):
                     team_connected_s = float(t)
             for i, ag in agents.items():
                 z_now = float(sim.agents[i].gt[k, 2])

@@ -21,6 +21,7 @@ kind                    shape (what it stresses)
 ``helix``               circle climbing/descending between ``z`` and ``z_top``
 ``yoyo``                straight legs with depth oscillating between ``z`` and
                         ``z_top`` (e.g. to the surface and back: surfacing windows)
+``polyline``            explicit waypoints (e.g. a one-way transit with ``loop: false``)
 ``hold``                static node
 ``csv``                 replay of a recorded path (``file``: CSV with x,y,z columns)
 ======================  ===========================================================
@@ -107,6 +108,20 @@ def yoyo(length=60.0, z=-6.0, z_top=0.0, period=20.0, step_m=1.0, **_) -> FloatA
     return np.vstack([out, out[::-1][1:]])  # out and back along the same line
 
 
+def polyline(points=((0.0, 0.0), (20.0, 0.0)), z=0.0, **_) -> FloatArray:
+    """Explicit waypoints ``[(x, y) | (x, y, z), ...]`` in the pattern frame [m].
+
+    Points without a height use ``z``. Use ``loop: false`` for a one-way transit.
+    """
+    pts = []
+    for q in points:
+        q = [float(v) for v in q]
+        pts.append((q[0], q[1], q[2] if len(q) > 2 else z))
+    out = np.asarray(pts, dtype=float)
+    out[:, :2] -= out[0, :2]  # the first point is the start (placed at ``start``)
+    return out
+
+
 def hold(z=0.0, **_) -> FloatArray:
     return np.array([(0.0, 0.0, z), (0.0, 0.0, z)])
 
@@ -131,6 +146,7 @@ TRAJECTORY_LIBRARY: dict[str, Callable[..., FloatArray]] = {
     "spiral": spiral,
     "helix": helix,
     "yoyo": yoyo,
+    "polyline": polyline,
     "hold": hold,
     "csv": from_csv,
 }

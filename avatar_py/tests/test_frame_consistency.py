@@ -100,3 +100,27 @@ def test_frame_graph_fusion_is_exact_on_exact_edges_and_averages_noisy_ones():
     err_chain = np.hypot(*(init[2] - truth)[:2])
     err_fused = np.hypot(*(fused[2] - truth)[:2])
     assert err_fused < 0.6 * err_chain
+
+
+def test_windowed_association_never_loses_pairs():
+    # Windows add pairs from sub-maps; the merged pairing is one-to-one.
+    base = AvatarParams()
+    win = AvatarParams(align_window_kf=120)
+    sc, sim = make_sim("harbor_fleet", 0, 300.0, base)
+    import avatar.runner as R
+
+    got = {}
+    orig = R._make_agents
+    for name, params in (("base", base), ("win", win)):
+        R._make_agents = lambda *a, _n=name, **k: got.setdefault(_n, orig(*a, **k))
+        try:
+            run_decentralized(sc, sim, params, 0)
+        finally:
+            R._make_agents = orig
+    for i, ag in got["win"].items():
+        for pairs in ag.alignment_ids.values():
+            mine = [p[0] for p in pairs]
+            rem = [p[1] for p in pairs]
+            assert len(set(mine)) == len(mine) and len(set(rem)) == len(rem)
+        n_base = sum(len(v) for v in got["base"][i].alignment_ids.values())
+        assert sum(len(v) for v in ag.alignment_ids.values()) >= n_base

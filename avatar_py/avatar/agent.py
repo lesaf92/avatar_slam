@@ -70,6 +70,11 @@ class AvatarParams:
     cycle_check: bool = True  # team frame-graph cycle consistency (T-X2-02)
     point_obs_robust_k: float | None = None  # Huber on landmark observations (front-end errors)
     fuse_team_frames: bool = True  # pose graph over agent frames (else: least-σ chain only)
+    # Drift-tolerant association: also align sliding windows of this many own
+    # keyframes (0 = whole map only). Recent sub-maps stay nearly rigid when the
+    # whole map is bent by drift (LOG L19).
+    align_window_kf: int = 0
+    align_window_min_landmarks: int = 6
     cycle_gate: CycleGate = field(default_factory=CycleGate)
 
 
@@ -85,6 +90,8 @@ class LandmarkMeta:
     extent_sum: FloatArray = field(default_factory=lambda: np.zeros(3))
     desc_sum: FloatArray | None = None
     n_desc: int = 0
+    first_k: int = -1  # first and last own keyframe that observed this part
+    last_k: int = -1
 
     def update(self, modality: LandmarkFlags, cls: int, extent: FloatArray, desc: FloatArray):
         self.n_obs += 1
@@ -221,7 +228,11 @@ class AvatarAgent:
                         self.params.coaxial_sigma_m,
                     )
             self.local.add_point_obs(key, lkey, det.p_body, det.sigmas)
-            self.meta[lid].update(det.modality, det.class_id, det.extent, det.descriptor)
+            meta = self.meta[lid]
+            meta.update(det.modality, det.class_id, det.extent, det.descriptor)
+            meta.last_k = self.k
+            if meta.first_k < 0:
+                meta.first_k = self.k
 
     # ------------------------------------------------------------------ local solve
     def solve_local(self, with_marginals: bool = True) -> None:
@@ -419,8 +430,8 @@ class AvatarAgent:
                 return
             self.frames[(msg.sender_id, msg.other_id)] = fe
 
-    def _my_landmarks(self) -> tuple[LandmarkSet, list[int]]:
-        lids = list(self._lm_cache)
+    def _my_landmarks(self, lids: list[int] | None = None) -> tuple[LandmarkSet, list[int]]:
+        lids = list(self._lm_cache) if lids is None else lids
         return self._landmark_set(
             lids,
             [self._lm_cache[i][0] for i in lids],
@@ -471,19 +482,65 @@ class AvatarAgent:
         for sender in sorted(self._dirty):
             remote, remote_ids = self._remote_landmarks(sender)
             res = align(mine, remote, self.params.association)
+            ids = None
+            if res is not None:
+                ids = [(my_ids[i], remote_ids[j], c) for i, j, c in res.pairs]
+            if self.params.align_window_kf > 0:
+                res, ids = self._windowed_alignment(remote, remote_ids, res, ids)
             if res is None:
                 continue
             old = self.alignments.get(sender)
-            if old is not None and res.n_inliers < old.n_inliers:
+            if self.params.align_window_kf > 0:
+                # windows of a drifting map legitimately disagree on the frame by
+                # metres; keep whichever pairing links more parts
+                if len(ids) < len(self.alignment_ids.get(sender, [])):
+                    continue
+            elif old is not None and res.n_inliers < old.n_inliers:
                 d = res.T_mine_from_remote - old.T_mine_from_remote
                 if np.hypot(d[0], d[1]) > 1.0:
                     continue  # weaker, inconsistent hypothesis: keep the old one
             self.alignments[sender] = res
-            self.alignment_ids[sender] = [
-                (my_ids[i], remote_ids[j], cross) for i, j, cross in res.pairs
-            ]
+            self.alignment_ids[sender] = ids
         self._dirty.clear()
         self.check_cycles()
+
+    def _windowed_alignment(self, remote, remote_ids, full, full_ids):
+        """Align sliding windows of own keyframes and merge their landmark pairs.
+
+        Windows of ``align_window_kf`` keyframes (stride half a window) select
+        the own parts observed inside them. Each window with enough parts is
+        aligned on its own. Pairs from all accepted windows (and the whole-map
+        alignment) are merged; a part paired differently by two windows keeps
+        the pair of the window with more inliers. Returns the alignment with
+        the most inliers (its frame initialises the fused graph) and the merged
+        pairs.
+        """
+        w = self.params.align_window_kf
+        results = [] if full is None else [(full, full_ids)]
+        for t0 in range(0, max(self.k - w // 2, 0) + 1, max(w // 2, 1)):
+            lids = [
+                lid for lid in self._lm_cache
+                if self.meta[lid].first_k < t0 + w and self.meta[lid].last_k >= t0
+            ]  # fmt: skip
+            if len(lids) < self.params.align_window_min_landmarks:
+                continue
+            sub, sub_ids = self._my_landmarks(lids)
+            res = align(sub, remote, self.params.association)
+            if res is not None:
+                results.append((res, [(sub_ids[i], remote_ids[j], c) for i, j, c in res.pairs]))
+        if not results:
+            return None, None
+        best: dict[int, tuple[int, tuple[int, int, bool]]] = {}
+        taken: dict[int, int] = {}
+        for res, ids in sorted(results, key=lambda r: -r[0].n_inliers):
+            for pair in ids:
+                mine_id, rem_id, _ = pair
+                if mine_id in best or rem_id in taken:
+                    continue  # one-to-one; stronger windows win
+                best[mine_id] = (res.n_inliers, pair)
+                taken[rem_id] = mine_id
+        top = max(results, key=lambda r: r[0].n_inliers)[0]
+        return top, [pair for _, pair in best.values()]
 
     def check_cycles(self) -> None:
         """Veto frame estimates that break a cycle of the team frame graph (T-X2-02).
