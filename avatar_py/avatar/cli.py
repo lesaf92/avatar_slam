@@ -30,18 +30,24 @@ from avatar.agent import AvatarParams
 from avatar.runner import MODES, RunResult, make_sim, run
 from avatar.semantics import CLASS_NAMES
 
+OUTPUT_DIRS = ("paper/data", "viz/data")  # outputs do not make the code "dirty"
+
 
 def _git_commit() -> str:
+    """Short HEAD hash, plus ``-dirty`` if tracked files outside output dirs changed."""
     try:
-        out = subprocess.run(
-            ["git", "describe", "--always", "--dirty", "--abbrev=7"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return out.stdout.strip()
+        rev = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()  # fmt: skip
+        exclude = [f":(top,exclude){d}" for d in OUTPUT_DIRS]
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no", "--", ":/", *exclude],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()  # fmt: skip
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+    return rev + ("-dirty" if status else "")
 
 
 def _jsonable(obj):
