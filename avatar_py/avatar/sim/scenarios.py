@@ -17,6 +17,7 @@ Team (default): ``usv_0`` (anchor; LiDAR + camera + sonar; RF + acoustic),
 
 from __future__ import annotations
 
+import dataclasses
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -229,6 +230,7 @@ def harbor_fleet(
     with_usv: bool = False,
     paths: dict[str, dict] | None = None,
     frontend_errors: dict | None = None,
+    acoustic_bps: float | None = None,
 ) -> Scenario:
     """Harbour world with the PI's **reference fleet** (ADR-0006, docs/hardware.md).
 
@@ -251,7 +253,8 @@ def harbor_fleet(
     ``z > -0.3 m`` gives the vehicle an RF window only if it also has ``"rf"`` in
     ``paths[name]["comm"]``. ``frontend_errors`` sets
     :class:`~avatar.sim.measurements.FrontEndErrors` (clutter, identity switches;
-    off by default).
+    off by default). ``acoustic_bps`` overrides the acoustic profile's raw bit
+    rate (bandwidth sweeps, T-C5-01); everything else of the profile is kept.
     """
     errors = FrontEndErrors(**(frontend_errors or {}))
     world = harbor_world(rng)
@@ -297,6 +300,8 @@ def harbor_fleet(
                   absolute_z="surface", odometry=odo["blueboat_vio"])
         )  # fmt: skip
     channels = {RF: CHANNEL_PROFILES[rf], AC: CHANNEL_PROFILES[acoustic]}
+    if acoustic_bps is not None:
+        channels[AC] = dataclasses.replace(channels[AC], bandwidth_bps=float(acoustic_bps))
     return Scenario(
         "harbor_fleet", world, agents, channels=channels, anchor_id=0, frontend_errors=errors
     )

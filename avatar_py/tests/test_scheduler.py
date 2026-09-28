@@ -96,7 +96,7 @@ def test_link_receivers_follow_the_gateway():
     assert Domain.UNDERWATER in link_receivers(sc, ugv.agent_id)[LinkType.RF]
 
 
-@pytest.mark.parametrize("scheduler", ["quality", "voi"])
+@pytest.mark.parametrize("scheduler", ["fifo", "quality", "voi"])
 def test_both_schedulers_align_the_fleet(scheduler):
     params = AvatarParams(scheduler=scheduler)
     sc, sim = make_sim("harbor_fleet", 0, 400.0, params)
@@ -106,7 +106,14 @@ def test_both_schedulers_align_the_fleet(scheduler):
 
 
 def test_unknown_scheduler_is_rejected():
-    params = AvatarParams(scheduler="fifo")
+    params = AvatarParams(scheduler="lifo")
     sc, sim = make_sim("harbor_fleet", 0, 60.0, params)
     with pytest.raises(ValueError):
         run_decentralized(sc, sim, params, 0)
+
+
+def test_acoustic_rate_override_keeps_the_rest_of_the_profile():
+    base = harbor_fleet(np.random.default_rng(0)).channels[LinkType.ACOUSTIC]
+    slow = harbor_fleet(np.random.default_rng(0), acoustic_bps=16).channels[LinkType.ACOUSTIC]
+    assert slow.bandwidth_bps == 16.0 and base.bandwidth_bps == 64.0
+    assert slow.mtu_B == base.mtu_B and slow.max_range_m == base.max_range_m

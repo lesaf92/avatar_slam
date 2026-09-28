@@ -49,7 +49,7 @@ class AvatarParams:
     exchange_period_s: float = 20.0
     descriptor_dim: int = 8
     acoustic_descriptor_dim: int = 0  # descriptors are not worth their bytes at 10²-10³ bps
-    scheduler: str = "voi"  # digest ordering: "voi" (T-C2-01) or "quality" (v0 heuristic)
+    scheduler: str = "voi"  # digest ordering: "voi" (T-C2-01), "quality" (v0) or "fifo"
     min_obs_to_share: int = 2
     max_share_sigma_m: float = 3.0
     coaxial_sigma_m: float = 0.1
@@ -260,9 +260,10 @@ class AvatarAgent:
         (``avatar.comm.scheduler``), accounting for what was already sent on this
         link and for whether the receivers' media can match each record.
         ``scheduler="quality"`` (v0): never-sent first by ``n_obs / (σ_xy + 0.05)``.
-        In both, landmarks that moved > 0.25 m or doubled their observation count
-        since last sent follow, then the rest. Acoustic packets use
-        ``acoustic_descriptor_dim`` (default 0: no descriptors).
+        ``scheduler="fifo"``: never-sent first in the order they were first
+        observed (the naive baseline for H2). In all, landmarks that moved > 0.25 m
+        or doubled their observation count since last sent follow, then the rest.
+        Acoustic packets use ``acoustic_descriptor_dim`` (default 0: no descriptors).
         """
         p = self.params
         dim = p.acoustic_descriptor_dim if link == LinkType.ACOUSTIC else p.descriptor_dim
@@ -298,6 +299,9 @@ class AvatarAgent:
             credited = set(picked)
         elif p.scheduler == "quality":
             order = fresh_order + [lid for _, lid in sorted(changed, reverse=True)]
+            credited = set()
+        elif p.scheduler == "fifo":  # naive baseline: first observed, first sent
+            order = [lid for _, lid in fresh] + [lid for _, lid in changed]
             credited = set()
         else:
             raise ValueError(f"unknown scheduler {p.scheduler!r}")
