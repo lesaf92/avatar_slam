@@ -11,35 +11,40 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
-### L23. Why drift is not corrected: frames are free, and the cycle check blames the wrong edge
+### L23. Why drift is not corrected: the start anchor has no correct link to the team
 
-Diagnostic on `fleet_transit_3uuv`, seed 2, 1 kbit/s (commit after `d8ff828`).
+Diagnostic on `fleet_transit_3uuv`, seed 2, 1 kbit/s (commit `f07863c`).
 Pairs from **both** ends reach `uuv_1`'s fused graph: 5–6 pairs with `uuv_2`
 at keyframes 0–55 (start) and 13 with `uuv_0`/UGV/UAV at keyframes 436–514
 (end). All whitened residuals are small (median 0.3–0.4, none > 2). The
-trajectory still does not bend, for two reasons:
+trajectory still does not bend:
 
 1. **Each neighbour's frame is a free variable** in the fused graph. The start
    cluster pins T(`uuv_2`), the end cluster pins T(`uuv_0`), and nothing in the
    graph ties the two frames together, so each absorbs its cluster rigidly.
    Fix, implemented but **off by default**: `frame_links_in_fused` adds between
    factors among neighbour frame variables from received, cycle-consistent
-   estimates (σ × 2 against double counting). Here it changes nothing,
-   because of reason 2.
-2. **The cycle check rejects the one link that would help.** `uuv_0`'s
-   alignment of `uuv_2` (4 inliers, correct) closes the cycle `uuv_2 → uuv_1
-   (start) … uuv_1 (end) → uuv_0`. That cycle is inconsistent *because of
-   `uuv_1`'s drift*, and the Kruskal pass blames its weakest edge. Both
-   `uuv_0` (veto) and `uuv_1` (rejected received estimate) drop it.
-   **Cycle consistency assumes rigid maps.** A cycle that passes through two
-   distant regions of a drifting agent's map needs a gate that grows with that
-   agent's odometry uncertainty between the two regions. Without it, the check
-   will veto correct edges exactly where collaboration matters most.
+   estimates (σ × 2 against double counting).
+2. **No correct estimate links `uuv_2` to the rest of the team.** The only
+   candidate, `uuv_0`'s 4-inlier alignment of `uuv_2`, is **wrong** (38.6 m
+   off; cycle error 51.7 m / 161°), and the cycle check rightly rejects it.
+   `uuv_2` surveys the north piers, which overlap too little with the other
+   agents. So the start constraint stays free relative to the end constraints,
+   and the frame links have nothing correct to add.
+3. Uncertainty is modelled honestly in translation: `uuv_1`'s end-anchored
+   frame estimates carry σ ≈ 5 m and its pose marginal at k = 500 is 4.1 m
+   (actual drift 4.4 m). Yaw is not: the injected yaw bias (0.0015 rad/m,
+   ≈ 24° over 275 m, 1σ) is not in the estimator's odometry model (≈ 2°), so
+   yaw gates are over-tight for long transits.
 
-Next (T-X1-02): add the drift term to the cycle gate (σ from the agent's own
-marginal between the keyframes that anchor each alignment), keep
-`frame_links_in_fused` on, and re-run `fleet_transit_3uuv` and the 50-seed
-cycle-check benchmark (which must stay at 0 wrong alignments).
+*Correction:* an earlier version of this entry (commit `f07863c`) said the
+cycle check vetoed a *correct* link. It did not: checked against ground
+truth, that link is wrong.
+
+Next (T-X1-02): a scenario in which the start surveyor is itself linked to the
+team (e.g. `uuv_2` sharing piles with `uuv_0` or seen from the quay by the
+UGV); `frame_links_in_fused` on; estimator odometry σ that includes the yaw-bias
+effect. Then re-run the 50-seed cycle-check benchmark (must stay at 0 wrong).
 
 ### L22. Both transit ends surveyed by teammates: still no drift correction (negative)
 
