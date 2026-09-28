@@ -129,3 +129,54 @@ def test_variable_type_checks():
         g.add_variable("p", VarType.POSE4, np.zeros(4))
     with pytest.raises(ValueError):
         g.add_pose_prior("p", np.zeros(4), [0, 1, 1, 1])
+
+
+@pytest.mark.parametrize("which", ["landmarks", "poses", "mixed"])
+def test_schur_marginals_match_dense_inverse(rng, which):
+    """Schur-complement and direct marginals equal blocks of the dense H⁻¹."""
+    gt = [np.array([0, 0, 0, 0.0])]
+    for _ in range(9):
+        gt.append(compose(gt[-1], [1.5, 0.2, 0.0, np.pi / 8]))
+    lms = rng.uniform(-6, 6, (6, 3))
+    g = FactorGraph()
+    for k, p in enumerate(gt):
+        g.add_variable(("x", k), VarType.POSE4, p)
+    for j, lm in enumerate(lms):
+        g.add_variable(("l", j), VarType.POINT3, lm)
+    g.add_pose_prior(("x", 0), gt[0], [1e-2] * 4)
+    for k in range(1, len(gt)):
+        g.add_between(("x", k - 1), ("x", k), between(gt[k - 1], gt[k]), [0.05, 0.05, 0.1, 0.02])
+    for k, p in enumerate(gt):
+        for j, lm in enumerate(lms):
+            if (k + j) % 3:  # partial visibility
+                g.add_point_obs(("x", k), ("l", j), inverse_transform_points(p, lm), [0.1] * 3)
+    keys = {
+        "landmarks": [("l", j) for j in range(6)],
+        "poses": [("x", 4), ("x", 9)],
+        "mixed": [("x", 2), ("l", 3), ("l", 0)],
+    }[which]
+    _, _, J = g._linearize(g._state())
+    Sigma = np.linalg.inv((J.T @ J).toarray())
+    schur = g.marginal_covariances(keys, method="schur")
+    direct = g.marginal_covariances(keys, method="direct")
+    for k in keys:
+        i = g._index[k]
+        o, d = g._offsets[i], int(g._types[i])
+        want = Sigma[o : o + d, o : o + d]
+        assert np.allclose(schur[k], want, rtol=1e-8, atol=1e-12)
+        assert np.allclose(direct[k], want, rtol=1e-8, atol=1e-12)
+    with pytest.raises(ValueError):
+        g.marginal_covariances(keys, method="qr")
+
+
+def test_copy_is_independent():
+    g = FactorGraph()
+    g.add_variable("a", VarType.POINT3, np.zeros(3))
+    g.add_point_prior("a", [1.0, 2.0, 3.0], [1.0, 1.0, 1.0])
+    g.optimize()
+    h = g.copy()
+    h.add_variable("b", VarType.POINT3, np.zeros(3))
+    h.add_point_prior("b", [0.0, 0.0, 0.0], [1.0, 1.0, 1.0])
+    h.set_value("a", [9.0, 9.0, 9.0])
+    assert not g.has("b") and g.num_factors() == 1
+    assert np.allclose(g.value("a"), [1.0, 2.0, 3.0])

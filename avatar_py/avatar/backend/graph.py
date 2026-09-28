@@ -28,7 +28,6 @@ the sparse normal equations, with multiplicative diagonal damping.
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Hashable, Iterable
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -61,6 +60,7 @@ class _FactorBlock:
     sigmas: list[FloatArray] = field(default_factory=list)
     flags: list[bool] = field(default_factory=list)  # per-factor boolean option
     robust_k: float | None = None
+    _arrays: tuple | None = field(default=None, repr=False)  # cache, reset by add()
 
     def add(self, var_idx: tuple[int, ...], meas, sigmas, flag: bool = False) -> None:
         sig = np.asarray(sigmas, dtype=float)
@@ -70,6 +70,28 @@ class _FactorBlock:
         self.meas.append(np.atleast_1d(np.asarray(meas, dtype=float)))
         self.sigmas.append(sig)
         self.flags.append(flag)
+        self._arrays = None
+
+    def arrays(self) -> tuple[NDArray[np.int64], FloatArray, FloatArray, NDArray[np.bool_]]:
+        """(variable indices, measurements, sigmas, flags) stacked; cached, read-only."""
+        if self._arrays is None:
+            out = (
+                np.asarray(self.vars, dtype=np.int64),
+                np.vstack(self.meas),
+                np.vstack(self.sigmas),
+                np.asarray(self.flags, dtype=bool),
+            )
+            for a in out:
+                a.setflags(write=False)
+            self._arrays = out
+        return self._arrays
+
+    def copy(self) -> _FactorBlock:
+        """Copy with its own lists; the (never mutated) arrays and cache are shared."""
+        return _FactorBlock(
+            list(self.vars), list(self.meas), list(self.sigmas), list(self.flags),
+            self.robust_k, self._arrays,
+        )  # fmt: skip
 
     def __len__(self) -> int:
         return len(self.vars)
@@ -83,6 +105,16 @@ class OptimizeResult:
     final_cost: float
     iterations: int
     converged: bool
+
+
+def _factor(A: sp.csc_matrix):
+    """Sparse LU of a symmetric positive (semi)definite matrix.
+
+    A symmetric minimum-degree ordering (on AᵀA + A) gives ~4x less fill-in and
+    ~2x faster solves than SuperLU's default COLAMD on SLAM normal equations
+    (docs/LOG.md L10).
+    """
+    return spla.splu(A, permc_spec="MMD_AT_PLUS_A")
 
 
 class FactorGraph:
@@ -198,8 +230,19 @@ class FactorGraph:
         self._blocks["range"].add((a, b), [range_m], [sigma])
 
     def copy(self) -> FactorGraph:
-        """Independent copy (values and factor lists)."""
-        return copy.deepcopy(self)
+        """Independent copy (values and factor lists).
+
+        Measurement arrays are shared: the graph never mutates them in place.
+        """
+        g = FactorGraph.__new__(FactorGraph)
+        g._index = dict(self._index)
+        g._keys = list(self._keys)
+        g._types = list(self._types)
+        g._offsets = list(self._offsets)
+        g._dim = self._dim
+        g._values = [v.copy() for v in self._values]
+        g._blocks = {name: blk.copy() for name, blk in self._blocks.items()}
+        return g
 
     # ------------------------------------------------------------------ linearization
     def _state(self) -> FloatArray:
@@ -264,9 +307,7 @@ class FactorGraph:
 
     @staticmethod
     def _arr(blk: _FactorBlock):
-        idx = np.asarray(blk.vars, dtype=np.int64)
-        meas = np.vstack(blk.meas)
-        sig = np.vstack(blk.sigmas)
+        idx, meas, sig, _ = blk.arrays()
         return idx, meas, sig
 
     def _lin_pose_prior(self, x, off, blk, jac):
@@ -350,7 +391,7 @@ class FactorGraph:
 
     def _lin_linked_point(self, x, off, blk, jac):
         idx, meas, sig = self._arr(blk)
-        horiz = np.asarray(blk.flags, dtype=bool)
+        horiz = blk.arrays()[3]
         ol, ot = off[idx[:, 0]], off[idx[:, 1]]
         lm = x[ol[:, None] + np.arange(3)]
         t = x[ot[:, None] + np.arange(3)]
@@ -430,7 +471,7 @@ class FactorGraph:
             while lam < 1e12:
                 A = H + sp.diags(lam * np.maximum(diag, 1e-9), format="csc")
                 try:
-                    delta = -spla.spsolve(A, g)
+                    delta = -_factor(A).solve(g)
                 except RuntimeError:
                     lam *= 10.0
                     continue
@@ -458,28 +499,60 @@ class FactorGraph:
         self._set_state(x)
         return OptimizeResult(initial, cost, it, converged)
 
-    def marginal_covariances(self, keys: Iterable[Hashable]) -> dict[Hashable, FloatArray]:
-        """Marginal covariance blocks at the current estimate (Laplace approximation)."""
+    SCHUR_MAX_DIM = 3000  # dense Schur complement limit (requested dimensions)
+
+    def marginal_covariances(
+        self, keys: Iterable[Hashable], method: str = "auto"
+    ) -> dict[Hashable, FloatArray]:
+        """Marginal covariance blocks at the current estimate (Laplace approximation).
+
+        ``method="schur"`` factors only the block of the *other* variables
+        (``H_aa``, typically the pose chain, which factorises with little
+        fill-in) and inverts the dense Schur complement of the requested
+        block, ``Σ_bb = (H_bb − H_ba H_aa⁻¹ H_ab)⁻¹``. This is much cheaper than
+        ``method="direct"`` (one sparse LU of the full H, solved for every
+        requested column) when many landmarks are requested, because the
+        landmarks cause the fill-in. ``"auto"`` uses Schur when the requested
+        block has at most :attr:`SCHUR_MAX_DIM` dimensions.
+        """
         keys = list(keys)
         if not keys:
             return {}
         _, _, J = self._linearize(self._state())
         H = (J.T @ J).tocsc()
         H = H + sp.identity(self._dim, format="csc") * 1e-12
-        lu = spla.splu(H)
-        cols = []
+        cols: list[int] = []
         spans = []
         for k in keys:
             idx = self._index[k]
             o, d = self._offsets[idx], int(self._types[idx])
             spans.append((len(cols), d))
             cols.extend(range(o, o + d))
-        E = np.zeros((self._dim, len(cols)))
-        E[cols, np.arange(len(cols))] = 1.0
-        X = lu.solve(E)
+        if method == "auto":
+            method = "schur" if len(cols) <= self.SCHUR_MAX_DIM else "direct"
+        if method == "schur":
+            b = np.asarray(cols, dtype=np.int64)
+            mask = np.ones(self._dim, dtype=bool)
+            mask[b] = False
+            a = np.flatnonzero(mask)
+            H_bb = H[b][:, b].toarray()
+            if len(a):
+                H_ab = H[a][:, b]
+                X = _factor(H[a][:, a].tocsc()).solve(H_ab.toarray())
+                S = H_bb - H_ab.T @ X
+            else:
+                S = H_bb
+            Sigma = np.linalg.inv(0.5 * (S + S.T))
+            X = Sigma  # columns/rows in request order
+        elif method == "direct":
+            lu = _factor(H)
+            E = np.zeros((self._dim, len(cols)))
+            E[cols, np.arange(len(cols))] = 1.0
+            X = lu.solve(E)[cols]
+        else:
+            raise ValueError(f"unknown method {method!r}")
         out = {}
         for k, (start, d) in zip(keys, spans, strict=True):
-            rows = cols[start : start + d]
-            block = X[rows, start : start + d]
+            block = X[start : start + d, start : start + d]
             out[k] = 0.5 * (block + block.T)
         return out

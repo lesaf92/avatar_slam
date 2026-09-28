@@ -9,6 +9,13 @@ Examples
 
 from __future__ import annotations
 
+import os
+
+# Small sparse solves run 5-10x slower with multi-threaded BLAS, and much worse
+# when several runs share the CPU (docs/LOG.md L10). Must precede the NumPy import.
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 import argparse
 import csv
 import json
