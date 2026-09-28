@@ -1,0 +1,13 @@
+# Feature-poor transit with both ends in surveyed water (H1, T-X1-02): uuv_1
+# leaves pier A at (50, 4), crosses the sparse outer field, returns along the
+# pipeline and ends among the piles at (15, 0), one way. uuv_0 keeps its
+# default lawnmower over the piers, so the team knows both ends of the transit
+# while uuv_1 alone never revisits its own landmarks (sonar range 30 m, 90° FOV).
+scenario: harbor_fleet
+duration_s: 600
+args:
+  acoustic: m64
+  n_uuv: 2
+  paths:
+    uuv_1: {kind: polyline, start: [50, 4], z: -5.0, speed_mps: 0.5, loop: false,
+            points: [[0, 0], [50, 0], [50, -34], [-35, -34], [-35, -4]]}

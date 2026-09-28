@@ -46,8 +46,9 @@ def main() -> None:
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--duration", type=float, default=None, help="override the preset's")
     ap.add_argument("--out", default="results/trajectory_study.csv")
+    ap.add_argument("--align-window", type=int, default=0, help="AvatarParams.align_window_kf")
     args = ap.parse_args()
-    params = AvatarParams()
+    params = AvatarParams(align_window_kf=args.align_window)
     rev = commit()
     rows = []
     for name in args.presets:
@@ -61,6 +62,7 @@ def main() -> None:
             row = {
                 "commit": rev,
                 "preset": name,
+                "align_window_kf": args.align_window,
                 "seed": seed,
                 "duration_s": duration,
                 "team_ate_dec_m": dec["ate_team_m"],
