@@ -245,6 +245,9 @@ class Detection:
     extent: NDArray[np.float64]  # measured (footprint x, footprint y, height) [m]
     class_id: int
     descriptor: NDArray[np.float64]  # zeros if not provided
+    # Ground truth for evaluation only: the part really observed (differs from
+    # ``part_index`` after an identity switch; -1 for clutter). None = same.
+    true_part_index: int | None = None
 
 
 def detect(

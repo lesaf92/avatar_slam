@@ -60,6 +60,7 @@ class AvatarParams:
     fused_iters: int = 15
     association: AssociationParams = field(default_factory=AssociationParams)
     cycle_check: bool = True  # team frame-graph cycle consistency (T-X2-02)
+    point_obs_robust_k: float | None = None  # Huber on landmark observations (front-end errors)
     cycle_gate: CycleGate = field(default_factory=CycleGate)
 
 
@@ -127,7 +128,7 @@ class AvatarAgent:
         self.id = cfg.agent_id
         self.params = params
         self.rng = rng
-        self.local = FactorGraph()
+        self.local = FactorGraph(point_obs_robust_k=params.point_obs_robust_k)
         self.fused: FactorGraph | None = None
         self.k = -1
         self.meta: dict[int, LandmarkMeta] = {}
@@ -195,7 +196,12 @@ class AvatarAgent:
             if not self.local.has(lkey):
                 self.local.add_variable(lkey, VarType.POINT3, transform_points(pose, det.p_body))
                 self.meta[lid] = LandmarkMeta(lid, det.medium, int(medium_flag(det.medium)))
-                obj = int(self._part_object_ids[det.part_index])
+                n_parts = len(self._part_object_ids)
+                obj = (  # clutter (index beyond the world's parts) belongs to no structure
+                    int(self._part_object_ids[det.part_index])
+                    if 0 <= det.part_index < n_parts
+                    else -1 - det.part_index
+                )
                 parts = self._object_parts.setdefault(obj, {})
                 parts[det.medium] = lid
                 if len(parts) == 2:  # both parts of one structure seen by this agent

@@ -131,7 +131,10 @@ class FactorGraph:
         "range",
     )
 
-    def __init__(self, robust_k: float = 2.0) -> None:
+    def __init__(self, robust_k: float = 2.0, point_obs_robust_k: float | None = None) -> None:
+        """``robust_k``: Huber threshold (whitened) of inter-agent factors
+        (``linked_point``, ``range``). ``point_obs_robust_k``: optional Huber on
+        landmark observations, for front-ends that make association errors."""
         self._index: dict[Hashable, int] = {}
         self._keys: list[Hashable] = []
         self._types: list[VarType] = []
@@ -141,6 +144,7 @@ class FactorGraph:
         self._blocks: dict[str, _FactorBlock] = {t: _FactorBlock() for t in self.FACTOR_TYPES}
         for name in ("linked_point", "range"):
             self._blocks[name].robust_k = robust_k
+        self._blocks["point_obs"].robust_k = point_obs_robust_k
 
     # ------------------------------------------------------------------ variables
     def add_variable(self, key: Hashable, vtype: VarType, initial) -> int:

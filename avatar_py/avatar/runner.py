@@ -57,7 +57,14 @@ def make_sim(
     rng = np.random.default_rng(seed)
     scenario = SCENARIOS[scenario_name](rng, **kwargs)
     sim = generate_measurements(
-        scenario.world, scenario.agents, duration_s, 1.0, params.descriptor_dim, rng
+        scenario.world,
+        scenario.agents,
+        duration_s,
+        1.0,
+        params.descriptor_dim,
+        rng,
+        frontend_errors=scenario.frontend_errors,
+        frontend_rng=np.random.default_rng(seed + 30_000),
     )
     return scenario, sim
 
@@ -313,7 +320,10 @@ def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed
             if kf.abs_z is not None:
                 g.add_z_prior(key, kf.abs_z, kf.abs_z_sigma)
             for det in kf.detections:
-                lk = part_key[det.part_index]
+                true_part = det.part_index if det.true_part_index is None else det.true_part_index
+                if true_part < 0:
+                    continue  # clutter: the oracle's association knows it is not a part
+                lk = part_key[true_part]
                 if not g.has(lk):
                     g.add_variable(lk, VarType.POINT3, compose(est, [*det.p_body, 0.0])[:3])
                 g.add_point_obs(key, lk, det.p_body, det.sigmas)

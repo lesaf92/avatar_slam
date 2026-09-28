@@ -32,6 +32,12 @@ from avatar.runner import make_sim
 from avatar.types import LinkType
 
 
+def same_object(parts, pa: int, pb: int) -> bool:
+    """Both indices are real parts (not clutter) of the same structure."""
+    n = len(parts)
+    return 0 <= pa < n and 0 <= pb < n and parts[pa].object_id == parts[pb].object_id
+
+
 def evaluate(seed: int, duration_s: float, params: AvatarParams, scenario_name: str) -> dict:
     scenario, data = make_sim(scenario_name, seed, duration_s, params)
     obj_ids = np.array([p.object_id for p in data.world.parts])
@@ -75,9 +81,7 @@ def evaluate(seed: int, duration_s: float, params: AvatarParams, scenario_name: 
     n_all = n_ok = 0
     for rx, ag in agents.items():
         for tx, pairs in ag.alignment_ids.items():
-            ok = sum(
-                parts[inv[rx][a]].object_id == parts[inv[tx][b]].object_id for a, b, _ in pairs
-            )
+            ok = sum(same_object(parts, inv[rx][a], inv[tx][b]) for a, b, _ in pairs)
             n_all += len(pairs)
             n_ok += ok
             out["links"][f"{rx}<-{tx}"] = {

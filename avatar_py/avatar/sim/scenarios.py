@@ -23,6 +23,7 @@ import numpy as np
 
 from avatar.comm.channel import ACOUSTIC_DEFAULT, CHANNEL_PROFILES, RF_DEFAULT, ChannelModel
 from avatar.sim.agents import PLATFORM_ODOMETRY, AgentConfig, lawnmower, rectangle
+from avatar.sim.measurements import FrontEndErrors
 from avatar.sim.trajectories import TrajectorySpec
 from avatar.sim.world import Structure, World
 from avatar.types import Domain, LinkType
@@ -39,6 +40,7 @@ class Scenario:
         default_factory=lambda: {LinkType.RF: RF_DEFAULT, LinkType.ACOUSTIC: ACOUSTIC_DEFAULT}
     )
     anchor_id: int = 0
+    frontend_errors: FrontEndErrors = field(default_factory=FrontEndErrors)
 
     def agent(self, agent_id: int) -> AgentConfig:
         for a in self.agents:
@@ -226,6 +228,7 @@ def harbor_fleet(
     rf: str = "wifi_mesh",
     with_usv: bool = False,
     paths: dict[str, dict] | None = None,
+    frontend_errors: dict | None = None,
 ) -> Scenario:
     """Harbour world with the PI's **reference fleet** (ADR-0006, docs/hardware.md).
 
@@ -246,8 +249,11 @@ def harbor_fleet(
     e.g. ``{"uuv_0": {"kind": "figure8", "start": [20, 0], "z": -6, "length": 30}}``
     (defaults: :func:`fleet_default_paths`). An AUV path that reaches
     ``z > -0.3 m`` gives the vehicle an RF window only if it also has ``"rf"`` in
-    ``paths[name]["comm"]``.
+    ``paths[name]["comm"]``. ``frontend_errors`` sets
+    :class:`~avatar.sim.measurements.FrontEndErrors` (clutter, identity switches;
+    off by default).
     """
+    errors = FrontEndErrors(**(frontend_errors or {}))
     world = harbor_world(rng)
     RF, AC = LinkType.RF, LinkType.ACOUSTIC
     odo = PLATFORM_ODOMETRY
@@ -291,7 +297,9 @@ def harbor_fleet(
                   absolute_z="surface", odometry=odo["blueboat_vio"])
         )  # fmt: skip
     channels = {RF: CHANNEL_PROFILES[rf], AC: CHANNEL_PROFILES[acoustic]}
-    return Scenario("harbor_fleet", world, agents, channels=channels, anchor_id=0)
+    return Scenario(
+        "harbor_fleet", world, agents, channels=channels, anchor_id=0, frontend_errors=errors
+    )
 
 
 SCENARIOS = {"harbor": harbor, "harbor_fleet": harbor_fleet}
