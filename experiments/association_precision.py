@@ -39,26 +39,21 @@ def evaluate(seed: int, duration_s: float, params: AvatarParams) -> dict:
         ag.solve_local()
         agents[cfg.agent_id] = ag
     # Digests are broadcasts: build each sender's packets once, deliver to everyone.
-    packets = {
-        i: ag.build_digests(0.0, LinkType.RF, 10**7, 1400) for i, ag in agents.items()
-    }
+    packets = {i: ag.build_digests(0.0, LinkType.RF, 10**7, 1400) for i, ag in agents.items()}
     for rx in agents.values():
         for tx, pkts in packets.items():
             if tx != rx.id:
                 for pkt in pkts:
                     rx.on_packet(pkt)
         rx.update_alignments()
-    inv = {
-        a: {lid: p for p, lid in ag._lid_of_part.items()} for a, ag in agents.items()
-    }
+    inv = {a: {lid: p for p, lid in ag._lid_of_part.items()} for a, ag in agents.items()}
     parts = data.world.parts
     out = {"seed": seed, "links": {}}
     n_all = n_ok = 0
     for rx, ag in agents.items():
         for tx, pairs in ag.alignment_ids.items():
             ok = sum(
-                parts[inv[rx][a]].object_id == parts[inv[tx][b]].object_id
-                for a, b, _ in pairs
+                parts[inv[rx][a]].object_id == parts[inv[tx][b]].object_id for a, b, _ in pairs
             )
             n_all += len(pairs)
             n_ok += ok
@@ -66,9 +61,7 @@ def evaluate(seed: int, duration_s: float, params: AvatarParams) -> dict:
     out["accepted_alignments"] = sum(len(ag.alignment_ids) for ag in agents.values())
     out["possible_alignments"] = len(agents) * (len(agents) - 1)
     out["pair_precision"] = n_ok / n_all if n_all else float("nan")
-    out["wrong_alignments"] = sum(
-        1 for v in out["links"].values() if v["correct"] < v["pairs"] / 2
-    )
+    out["wrong_alignments"] = sum(1 for v in out["links"].values() if v["correct"] < v["pairs"] / 2)
     return out
 
 

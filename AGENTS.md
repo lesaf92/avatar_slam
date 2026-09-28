@@ -121,7 +121,7 @@ ROS 2 packages depend on the cores, never the reverse (ADR-0002).
 # Python reference package
 pip install -e "avatar_py[dev]"
 pytest avatar_py/tests -q
-ruff check avatar_py && ruff format --check avatar_py
+ruff check avatar_py tools experiments && ruff format --check avatar_py tools experiments
 
 # C++ core (plain CMake, no ROS needed)
 cmake -S avatar_core -B build/avatar_core -DCMAKE_BUILD_TYPE=Release
@@ -144,7 +144,7 @@ top priority.
 
 ## 7. Code style
 
-**Python.** `ruff` (lint + format, config in `avatar_py/pyproject.toml`), full
+**Python.** `ruff` (lint + format, config in the root `ruff.toml`), full
 type hints, NumPy-style docstrings, `numpy.random.Generator` passed explicitly
 (no global RNG state), no hidden I/O in library code, SI units.
 
