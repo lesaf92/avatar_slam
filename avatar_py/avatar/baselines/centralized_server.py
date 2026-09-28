@@ -50,6 +50,7 @@ from avatar.eval.metrics import chain_frames, team_ate
 from avatar.frontend.association import align
 from avatar.frontend.frame_consistency import FrameEdge, consistent_subset
 from avatar.geometry import compose, inverse, transform_points
+from avatar.sim.agents import heading_bias_modelled
 from avatar.sim.measurements import KeyframeData, SimData
 from avatar.sim.scenarios import Scenario
 from avatar.types import LinkType, Medium
@@ -441,9 +442,16 @@ def _joint_graph(server: Server, accepted, T_anchor_from, anchor: int, params: A
             g.add_pose_prior(("x", i, 0), first, [1e-3, 1e-3, params.initial_z_sigma_m, 1e-3])
         else:  # frame known only through association (weak prior keeps the gauge sane)
             g.add_pose_prior(("x", i, 0), first, [1e3, 1e3, params.initial_z_sigma_m, 1e3])
+        bkey = ("b", i)
+        if params.model_heading_bias and heading_bias_modelled(sh.cfg):
+            g.add_variable(bkey, VarType.SCALAR, [0.0])
+            g.add_scalar_prior(bkey, 0.0, sh.cfg.odometry_noise.yaw_bias_std_rad_per_m)
         for n, kf in enumerate(server.fed_keyframes[i]):
             key = ("x", i, n)
-            if n > 0:
+            if n > 0 and g.has(bkey):
+                dist = float(np.linalg.norm(kf.odom[:3]))
+                g.add_between_bias(("x", i, n - 1), key, bkey, kf.odom, dist, kf.odom_sigmas)
+            elif n > 0:
                 g.add_between(("x", i, n - 1), key, kf.odom, kf.odom_sigmas)
             if kf.abs_z is not None and kf.abs_z_sigma is not None:
                 g.add_z_prior(key, kf.abs_z, kf.abs_z_sigma)

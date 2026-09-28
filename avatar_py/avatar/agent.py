@@ -36,7 +36,7 @@ from avatar.frontend.frame_consistency import (
 )
 from avatar.geometry import compose, transform_points
 from avatar.semantics import normalize
-from avatar.sim.agents import AgentConfig
+from avatar.sim.agents import AgentConfig, heading_bias_modelled
 from avatar.sim.measurements import KeyframeData
 from avatar.types import Domain, LandmarkFlags, LinkType, Medium, medium_flag
 
@@ -73,6 +73,9 @@ class AvatarParams:
     # sqrt(chi2_3(0.999))). Takes precedence over Huber (LOG L25).
     point_obs_gnc: float | None = None
     fuse_team_frames: bool = True  # pose graph over agent frames (else: least-σ chain only)
+    # Estimate a per-agent heading bias [rad/m] when heading is dead-reckoned
+    # (platform heading_source != "compass"); prior σ from the platform spec (D9, L24).
+    model_heading_bias: bool = False
     # Drift-tolerant association: also align sliding windows of this many own
     # keyframes (0 = whole map only). Recent sub-maps stay nearly rigid when the
     # whole map is bent by drift (LOG L19).
@@ -157,6 +160,7 @@ class AvatarAgent:
         self.fused: FactorGraph | None = None
         self.k = -1
         self.meta: dict[int, LandmarkMeta] = {}
+        self._bias_key: tuple | None = None  # heading-bias state (D9), created at k = 0
         self._part_object_ids = part_object_ids
         self._initial_z = initial_z_m
         self._lid_of_part: dict[int, int] = {}
@@ -204,15 +208,30 @@ class AvatarAgent:
             init = np.array([0.0, 0.0, z0, 0.0])
             self.local.add_variable(key, VarType.POSE4, init)
             self.local.add_pose_prior(key, init, [1e-3, 1e-3, self.params.initial_z_sigma_m, 1e-3])
+            if self.params.model_heading_bias and heading_bias_modelled(self.cfg):
+                self._bias_key = ("b",)
+                self.local.add_variable(self._bias_key, VarType.SCALAR, [0.0])
+                std = self.cfg.odometry_noise.yaw_bias_std_rad_per_m
+                self.local.add_scalar_prior(self._bias_key, 0.0, std)
         else:
             if kf.odom is None or kf.odom_sigmas is None:
                 raise ValueError("keyframes after the first need odometry")
             prev = ("x", self.k - 1)
-            init = compose(self.local.value(prev), kf.odom)
+            odom = np.asarray(kf.odom, dtype=float)
+            dist = float(np.linalg.norm(odom[:3]))
+            if self._bias_key is not None:
+                odom = odom.copy()
+                odom[3] -= float(self.local.value(self._bias_key)[0]) * dist
+            init = compose(self.local.value(prev), odom)
             if kf.abs_z is not None:
                 init[2] = kf.abs_z
             self.local.add_variable(key, VarType.POSE4, init)
-            self.local.add_between(prev, key, kf.odom, kf.odom_sigmas)
+            if self._bias_key is not None:
+                self.local.add_between_bias(
+                    prev, key, self._bias_key, kf.odom, dist, kf.odom_sigmas
+                )
+            else:
+                self.local.add_between(prev, key, kf.odom, kf.odom_sigmas)
         if kf.abs_z is not None and kf.abs_z_sigma is not None:
             self.local.add_z_prior(key, kf.abs_z, kf.abs_z_sigma)
         pose = self.local.value(key)

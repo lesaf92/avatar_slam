@@ -28,6 +28,7 @@ from avatar.comm.gateway import Gateway
 from avatar.comm.network import Network
 from avatar.eval.metrics import ate_rmse, frame_error, team_ate
 from avatar.geometry import compose, inverse, transform_poses
+from avatar.sim.agents import heading_bias_modelled
 from avatar.sim.measurements import SimData, generate_measurements
 from avatar.sim.scenarios import SCENARIOS, Scenario
 from avatar.types import Domain, LinkType, Medium
@@ -313,7 +314,16 @@ def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed
                 if kf.abs_z is not None:
                     est[2] = kf.abs_z
                 g.add_variable(key, VarType.POSE4, est)
-                g.add_between(("x", i, k - 1), key, kf.odom, kf.odom_sigmas)
+                bkey = ("b", i)
+                if params.model_heading_bias and heading_bias_modelled(ad.config):
+                    if not g.has(bkey):
+                        g.add_variable(bkey, VarType.SCALAR, [0.0])
+                        std = ad.config.odometry_noise.yaw_bias_std_rad_per_m
+                        g.add_scalar_prior(bkey, 0.0, std)
+                    dist = float(np.linalg.norm(kf.odom[:3]))
+                    g.add_between_bias(("x", i, k - 1), key, bkey, kf.odom, dist, kf.odom_sigmas)
+                else:
+                    g.add_between(("x", i, k - 1), key, kf.odom, kf.odom_sigmas)
             if kf.abs_z is not None:
                 g.add_z_prior(key, kf.abs_z, kf.abs_z_sigma)
             for det in kf.detections:

@@ -35,6 +35,10 @@ class OdometryNoise:
     sigma_yaw_floor_rad: float = 0.001
     yaw_bias_std_rad_per_m: float = 5e-4
     scale_bias_std: float = 0.0
+    # "compass" (reliable magnetometer: absolute heading, no bias) or a
+    # dead-reckoned source ("gyro", "lio", "vio") whose heading bias the
+    # estimator can model (decision D9, LOG L24).
+    heading_source: str = "gyro"
     sigma_yaw_per_rad: float = 0.0
     yaw_scale_bias_std: float = 0.0
 
@@ -66,25 +70,37 @@ PLATFORM_ODOMETRY: dict[str, OdometryNoise] = {
     # pivots are where wheel odometry is worst, LIO keeps the gyro scale error small.
     "husky_lio": OdometryNoise(
         0.02, 0.01, 0.0015, yaw_bias_std_rad_per_m=3e-4,
-        sigma_yaw_per_rad=0.005, yaw_scale_bias_std=0.002,
+        sigma_yaw_per_rad=0.005, yaw_scale_bias_std=0.002, heading_source="lio",
     ),
     # Tarot 680 + D435i visual-inertial odometry fused with the Cube IMU.
     "tarot_vio": OdometryNoise(
         0.04, 0.02, 0.003, yaw_bias_std_rad_per_m=5e-4,
-        sigma_yaw_per_rad=0.01, yaw_scale_bias_std=0.005,
+        sigma_yaw_per_rad=0.01, yaw_scale_bias_std=0.005, heading_source="vio",
     ),
     # BlueROV2 + DVL A50 dead reckoning (±1.01 % long-term accuracy, standard model);
-    # heading from the vehicle IMU/compass, degraded near steel structures.
+    # heading from the vehicle IMU/compass; near steel the magnetometer is
+    # unreliable, so heading is effectively gyro-integrated (D9).
     "bluerov2_dvl": OdometryNoise(
         0.01, 0.005, 0.002, yaw_bias_std_rad_per_m=1.5e-3, scale_bias_std=0.01,
-        sigma_yaw_per_rad=0.02, yaw_scale_bias_std=0.01,
+        sigma_yaw_per_rad=0.02, yaw_scale_bias_std=0.01, heading_source="gyro",
     ),
     # BlueBoat (optional) with D435i VIO and GNSS-denied operation near the quay.
     "blueboat_vio": OdometryNoise(
         0.04, 0.005, 0.003, yaw_bias_std_rad_per_m=1e-3,
-        sigma_yaw_per_rad=0.01, yaw_scale_bias_std=0.005,
+        sigma_yaw_per_rad=0.01, yaw_scale_bias_std=0.005, heading_source="vio",
     ),
 }  # fmt: skip
+
+
+def heading_bias_modelled(cfg: AgentConfig) -> bool:
+    """Whether an estimator should carry a heading-bias state for this agent (D9).
+
+    True when the platform's heading is dead-reckoned (not a reliable compass)
+    and its spec has a non-zero heading-bias σ.
+    """
+    noise = cfg.odometry_noise
+    return noise.heading_source != "compass" and noise.yaw_bias_std_rad_per_m > 0
+
 
 ROLES = ("slam", "gateway")
 

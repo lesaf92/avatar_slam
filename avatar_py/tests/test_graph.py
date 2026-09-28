@@ -27,6 +27,8 @@ def rand_pose(rng):
     [
         "pose_prior",
         "between",
+        "between_bias",
+        "scalar_prior",
         "point_obs",
         "z_prior",
         "point_prior",
@@ -49,6 +51,12 @@ def test_analytic_jacobians_match_finite_differences(rng, factor):
         g.add_pose_prior("a", rand_pose(rng), sig4)
     elif factor == "between":
         g.add_between("a", "b", rand_pose(rng), sig4)
+    elif factor == "between_bias":
+        g.add_variable("bias", VarType.SCALAR, [rng.normal(0, 0.01)])
+        g.add_between_bias("a", "b", "bias", rand_pose(rng), 3.7, sig4)
+    elif factor == "scalar_prior":
+        g.add_variable("bias", VarType.SCALAR, [0.02])
+        g.add_scalar_prior("bias", 0.0, 0.01)
     elif factor == "point_obs":
         g.add_point_obs("a", "l", rng.normal(size=3), sig3)
     elif factor == "z_prior":
@@ -221,3 +229,29 @@ def test_gnc_is_plain_least_squares_without_outliers(rng):
     assert not g2.outlier_mask("point_prior").any()
     with pytest.raises(ValueError):
         g2.set_kernel("point_prior", "cauchy", 1.0)
+
+
+def test_heading_bias_is_recovered_on_a_loop(rng):
+    """A square loop driven with a constant heading bias: estimating the bias
+    (b ~ 1.5 mrad/m) closes the loop that a bias-free model cannot explain."""
+    b_true = 1.5e-3
+    gt = [np.zeros(4)]
+    for _ in range(40):
+        gt.append(compose(gt[-1], [2.0, 0.0, 0.0, np.pi / 20]))
+    lm = np.array([3.0, 4.0, 0.0])
+    g = FactorGraph()
+    for k, p in enumerate(gt):
+        g.add_variable(("x", k), VarType.POSE4, p)
+    g.add_variable("bias", VarType.SCALAR, [0.0])
+    g.add_scalar_prior("bias", 0.0, 2e-3)
+    g.add_pose_prior(("x", 0), gt[0], [1e-3] * 4)
+    g.add_variable("l", VarType.POINT3, lm)
+    for k in range(1, len(gt)):
+        inc = between(gt[k - 1], gt[k])
+        d = float(np.linalg.norm(inc[:3]))
+        meas = inc + np.array([0, 0, 0, b_true * d])
+        g.add_between_bias(("x", k - 1), ("x", k), "bias", meas, d, [0.01, 0.01, 0.01, 1e-4])
+    for k in (0, 20, 40):  # the same landmark seen three times closes the loop
+        g.add_point_obs(("x", k), "l", inverse_transform_points(gt[k], lm), [0.01] * 3)
+    g.optimize()
+    assert g.value("bias")[0] == pytest.approx(b_true, rel=0.05)

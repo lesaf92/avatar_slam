@@ -45,6 +45,7 @@ class VarType(IntEnum):
 
     POSE4 = 4
     POINT3 = 3
+    SCALAR = 1  # e.g. a per-agent heading bias [rad/m]
 
 
 def _wrap(a: FloatArray) -> FloatArray:
@@ -126,6 +127,8 @@ class FactorGraph:
     FACTOR_TYPES = (
         "pose_prior",
         "between",
+        "between_bias",
+        "scalar_prior",
         "point_obs",
         "z_prior",
         "point_prior",
@@ -206,6 +209,18 @@ class FactorGraph:
         i = self._idx(key_i, VarType.POSE4)
         j = self._idx(key_j, VarType.POSE4)
         self._blocks["between"].add((i, j), meas, sigmas)
+
+    def add_between_bias(self, key_i, key_j, bias_key, meas, dist_m: float, sigmas) -> None:
+        """Odometry ``meas = [Δx, Δy, Δz, Δψ]`` whose heading carries a bias ``b``
+        [rad/m] times the distance travelled: ``Δψ_meas = Δψ + b·dist_m``."""
+        i = self._idx(key_i, VarType.POSE4)
+        j = self._idx(key_j, VarType.POSE4)
+        b = self._idx(bias_key, VarType.SCALAR)
+        m = np.concatenate([np.asarray(meas, dtype=float), [float(dist_m)]])
+        self._blocks["between_bias"].add((i, j, b), m, sigmas)
+
+    def add_scalar_prior(self, key, mean: float, sigma: float) -> None:
+        self._blocks["scalar_prior"].add((self._idx(key, VarType.SCALAR),), [mean], [sigma])
 
     def add_point_obs(self, pose_key, point_key, meas, sigmas) -> None:
         i = self._idx(pose_key, VarType.POSE4)
@@ -361,6 +376,26 @@ class FactorGraph:
             J.append((2, oj + 2, 1.0 / sig[:, 2]))
             J.append((3, oi + 3, -1.0 / sig[:, 3]))
             J.append((3, oj + 3, 1.0 / sig[:, 3]))
+        return r, J
+
+    def _lin_between_bias(self, x, off, blk, jac):
+        idx, meas, sig = self._arr(blk)
+        ob = off[idx[:, 2]]
+        dist = meas[:, 4]
+        corrected = meas[:, :4].copy()
+        corrected[:, 3] = meas[:, 3] - x[ob] * dist  # remove the heading bias
+        tmp = _FactorBlock(robust_k=None)
+        tmp._arrays = (idx[:, :2], corrected, sig, np.zeros(len(idx), dtype=bool))
+        r, J = self._lin_between(x, off, tmp, jac)
+        if jac:  # ∂r_yaw/∂b = +dist/σ_yaw
+            J.append((3, ob, dist / sig[:, 3]))
+        return r, J
+
+    def _lin_scalar_prior(self, x, off, blk, jac):
+        idx, meas, sig = self._arr(blk)
+        o = off[idx[:, 0]]
+        r = (x[o][:, None] - meas) / sig
+        J = [(0, o, 1.0 / sig[:, 0])] if jac else []
         return r, J
 
     def _lin_point_obs(self, x, off, blk, jac):

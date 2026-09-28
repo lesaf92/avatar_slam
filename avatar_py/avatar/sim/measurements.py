@@ -190,6 +190,8 @@ def generate_measurements(
         gt = sample_trajectory(cfg, times)
         noise = cfg.odometry_noise
         bias = float(rng.normal(0.0, noise.yaw_bias_std_rad_per_m))
+        if noise.heading_source == "compass":
+            bias = 0.0  # absolute heading: no accumulated bias (draw kept for the RNG stream)
         scale = 1.0 + float(rng.normal(0.0, noise.scale_bias_std)) if noise.scale_bias_std else 1.0
         yaw_scale = (
             1.0 + float(rng.normal(0.0, noise.yaw_scale_bias_std))
