@@ -1,0 +1,12 @@
+# Feature-poor transit with both ends surveyed by same-medium teammates (H1,
+# T-X1-02): uuv_1 makes the 275 m one-way transit of fleet_transit.yaml, from
+# the north piers (surveyed by uuv_2) through the sparse outer field and back
+# along the pipeline to the south piers (surveyed by uuv_0, default path).
+scenario: harbor_fleet
+duration_s: 600
+args:
+  acoustic: m64
+  n_uuv: 3
+  paths:
+    uuv_1: {kind: polyline, start: [12, 42], z: -5.0, speed_mps: 0.5, loop: false,
+            points: [[0, 0], [88, 0], [88, -72], [3, -72], [3, -42]]}
