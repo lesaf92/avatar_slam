@@ -1,0 +1,43 @@
+\section{Problem Formulation}
+\label{sec:problem}
+
+\subsection{Agents, media, and frames}
+A team $\mathcal{A}$ of agents operates in air, on ground, on the water surface, and underwater.
+All frames are right-handed ENU and gravity-aligned; the vertical datum $z=0$ is the waterline
+(docs/conventions.md). Agent $i$ estimates its trajectory in a local map frame $L_i$ whose
+origin lies at its start position and whose $x$-axis follows its start heading. Because roll and
+pitch are observable from gravity and every agent references the waterline (pressure sensor,
+barometer, hull, or known quay height), local frames differ by a 4-DoF transform
+$\Tf{i}{j} = (\mathbf{t}_{ij}, \theta_{ij}) \in \R^3 \times S^1$ with $t^z_{ij} \approx 0$.
+Poses are $\mathbf{x}_k = (\p_k, \psi_k)$.
+
+\subsection{Landmark parts and the coaxial model}
+A structure $s$ spanning $[z^{\min}_s, z^{\max}_s]$ that crosses the waterline yields an
+\emph{above} part $\lm^{+}_s$ and a \emph{below} part $\lm^{-}_s$: the centroids of the portions
+visible to optical and to acoustic sensors, respectively. Both share the horizontal position but
+not the height:
+\begin{equation}
+  \Pxy\,\lm^{+}_s = \Pxy\,\lm^{-}_s, \qquad \Pxy = \begin{bmatrix} 1 & 0 & 0\\ 0 & 1 & 0\end{bmatrix}.
+  \label{eq:coaxial}
+\end{equation}
+
+\begin{figure}[t]
+  \centering
+  \fbox{\parbox{0.92\columnwidth}{\centering\vspace{2em}\todo{Coaxial-part diagram: pile,
+  waterline, LiDAR-visible part centroid vs.\ sonar-visible part centroid.}\vspace{2em}}}
+  \caption{Coaxial landmark parts. \todo{caption}}
+  \label{fig:coaxial}
+\end{figure}
+
+\subsection{Communication model}
+Each agent carries a subset of link types $\{\mathrm{RF}, \mathrm{AC}\}$. A packet of $B$ bytes
+sent at share $\sigma$ of bit rate $\beta$ over distance $d$ arrives after
+$8B/(\sigma\beta) + \tau_0 + d/c$ with probability $1 - p_{\mathrm{loss}}(d)$, provided both
+endpoints are in a medium that supports the link (RF: $z \geq -\epsilon$; acoustic:
+$z \leq \epsilon$). \todo{justify parameter ranges with modem/radio datasheets.}
+
+\subsection{Problem statement}
+Given each agent's own measurements and the packets it receives, estimate (i) its trajectory and
+landmark parts in $L_i$ and (ii) the transforms $\Tf{i}{j}$ to its neighbors, such that all
+agents can be expressed in a common team frame, without a central server, while respecting
+each link's byte budget.

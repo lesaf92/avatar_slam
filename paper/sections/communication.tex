@@ -1,0 +1,12 @@
+\section{Medium-Aware Communication}
+\label{sec:comm}
+
+\subsection{Wire format}
+Each landmark part is encoded in $16 + D$ bytes: position at 5~cm resolution, isotropic horizontal and
+vertical uncertainty, footprint and part height, class, medium/modality flags, observation count,
+and an optional $D$-dimensional int8 descriptor; packets carry a 10-byte header and a CRC-16
+(docs/spec/wire\_format\_v0.md). \todo{justify resolutions vs.\ sensor noise.}
+
+\subsection{Scheduling}
+\todo{VoI-per-byte scheduler (T-C2-01): maximize expected information gain of receivers per byte
+subject to per-link budgets; USV gateway relay (T-C3-01); surfacing windows (T-C4-01).}

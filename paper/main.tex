@@ -1,0 +1,62 @@
+% Avatar SLAM manuscript (IEEE T-RO / RA-L format). Build: make -C paper
+% Rules: AGENTS.md §5 (no fabricated numbers, verified citations only), paper/README.md.
+\documentclass[journal]{IEEEtran}
+
+\usepackage{cite}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{url}
+\usepackage[hidelinks]{hyperref}
+
+% ---- Editorial macros (remove before submission; `make check` fails if any remain) ----
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+\newcommand{\draftnote}[1]{\textcolor{blue}{[#1]}}
+
+% ---- Notation (keep in sync with docs/conventions.md) ----
+\newcommand{\avatar}{\textsc{Avatar SLAM}}
+\newcommand{\R}{\mathbb{R}}
+\newcommand{\Rz}[1]{\mathbf{R}_z(#1)}
+\newcommand{\Tf}[2]{\mathbf{T}_{#1#2}}          % T_{a b}: maps frame b into frame a
+\newcommand{\lm}{\boldsymbol{\ell}}
+\newcommand{\p}{\mathbf{p}}
+\newcommand{\Pxy}{\boldsymbol{\Pi}_{xy}}
+\newcommand{\wrap}[1]{\langle #1 \rangle}
+
+\begin{document}
+
+\title{Avatar SLAM: Decentralized Metric-Semantic SLAM\\ for Air--Ground--Surface--Underwater Robot Teams}
+
+\author{Luiz~Eug\^enio~Filho%
+\thanks{\todo{Affiliation(s), funding, and co-authors (decision D3 in docs/PLAN.md).}}}
+
+\markboth{IEEE Transactions on Robotics --- Draft}{Eug\^enio Filho \MakeLowercase{\textit{et al.}}: Avatar SLAM}
+
+\maketitle
+
+\begin{abstract}
+\input{sections/abstract}
+\end{abstract}
+
+\begin{IEEEkeywords}
+Multi-robot SLAM, heterogeneous robot teams, marine robotics, communication-constrained
+estimation, semantic mapping, sensor fusion.
+\end{IEEEkeywords}
+
+\input{sections/introduction}
+\input{sections/related_work}
+\input{sections/problem}
+\input{sections/system}
+\input{sections/association}
+\input{sections/communication}
+\input{sections/neural}
+\input{sections/experiments}
+\input{sections/discussion}
+\input{sections/conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{references}
+
+\end{document}

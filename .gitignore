@@ -1,0 +1,37 @@
+# Build outputs
+build/
+install/
+log/
+paper/build/
+*.aux
+*.bbl
+*.blg
+*.fdb_latexmk
+*.fls
+*.log
+*.out
+*.synctex.gz
+*.toc
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.venv/
+
+# Data and results (never commit; see AGENTS.md §8)
+/data/
+/results/
+*.bag
+*.db3
+*.mcap
+*.pt
+*.ckpt
+
+# Editors
+.vscode/
+.idea/
+*.swp
+.DS_Store

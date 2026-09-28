@@ -1,0 +1,15 @@
+% Draft abstract (≤ 200 words for T-RO). Numbers must come from paper/data (AGENTS.md §5).
+Teams that mix aerial, ground, surface, and underwater robots could map harbors, dams, and
+offshore assets end to end, yet no SLAM system lets such a team build one consistent map
+without a central server. The obstacles are physical: the water surface splits both what the
+robots \emph{perceive} (optics above, acoustics below) and how they \emph{communicate}
+(megabit radio links versus kilobit, intermittent acoustic links). We present \avatar{}, a
+decentralized metric-semantic SLAM system for air--ground--surface--underwater teams. \avatar{}
+(i)~models structures that cross the waterline as \emph{coaxial landmark parts}, turning piles,
+hulls, and buoys into constraints between above-water and below-water maps;
+(ii)~shares condensed, self-measured landmark maps under a medium-aware communication policy
+with a compact wire format; and (iii)~aligns agents' maps with a robust, uncertainty-gated
+consistency-graph association that rejects perceptual aliasing. \todo{Results sentence with
+numbers from paper/data (team ATE vs.\ centralized oracle, bytes per link type, association
+precision).} \todo{Neural layer sentence (Paper B only).} Code, simulator, and benchmark are
+open source.

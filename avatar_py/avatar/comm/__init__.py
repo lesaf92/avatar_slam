@@ -1,0 +1,1 @@
+"""avatar.comm subpackage."""

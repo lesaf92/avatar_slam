@@ -1,0 +1,98 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "claude/**", "wp/**"]
+  pull_request:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  python:
+    name: Python reference (avatar_py)
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install
+        run: pip install -e "avatar_py[dev]"
+      - name: Lint and format
+        run: |
+          ruff check avatar_py tools experiments
+          ruff format --check avatar_py tools experiments
+      - name: Wire vectors are up to date
+        run: python tools/gen_wire_vectors.py | diff - testdata/wire_v0_vectors.json
+      - name: Tests
+        run: pytest avatar_py/tests -q
+
+  cpp:
+    name: C++ core (avatar_core)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libeigen3-dev libgtest-dev nlohmann-json3-dev
+          pip install clang-format==23.1.1
+      - name: Format check
+        run: clang-format --dry-run --Werror $(git ls-files 'avatar_core/*.cpp' 'avatar_core/*.hpp')
+      - name: Build
+        run: |
+          cmake -S avatar_core -B build/avatar_core -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/avatar_core -j
+      - name: Test
+        run: ctest --test-dir build/avatar_core --output-on-failure
+
+  ros2:
+    name: ROS 2 Jazzy colcon build
+    runs-on: ubuntu-24.04
+    container: ros:jazzy
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - name: Dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends libeigen3-dev libgtest-dev nlohmann-json3-dev
+      - name: Build
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon build --base-paths avatar_core ros2 --event-handlers console_direct+
+      - name: Test
+        run: |
+          source /opt/ros/jazzy/setup.bash
+          colcon test --base-paths avatar_core ros2
+          colcon test-result --verbose
+      - name: Interfaces are importable
+        run: |
+          source install/setup.bash
+          ros2 interface show avatar_msgs/msg/AgentDigest
+
+  paper:
+    name: Manuscript (LaTeX)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Citation hygiene (draft mode)
+        run: python3 tools/check_citations.py
+      - name: Compile
+        uses: xu-cheng/latex-action@v3
+        with:
+          root_file: main.tex
+          working_directory: paper
+          latexmk_use_lualatex: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manuscript
+          path: paper/main.pdf

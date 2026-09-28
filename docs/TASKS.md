@@ -1,0 +1,104 @@
+# Task board
+
+How to use this board: AGENTS.md §4. Claim a `todo` task whose dependencies are
+`done` by setting it to `in-progress`, with your handle and branch, in your first
+commit. One task per branch. Priority: **P0** blocks the next milestone,
+**P1** is needed for Paper A, **P2** is for Paper B or nice-to-have.
+
+Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
+
+## Milestone M0: foundation (target 2026-10-05)
+
+| ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
+|---|---|---|---|---|---|---|
+| T-I1-01 | Repo skeleton, rules (AGENTS.md), plan, ADRs, conventions, wire spec | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Docs in `docs/` |
+| T-S1-01 | Tier-1 simulator v0 (harbour, 4 domains, sensors, odometry) | P0 | – | done | Claude · same | `pytest` green |
+| T-C1-01 | Channel models, network, wire codec v0 (Py + C++ golden vectors) | P0 | – | done | Claude · same | Byte-identical vectors |
+| T-B1-01 | 4-DoF factor graph + LM + robust + marginals (Python) | P0 | – | done | Claude · same | Jacobians vs. finite differences |
+| T-B1-02 | Agent runtime: local/fused graphs, condensed sharing (ADR-0004) | P0 | T-B1-01 | done | Claude · same | Integration tests |
+| T-X1-01 | Association v0.1: gating, consistency-graph cliques, ambiguity test | P0 | – | done | Claude · same | 99.6 % pair precision, 20 seeds (LOG) |
+| T-E1-01 | Metrics: ATE (4-DoF), team ATE, frame error, comm accounting | P0 | – | done | Claude · same | – |
+| T-V1-01 | Scenario viewer (`viz/scenario_viewer.html`) | P1 | T-E1-01 | done | Claude · same | Opens sample run |
+| T-P1-01 | Manuscript skeleton + bib with status lines | P0 | – | done | Claude · same | `make -C paper` |
+| T-I1-02 | Get CI green on GitHub (ROS 2 job never run before; fix if red) | P0 | T-I1-01 | todo | | All 4 jobs green |
+| T-I1-04 | pre-commit hooks (ruff, clang-format, citation check) | P2 | T-I1-01 | todo | | `pre-commit run -a` passes |
+
+## Milestone M1: backbone v1 in the fast sim (target 2026-10-31)
+
+| ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
+|---|---|---|---|---|---|---|
+| T-R1-01 | **Deep-read *Above and Below*** (method, association, data, code). Update ledger N3 and the Paper A positioning | P0 | – | todo | | Notes in `docs/research/above_and_below.md`; N3 status updated |
+| T-R1-02 | Deep-read DRACo-SLAM2 + SlideSLAM (comm numbers, association) | P1 | – | todo | | Notes in `docs/research/` |
+| T-R1-04 | Verify every bib entry by DOI (`verified-web` / `UNVERIFIED` → `verified`) | P1 | – | todo | | `make -C paper check` shows no unverified cited entries |
+| T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | todo | | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario |
+| T-S1-03 | Occlusion model (footprint ray casting) | P1 | – | todo | | Test: pile behind hull not detected |
+| T-S1-05 | Profile + speed up decentralized runs (incremental solves, cached marginals) | P1 | – | todo | | 600 s harbour ≤ 60 s wall |
+| T-X2-02 | **Team frame-graph cycle consistency**: reject `T_ij` inconsistent with `T_ik ∘ T_kj` (evidence: all 4 wrong alignments in 20 seeds were ugv_0↔auv_1, pairs with no true overlap) | P0 | T-X1-01 | todo | | 0 wrong alignments over 50 seeds (`experiments/association_precision.py`) |
+| T-X2-01 | Aliasing-grid scenario + association benchmark → `paper/data/` | P1 | T-S4-02 | todo | | CSV with precision/recall per seed |
+| T-X2-03 | GNC/PCM-style robust inter-agent factors in the fused graph | P1 | T-X1-01 | todo | | Injected outliers do not move frames > 0.2 m |
+| T-C2-01 | **VoI-per-byte digest scheduler** (replace heuristic in `build_digests`) | P0 | T-B1-02 | todo | | H2 curve: ≥ 90 % accuracy at ≤ 20 % bytes vs. FIFO |
+| T-C3-01 | USV gateway: store-and-forward relay RF ↔ acoustic with dedup | P0 | T-C1-01 | todo | | UAV↔AUV alignment through relay in harbour |
+| T-C4-01 | Surfacing windows (AUV RF bursts when z > −0.5 m) | P1 | T-C1-01 | todo | | Scenario + test |
+| T-C5-01 | Bandwidth (100 bps–10 kbps) and loss sweep experiment → `paper/data/` | P1 | T-C2-01 | todo | | CSV + figure script |
+| T-S4-01 | Scenario YAML (world, team, links) shared by Tier 1 and Tier 2 | P0 | – | todo | | `harbor.yaml` reproduces current harbour |
+| T-S4-02 | Dam-face, offshore-jacket, aliasing-grid scenarios | P1 | T-S4-01 | todo | | Registered in `SCENARIOS` |
+
+## Milestone M2: ROS 2 + Gazebo end-to-end (target 2026-12-20)
+
+| ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
+|---|---|---|---|---|---|---|
+| T-I1-03 | Docker image: `ros:jazzy` + Gazebo Harmonic + DAVE (ros2 branch) + PX4 SITL | P0 | – | todo | | `docker compose up` spawns the empty world |
+| T-S2-01 | Gazebo Harmonic harbour world (piles, hulls, quay, buoys) from scenario YAML | P0 | T-S4-01, T-I1-03 | todo | | World loads; GT exported |
+| T-S2-02 | Spawn UAV (PX4 x500), UGV, USV, AUV (DAVE) in `unified.launch.py` | P0 | T-S2-01 | todo | | All four move on scripted paths |
+| T-S2-03 | Sensor bridges: LiDAR, cameras, multibeam/FLS sonar, DVL, depth, IMU (`ros_gz_bridge`), NED→ENU at the boundary | P0 | T-S2-02 | todo | | Topics per `conventions.md` §7 |
+| T-S2-04 | Evaluate LOTUSim as the Tier-2 host (vs. DAVE) | P2 | – | todo | | ADR if adopted |
+| T-S3-01 | ROS 2 comm emulator (`EncodedPacket` gateway enforcing `avatar.comm` models) | P0 | T-C1-01 | todo | | Same stats as Tier 1 on a replay |
+| T-F1-01 | Odometry adapters → 4-DoF increments with covariance | P0 | T-S2-03 | todo | | – |
+| T-F2-01 | Open-vocabulary camera detector + CLIP-family embeddings node | P1 | T-S2-03 | todo | | – |
+| T-F2-02 | LiDAR object clustering → landmark parts | P0 | T-S2-03 | todo | | – |
+| T-F2-03 | Imaging-sonar object extraction (DRACo2-style) | P0 | T-S2-03 | todo | | – |
+| T-F3-01 | Landmark-part tracker (medium tagging, intra-agent coaxial links) | P0 | T-F2-* | todo | | – |
+| T-F4-01 | Descriptor compression (int8/PQ); D = 0 packets for non-semantic landmarks | P1 | T-F2-01 | todo | | ≤ 32 B/landmark |
+| T-B2-01 | C++ back-end on GTSAM (iSAM2), matched to Python on shared graph vectors | P1 | T-B1-01 | todo | | Match to 1 mm / 0.01° |
+| T-B4-01 | Acoustic range factors (latency-aware, cross-frame) | P1 | T-B1-02 | todo | | – |
+| T-G1 | **Gate G1:** cross-medium association on Gazebo sonar data | P0 | T-F3-01 | todo | | Frame error < 1 m in Gazebo harbour |
+
+## Milestone M3–M4: Paper A (target submission ≈ 2027-03-01)
+
+| ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
+|---|---|---|---|---|---|---|
+| T-E2-01 | Swarm-SLAM baseline adapter (ROS 2) | P1 | M2 | todo | | Runs on air/ground subset |
+| T-E2-02 | Kimera-Multi baseline adapter | P1 | M2 | todo | | – |
+| T-E2-03 | SlideSLAM baseline adapter | P1 | M2 | todo | | – |
+| T-E2-04 | DRACo-SLAM2 baseline adapter | P1 | M2 | todo | | Runs on underwater subset |
+| T-E2-05 | *A&B*-style centralized server baseline (estimated association, all bytes counted) | P0 | T-X1-01 | todo | | Mode in `runner.py` |
+| T-E3-01 | Experiment matrix + `make -C experiments paper-data` | P0 | T-E2-* | todo | | Regenerates every paper number |
+| T-E4-01 | Real-data validation (A&B / DRACo2 data, ARACATI, PI's data) | P0 | T-R1-05 | todo | | At least one real sequence |
+| T-R1-05 | Obtain real datasets (ask authors; licences) | P0 | – | todo | | Data + licence noted |
+| T-P2-01 | Introduction + related work from the ledgers | P1 | T-R1-01 | todo | | – |
+| T-P3-01 | Method sections (formal statement of the no-double-counting property) | P1 | – | todo | | – |
+| T-P4-01 | Experiments section from `paper/data` | P0 | T-E3-01 | todo | | – |
+| T-P5-01 | Figures (teaser, coaxial parts, bandwidth curves) via scripts | P1 | – | todo | | – |
+| T-P6-01 | Internal Reviewer-2 pass (`paper/README.md` checklist) | P0 | T-P4-01 | todo | | Checklist all ticked |
+
+## Paper B / later
+
+| ID | Task | Pri | Deps | Status | Owner / branch |
+|---|---|---|---|---|---|
+| T-N1-01 | Per-agent 3DGS submaps anchored to keyframes (camera, then LiDAR depth) | P2 | M2 | todo | |
+| T-N2-01 | Imaging-sonar rasterizer (range–azimuth) | P2 | T-N1-01 | todo | |
+| T-N3-01 | Decentralized submap exchange + uncertainty-weighted merge | P2 | T-N1-01 | todo | |
+| T-N4-01 | Open-vocabulary feature field | P2 | T-N1-01 | todo | |
+| T-B1-05 | 6-DoF extension | P2 | – | todo | |
+| T-B3-01 | DPGO inside RF clusters (study) | P2 | – | todo | |
+| T-B3-02 | Consistent multi-hop information sharing | P2 | – | todo | |
+| T-V2-01 | Live ROS 2 web viewer (foxglove_bridge/rosbridge + three.js) | P2 | M2 | todo | |
+| T-V3-01 | Figure pipeline (matplotlib, shared palette) | P1 | – | todo | |
+| T-R1-03 | Monthly novelty re-search (next: 2026-10-28) | P1 | – | todo (recurring) | |
+
+## Notes / hand-offs
+
+- *2026-09-28 (Claude, foundation session):* everything marked `done` above is on
+  branch `claude/relaxed-ramanujan-bzrqyd`. The ROS 2 packages have **not been
+  built locally** (packages.ros.org is blocked in the dev container). CI's `ros2`
+  job is their first build, which is why T-I1-02 is P0.

@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>avatar_core</name>
+  <version>0.1.0</version>
+  <description>
+    Avatar SLAM real-time core (ROS-agnostic C++17): frame conventions, 4-DoF pose
+    algebra and the inter-agent wire codec (docs/spec/wire_format_v0.md).
+  </description>
+  <maintainer email="lesaf92@users.noreply.github.com">Luiz Eugenio Filho</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>cmake</buildtool_depend>
+  <depend>eigen</depend>
+  <test_depend>gtest</test_depend>
+  <test_depend>nlohmann-json-dev</test_depend>
+
+  <export>
+    <build_type>cmake</build_type>
+  </export>
+</package>

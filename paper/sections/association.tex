@@ -1,0 +1,22 @@
+\section{Cross-Medium Association}
+\label{sec:association}
+
+\draftnote{Implemented in avatar\_py/avatar/frontend/association.py (v0.1).}
+
+\subsection{Candidate gating}
+Pairs of landmark parts are gated by medium (same medium: 3D residual; above/below: horizontal
+residual only), semantic class, yaw-invariant footprint ratio, height ratio (same medium), and
+descriptor cosine similarity when both carry open-vocabulary descriptors.
+
+\subsection{Consistency graph and hypotheses}
+Two candidate pairs are consistent if they use distinct landmarks and preserve horizontal
+distance, and, if both are same-medium, vertical offset, within the sum of their uncertainty-scaled
+gates. Hypotheses are greedy maximal cliques of this graph, in the spirit of
+PCM~\cite{mangelson2018pcm}; each is refined by weighted 4-DoF Kabsch~\cite{umeyama1991} and
+scored with a one-to-one MSAC score in which cross-medium inliers weigh $2/3$.
+
+\subsection{Ambiguity and support tests}
+Regular pile rows induce shifted hypotheses. We reject an alignment if a distinct competitor
+reaches a fraction $\rho$ of the best score, and require more support when all inliers are
+cross-medium. \todo{cycle consistency over the team frame graph (T-X2-02).}
+\todo{Table: association precision / acceptance over seeds from paper/data.}

@@ -1,0 +1,429 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<!-- AVATAR-CONTENT-START -->
+<title>Avatar SLAM Harbour Chart</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@75..100,400..700&family=IBM+Plex+Mono:wght@400;500&family=Spectral:ital,wght@1,400;1,500&display=swap">
+<style>
+  :root {
+    --paper: #f2f5f4;
+    --panel: #fbfcfc;
+    --ink: #18262e;
+    --ink-soft: #4f6069;
+    --rule: #cfd9dc;
+    --water: #d3e4ec;
+    --water-deep: #bcd5e1;
+    --land: #e2d8ba;
+    --sky: #eef3f6;
+    --seabed: #9fb3bb;
+    --magenta: #a8246f;
+    --rf: #2e6db0;
+    --uav: #2e6db0;
+    --ugv: #8c6a12;
+    --usv: #16806a;
+    --auv: #6a48a6;
+    --good: #1f7a4d;
+    --focus: #a8246f;
+    --ui: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+    --chart: "Spectral", Georgia, "Times New Roman", serif;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --paper: #0d1519; --panel: #111c21; --ink: #dce7eb; --ink-soft: #97a9b1; --rule: #25363e;
+      --water: #12303c; --water-deep: #0d2530; --land: #3b3526; --sky: #0f1d24; --seabed: #3d5560;
+      --magenta: #e062a8; --rf: #6fa8e6; --uav: #6fa8e6; --ugv: #d2ac4a; --usv: #43c3a2;
+      --auv: #a88be0; --good: #5fcf94; --focus: #e062a8;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --paper: #0d1519; --panel: #111c21; --ink: #dce7eb; --ink-soft: #97a9b1; --rule: #25363e;
+    --water: #12303c; --water-deep: #0d2530; --land: #3b3526; --sky: #0f1d24; --seabed: #3d5560;
+    --magenta: #e062a8; --rf: #6fa8e6; --uav: #6fa8e6; --ugv: #d2ac4a; --usv: #43c3a2;
+    --auv: #a88be0; --good: #5fcf94; --focus: #e062a8;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--paper); color: var(--ink); font: 14px/1.45 var(--ui);
+    font-stretch: 92%; padding-inline: 16px; padding-block: 16px 28px;
+  }
+  .wrap { max-width: 1320px; margin: 0 auto; display: grid; gap: 14px; }
+  header { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 18px; }
+  h1 { margin: 0; font-size: 22px; font-weight: 650; letter-spacing: 0.005em; text-wrap: balance; }
+  .sub { color: var(--ink-soft); font-size: 13px; }
+  .sub b { color: var(--ink); font-weight: 600; }
+  .bar {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; padding: 10px 12px;
+    background: var(--panel); border: 1px solid var(--rule); border-radius: 6px;
+  }
+  button, select, input[type="file"]::file-selector-button {
+    font: 600 13px var(--ui); color: var(--ink); background: var(--paper);
+    border: 1px solid var(--rule); border-radius: 4px; padding: 6px 12px; cursor: pointer;
+  }
+  button:hover, select:hover { border-color: var(--ink-soft); }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  #scrub { flex: 1 1 240px; accent-color: var(--magenta); min-width: 0; }
+  .clock { font: 500 14px var(--mono); font-variant-numeric: tabular-nums; min-width: 8ch; }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) 330px; gap: 14px; align-items: start; }
+  @media (max-width: 960px) { .main { grid-template-columns: minmax(0, 1fr); } }
+  .views { display: grid; gap: 14px; min-width: 0; }
+  figure { margin: 0; background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 10px; }
+  figcaption { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    font-size: 12px; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.08em;
+    margin-bottom: 6px; }
+  canvas { display: block; width: 100%; }
+  #plan { aspect-ratio: 180 / 160; max-width: 100%; }
+  #elev { height: 210px; }
+  aside { display: grid; gap: 14px; }
+  section.card { background: var(--panel); border: 1px solid var(--rule); border-radius: 6px; padding: 12px; }
+  h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--ink-soft); font-weight: 600; }
+  .kpis { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+  .kpi { display: grid; gap: 2px; }
+  .kpi .v { font: 500 18px var(--mono); font-variant-numeric: tabular-nums; }
+  .kpi .l { font-size: 11px; color: var(--ink-soft); }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; }
+  th, td { text-align: right; padding: 4px 6px; border-bottom: 1px solid var(--rule); font-size: 12.5px; }
+  th:first-child, td:first-child { text-align: left; }
+  th { font-weight: 600; color: var(--ink-soft); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  td.num { font-family: var(--mono); }
+  .sw { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 2px; }
+  .chip { font-size: 10.5px; padding: 1px 6px; border: 1px solid var(--rule); border-radius: 10px; color: var(--ink-soft); }
+  .legend { display: grid; gap: 6px; font-size: 12.5px; }
+  .legend div { display: flex; align-items: center; gap: 8px; }
+  .legend svg { flex: none; }
+  .scroll { overflow-x: auto; }
+  .note { font-size: 12px; color: var(--ink-soft); margin: 8px 0 0; }
+  #status { font-size: 12.5px; color: var(--ink-soft); }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+<!-- AVATAR-STYLE-END -->
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Avatar SLAM · Harbour chart</h1>
+    <span class="sub" id="meta">Loading scenario…</span>
+  </header>
+
+  <div class="bar" role="group" aria-label="Playback">
+    <button id="play" type="button" aria-pressed="false">Play</button>
+    <input id="scrub" type="range" min="0" max="300" step="1" value="300" aria-label="Mission time">
+    <span class="clock" id="clock">t = 0 s</span>
+    <label for="speed" class="sub">Speed</label>
+    <select id="speed">
+      <option value="5">5×</option>
+      <option value="20" selected>20×</option>
+      <option value="60">60×</option>
+    </select>
+    <label class="sub" for="file">Load run JSON</label>
+    <input id="file" type="file" accept="application/json,.json">
+    <span id="status"></span>
+  </div>
+
+  <div class="main">
+    <div class="views">
+      <figure>
+        <figcaption><span>Plan view · ENU, metres</span><span id="planInfo"></span></figcaption>
+        <canvas id="plan" aria-label="Plan view of the harbour with agent trajectories"></canvas>
+      </figure>
+      <figure>
+        <figcaption><span>Elevation section · x vs. z (vertical exaggerated)</span><span>z = 0 is the waterline datum</span></figcaption>
+        <canvas id="elev" aria-label="Elevation section showing agents above and below the waterline"></canvas>
+      </figure>
+    </div>
+
+    <aside>
+      <section class="card">
+        <h2>Team consistency</h2>
+        <div class="kpis">
+          <div class="kpi"><span class="v" id="kTeam">–</span><span class="l">team ATE [cm]</span></div>
+          <div class="kpi"><span class="v" id="kRf">–</span><span class="l">RF sent [kB]</span></div>
+          <div class="kpi"><span class="v" id="kAc">–</span><span class="l">acoustic sent [kB]</span></div>
+        </div>
+        <p class="note">Simulated (Tier-1). Team ATE uses one 4-DoF alignment for all agents, expressed through the anchor's estimated frame chain.</p>
+      </section>
+
+      <section class="card">
+        <h2>Agents</h2>
+        <div class="scroll"><table id="agents"><thead><tr>
+          <th>Agent</th><th title="single-agent SLAM">alone</th><th title="own fused graph">fused</th><th title="in the team frame">team</th>
+        </tr></thead><tbody></tbody></table></div>
+        <p class="note">ATE in cm. <em>Alone</em>: local graph only. <em>Fused</em>: with neighbours' landmarks. <em>Team</em>: in the anchor frame.</p>
+      </section>
+
+      <section class="card">
+        <h2>Inter-agent alignments · inliers</h2>
+        <div class="scroll"><table id="align"></table></div>
+        <p class="note">Row: receiver, column: sender. Cross-medium pairs (above-water ↔ below-water parts) count here too.</p>
+      </section>
+
+      <section class="card">
+        <h2>Legend</h2>
+        <div class="legend" id="legend"></div>
+      </section>
+    </aside>
+  </div>
+</div>
+
+<script>
+(() => {
+  "use strict";
+  const DOMAIN_VAR = { AERIAL: "--uav", GROUND: "--ugv", SURFACE: "--usv", UNDERWATER: "--auv" };
+  const $ = (id) => document.getElementById(id);
+  let data = null, now = 0, playing = false, lastTs = 0, colors = {};
+
+  function readColors() {
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of ["--paper", "--panel", "--ink", "--ink-soft", "--rule", "--water", "--water-deep",
+      "--land", "--sky", "--seabed", "--magenta", "--rf", "--uav", "--ugv", "--usv", "--auv"]) {
+      colors[k] = cs.getPropertyValue(k).trim();
+    }
+  }
+  const agentColor = (a) => colors[DOMAIN_VAR[a.domain]] || colors["--ink"];
+
+  // ---------- data ----------
+  async function loadDefault() {
+    const embedded = document.getElementById("run-data");
+    if (embedded) return JSON.parse(embedded.textContent);
+    const res = await fetch("data/harbor_seed0.json");
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return res.json();
+  }
+  function setData(d) {
+    data = d;
+    const dur = d.duration_s;
+    $("scrub").max = String(dur);
+    now = dur; $("scrub").value = String(dur);
+    const commit = d.provenance && d.provenance.commit ? " · commit " + d.provenance.commit : "";
+    $("meta").innerHTML = `Scenario <b>${d.scenario}</b> · seed <b>${d.seed}</b> · ${dur.toFixed(0)} s mission · ` +
+      `${d.agents.length} agents · ${d.structures.length} structures${commit}`;
+    fillPanels();
+    draw();
+  }
+
+  // ---------- helpers ----------
+  function sampleAt(a, key, t) {
+    const arr = a[key]; if (!arr) return null;
+    const ts = a.t; let lo = 0, hi = ts.length - 1;
+    if (t <= ts[0]) return arr[0];
+    if (t >= ts[hi]) return arr[hi];
+    while (hi - lo > 1) { const mid = (lo + hi) >> 1; if (ts[mid] <= t) lo = mid; else hi = mid; }
+    const f = (t - ts[lo]) / (ts[hi] - ts[lo]);
+    const p = arr[lo], q = arr[hi];
+    let dy = q[3] - p[3]; if (dy > Math.PI) dy -= 2 * Math.PI; if (dy < -Math.PI) dy += 2 * Math.PI;
+    return [p[0] + f * (q[0] - p[0]), p[1] + f * (q[1] - p[1]), p[2] + f * (q[2] - p[2]), p[3] + f * dy];
+  }
+  function fitCanvas(c) {
+    const r = c.getBoundingClientRect(), dpr = window.devicePixelRatio || 1;
+    const w = Math.max(1, Math.round(r.width * dpr)), h = Math.max(1, Math.round(r.height * dpr));
+    if (c.width !== w || c.height !== h) { c.width = w; c.height = h; }
+    const ctx = c.getContext("2d"); ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    return { ctx, w: r.width, h: r.height };
+  }
+  const spans = (s) => s.z_min < 0 && s.z_max > 0;
+
+  // ---------- plan view ----------
+  function drawPlan() {
+    const { ctx, w, h } = fitCanvas($("plan"));
+    const [x0, x1, y0, y1] = data.bounds_xy;
+    const pad = 28, s = Math.min((w - 2 * pad) / (x1 - x0), (h - 2 * pad) / (y1 - y0));
+    const ox = pad + ((w - 2 * pad) - s * (x1 - x0)) / 2, oy = pad + ((h - 2 * pad) - s * (y1 - y0)) / 2;
+    const X = (x) => ox + (x - x0) * s, Y = (y) => oy + (y1 - y) * s;
+    ctx.clearRect(0, 0, w, h);
+    // water and land
+    ctx.fillStyle = colors["--water"]; ctx.fillRect(X(data.shoreline_x), Y(y1), X(x1) - X(data.shoreline_x), Y(y0) - Y(y1));
+    ctx.fillStyle = colors["--land"]; ctx.fillRect(X(x0), Y(y1), X(data.shoreline_x) - X(x0), Y(y0) - Y(y1));
+    ctx.strokeStyle = colors["--ink"]; ctx.lineWidth = 1.2;
+    ctx.beginPath(); ctx.moveTo(X(data.shoreline_x), Y(y1)); ctx.lineTo(X(data.shoreline_x), Y(y0)); ctx.stroke();
+    // grid + ticks every 20 m
+    ctx.strokeStyle = colors["--rule"]; ctx.lineWidth = 0.6; ctx.globalAlpha = 0.8;
+    ctx.font = "10px " + getComputedStyle(document.body).getPropertyValue("--mono");
+    ctx.fillStyle = colors["--ink-soft"];
+    for (let x = Math.ceil(x0 / 20) * 20; x <= x1; x += 20) {
+      ctx.beginPath(); ctx.moveTo(X(x), Y(y1)); ctx.lineTo(X(x), Y(y0)); ctx.stroke();
+      ctx.textAlign = "center"; ctx.fillText(String(x), X(x), Y(y0) + 13);
+    }
+    for (let y = Math.ceil(y0 / 20) * 20; y <= y1; y += 20) {
+      ctx.beginPath(); ctx.moveTo(X(x0), Y(y)); ctx.lineTo(X(x1), Y(y)); ctx.stroke();
+      ctx.textAlign = "right"; ctx.fillText(String(y), X(x0) - 4, Y(y) + 3);
+    }
+    ctx.globalAlpha = 1;
+    // chart labels (italic serif for water, upright for land, like nautical charts)
+    ctx.fillStyle = colors["--ink-soft"];
+    ctx.font = "italic 15px Spectral, Georgia, serif"; ctx.textAlign = "left";
+    ctx.fillText("Harbour basin", X(70), Y(72));
+    ctx.font = "600 11px Archivo, Arial, sans-serif";
+    ctx.fillText("QUAY", X(-56), Y(72));
+    // structures
+    for (const st of data.structures) {
+      const [cx, cy] = st.center, [fx, fy] = st.footprint;
+      const rx = X(cx - fx / 2), ry = Y(cy + fy / 2), rw = Math.max(fx * s, 2.5), rh = Math.max(fy * s, 2.5);
+      if (spans(st)) {
+        ctx.fillStyle = colors["--magenta"]; ctx.globalAlpha = 0.85; ctx.fillRect(rx, ry, rw, rh); ctx.globalAlpha = 1;
+      } else if (st.z_max <= 0) {
+        ctx.setLineDash([2, 2]); ctx.strokeStyle = colors["--ink-soft"]; ctx.lineWidth = 1;
+        ctx.strokeRect(rx, ry, rw, rh); ctx.setLineDash([]);
+      } else {
+        ctx.fillStyle = colors["--ink"]; ctx.globalAlpha = 0.55; ctx.fillRect(rx, ry, rw, rh); ctx.globalAlpha = 1;
+      }
+    }
+    // trajectories
+    for (const a of data.agents) {
+      const col = agentColor(a);
+      ctx.strokeStyle = col; ctx.lineWidth = 1; ctx.globalAlpha = 0.28;
+      ctx.beginPath(); a.gt.forEach((p, i) => (i ? ctx.lineTo(X(p[0]), Y(p[1])) : ctx.moveTo(X(p[0]), Y(p[1])))); ctx.stroke();
+      ctx.globalAlpha = 1;
+      if (a.est) {
+        ctx.lineWidth = 1.8; ctx.beginPath(); let started = false;
+        for (let i = 0; i < a.t.length && a.t[i] <= now; i++) {
+          const p = a.est[i]; if (!started) { ctx.moveTo(X(p[0]), Y(p[1])); started = true; } else ctx.lineTo(X(p[0]), Y(p[1]));
+        }
+        ctx.stroke();
+      }
+    }
+    // comm events in flight around `now`
+    let inflight = 0;
+    for (const e of data.comm_events) {
+      if (e.t > now || e.t_arrival + 1.0 < now) continue;
+      const A = data.agents.find((a) => a.id === e.from), B = data.agents.find((a) => a.id === e.to);
+      if (!A || !B) continue;
+      const pa = sampleAt(A, "gt", now), pb = sampleAt(B, "gt", now);
+      ctx.strokeStyle = e.link === "RF" ? colors["--rf"] : colors["--magenta"];
+      ctx.setLineDash(e.link === "RF" ? [6, 4] : [1.5, 3]); ctx.lineWidth = 1.4;
+      ctx.beginPath(); ctx.moveTo(X(pa[0]), Y(pa[1])); ctx.lineTo(X(pb[0]), Y(pb[1])); ctx.stroke();
+      ctx.setLineDash([]); inflight++;
+    }
+    // agents
+    for (const a of data.agents) {
+      const g = sampleAt(a, "gt", now), e = a.est ? sampleAt(a, "est", now) : null;
+      const col = agentColor(a);
+      ctx.strokeStyle = col; ctx.lineWidth = 1.2;
+      ctx.beginPath(); ctx.arc(X(g[0]), Y(g[1]), 5, 0, 2 * Math.PI); ctx.stroke();
+      const p = e || g, yaw = p[3];
+      ctx.save(); ctx.translate(X(p[0]), Y(p[1])); ctx.rotate(-yaw);
+      ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(8, 0); ctx.lineTo(-5, 4.5); ctx.lineTo(-5, -4.5); ctx.closePath(); ctx.fill();
+      ctx.restore();
+      ctx.fillStyle = colors["--ink"]; ctx.font = "600 11px Archivo, Arial, sans-serif"; ctx.textAlign = "left";
+      ctx.fillText(a.name, X(p[0]) + 9, Y(p[1]) - 7);
+    }
+    $("planInfo").textContent = inflight ? `${inflight} packet${inflight > 1 ? "s" : ""} in flight` : "no packets in flight";
+  }
+
+  // ---------- elevation view ----------
+  function drawElev() {
+    const { ctx, w, h } = fitCanvas($("elev"));
+    const [x0, x1] = data.bounds_xy;
+    const zTop = 18, zBot = data.seabed_z - 1, padL = 34, padR = 10, padT = 8, padB = 18;
+    const sx = (w - padL - padR) / (x1 - x0), sz = (h - padT - padB) / (zTop - zBot);
+    const X = (x) => padL + (x - x0) * sx, Z = (z) => padT + (zTop - z) * sz;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = colors["--sky"]; ctx.fillRect(X(x0), Z(zTop), X(x1) - X(x0), Z(0) - Z(zTop));
+    const grad = ctx.createLinearGradient(0, Z(0), 0, Z(data.seabed_z));
+    grad.addColorStop(0, colors["--water"]); grad.addColorStop(1, colors["--water-deep"]);
+    ctx.fillStyle = grad; ctx.fillRect(X(data.shoreline_x), Z(0), X(x1) - X(data.shoreline_x), Z(data.seabed_z) - Z(0));
+    ctx.fillStyle = colors["--seabed"]; ctx.fillRect(X(x0), Z(data.seabed_z), X(x1) - X(x0), Z(zBot) - Z(data.seabed_z));
+    ctx.fillStyle = colors["--land"]; ctx.fillRect(X(x0), Z(data.land_z), X(data.shoreline_x) - X(x0), Z(data.seabed_z) - Z(data.land_z));
+    // datum
+    ctx.strokeStyle = colors["--rf"]; ctx.lineWidth = 1.2; ctx.beginPath(); ctx.moveTo(X(x0), Z(0)); ctx.lineTo(X(x1), Z(0)); ctx.stroke();
+    ctx.fillStyle = colors["--ink-soft"]; ctx.font = "10px 'IBM Plex Mono', monospace"; ctx.textAlign = "right";
+    for (const z of [15, 5, 0, -6, -12]) { ctx.fillText(String(z), padL - 4, Z(z) + 3); }
+    // structures as vertical bars
+    for (const st of data.structures) {
+      const xa = X(st.center[0] - st.footprint[0] / 2), wa = Math.max(st.footprint[0] * sx, 1.5);
+      if (spans(st)) { ctx.fillStyle = colors["--magenta"]; ctx.globalAlpha = 0.55; }
+      else if (st.z_max <= 0) { ctx.fillStyle = colors["--ink-soft"]; ctx.globalAlpha = 0.35; }
+      else { ctx.fillStyle = colors["--ink"]; ctx.globalAlpha = 0.35; }
+      ctx.fillRect(xa, Z(st.z_max), wa, Z(st.z_min) - Z(st.z_max));
+    }
+    ctx.globalAlpha = 1;
+    for (const a of data.agents) {
+      const g = sampleAt(a, "gt", now);
+      ctx.fillStyle = agentColor(a); ctx.beginPath(); ctx.arc(X(g[0]), Z(g[2]), 4.5, 0, 2 * Math.PI); ctx.fill();
+      ctx.fillStyle = colors["--ink"]; ctx.font = "600 10.5px Archivo, Arial, sans-serif"; ctx.textAlign = "left";
+      ctx.fillText(a.name, X(g[0]) + 7, Z(g[2]) - 5);
+    }
+  }
+
+  function draw() { if (!data) return; drawPlan(); drawElev(); $("clock").textContent = `t = ${now.toFixed(0)} s`; }
+
+  // ---------- panels ----------
+  function fillPanels() {
+    const m = data.metrics, cm = (v) => (v == null || Number.isNaN(v) ? "–" : (100 * v).toFixed(1));
+    $("kTeam").textContent = cm(m.ate_team_m);
+    const kb = (k) => (m.comm && m.comm[k] ? (m.comm[k].bytes_sent / 1000).toFixed(1) : "0");
+    $("kRf").textContent = kb("RF"); $("kAc").textContent = kb("ACOUSTIC");
+    const tb = $("agents").querySelector("tbody"); tb.innerHTML = "";
+    for (const a of data.agents) {
+      const id = String(a.id), tr = document.createElement("tr");
+      const chips = [...a.sensors, ...a.comm.map((c) => c.toLowerCase())].map((c) => `<span class="chip">${c}</span>`).join("");
+      tr.innerHTML = `<td><span class="sw" style="background:var(${DOMAIN_VAR[a.domain]})"></span>${a.name}` +
+        `<div class="chips">${chips}</div></td>` +
+        `<td class="num">${cm(m.ate_local_m && m.ate_local_m[id])}</td>` +
+        `<td class="num">${cm(m.ate_fused_m && m.ate_fused_m[id])}</td>` +
+        `<td class="num">${cm(m.ate_team_per_agent_m && m.ate_team_per_agent_m[id])}</td>`;
+      tb.appendChild(tr);
+    }
+    const names = Object.fromEntries(data.agents.map((a) => [String(a.id), a.name]));
+    const ids = data.agents.map((a) => String(a.id));
+    let html = "<thead><tr><th>rx \\ tx</th>" + ids.map((i) => `<th>${names[i]}</th>`).join("") + "</tr></thead><tbody>";
+    for (const r of ids) {
+      html += `<tr><td>${names[r]}</td>` + ids.map((c) => {
+        const v = m.alignments && m.alignments[r] && m.alignments[r][c];
+        return `<td class="num">${r === c ? "·" : v != null ? v : "–"}</td>`;
+      }).join("") + "</tr>";
+    }
+    $("align").innerHTML = html + "</tbody>";
+    const line = (stroke, dash, w = 22) => `<svg width="${w}" height="10" aria-hidden="true"><line x1="0" y1="5" x2="${w}" y2="5" stroke="${stroke}" stroke-width="2" ${dash ? `stroke-dasharray="${dash}"` : ""}/></svg>`;
+    const box = (fill, stroke, dash) => `<svg width="22" height="12" aria-hidden="true"><rect x="5" y="1" width="12" height="10" fill="${fill}" stroke="${stroke}" ${dash ? `stroke-dasharray="${dash}"` : ""}/></svg>`;
+    $("legend").innerHTML =
+      `<div>${box("var(--magenta)", "none")}Crosses the waterline (pile, hull, buoy): coaxial parts</div>` +
+      `<div>${box("var(--ink)", "none")}Above water only (land)</div>` +
+      `<div>${box("none", "var(--ink-soft)", "2 2")}Submerged only (dotted, as on charts)</div>` +
+      `<div>${line("var(--ink-soft)")}Thick: estimate in team frame; faint: ground truth</div>` +
+      `<div>${line("var(--rf)", "6 4")}RF packet (Mbps, air)</div>` +
+      `<div>${line("var(--magenta)", "1.5 3")}Acoustic packet (kbps, water)</div>`;
+  }
+
+  // ---------- interaction ----------
+  function tick(ts) {
+    if (!playing) return;
+    const dt = lastTs ? (ts - lastTs) / 1000 : 0; lastTs = ts;
+    now += dt * Number($("speed").value);
+    if (now >= data.duration_s) { now = data.duration_s; setPlaying(false); }
+    $("scrub").value = String(now); draw();
+    if (playing) requestAnimationFrame(tick);
+  }
+  function setPlaying(p) {
+    playing = p; $("play").textContent = p ? "Pause" : "Play"; $("play").setAttribute("aria-pressed", String(p));
+    if (p) { if (now >= data.duration_s) now = 0; lastTs = 0; requestAnimationFrame(tick); }
+  }
+  $("play").addEventListener("click", () => data && setPlaying(!playing));
+  $("scrub").addEventListener("input", (e) => { now = Number(e.target.value); draw(); });
+  $("file").addEventListener("change", async (e) => {
+    const f = e.target.files && e.target.files[0]; if (!f) return;
+    try { setData(JSON.parse(await f.text())); $("status").textContent = "Loaded " + f.name; }
+    catch (err) { $("status").textContent = "Could not read " + f.name + ": the file is not an avatar export-viz JSON."; }
+  });
+  const refreshTheme = () => { readColors(); draw(); };
+  window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", refreshTheme);
+  new MutationObserver(refreshTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  new ResizeObserver(() => draw()).observe($("plan"));
+  readColors();
+  loadDefault().then(setData).catch(() => {
+    $("meta").textContent = "No run loaded.";
+    $("status").textContent = "Serve this folder (python -m http.server) or load a JSON from `avatar export-viz`.";
+  });
+  if (document.fonts) document.fonts.ready.then(draw);
+})();
+</script>
+<!-- AVATAR-CONTENT-END -->
+</body>
+</html>

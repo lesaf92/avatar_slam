@@ -1,0 +1,45 @@
+\section{Related Work}
+\label{sec:related}
+% Source of truth for claims and citations: docs/research/related_work.md and gap_analysis.md.
+
+\subsection{Collaborative SLAM on radio links}
+Distributed and decentralized C-SLAM for ground and aerial teams is mature. Kimera-Multi builds
+dense metric-semantic meshes with robust distributed pose-graph optimization and peer-to-peer
+communication~\cite{tian2022kimeramulti}. Swarm-SLAM prioritizes inter-robot loop closures under
+a communication budget~\cite{lajoie2024swarmslam}. SlideSLAM shares sparse object-level
+metric-semantic maps between aerial and ground robots~\cite{liu2025slideslam}. Hydra-Multi
+fuses 3D scene graphs from heterogeneous robots~\cite{chang2023hydramulti}, and ROMAN aligns
+open-set object maps for view-invariant global localization~\cite{peterson2025roman}.
+Distributed back-ends range from object-based Gauss--Seidel schemes~\cite{choudhary2017dgs} to
+certifiably correct distributed PGO~\cite{tian2021dpgo}; robust variants reject outlier loop
+closures via pairwise consistency~\cite{mangelson2018pcm} or graduated
+non-convexity~\cite{yang2020gnc}. \avatar{} follows the condensed-sharing idea of
+DDF-SAM~\cite{cunningham2010ddfsam, cunningham2013ddfsam2}. \todo{contrast: all assume a
+single medium and radio-class links.}
+
+\subsection{Multi-agent neural and Gaussian mapping}
+MAGiC-SLAM~\cite{yugay2025magic} and GRAND-SLAM~\cite{thomas2025grandslam} merge Gaussian
+splatting maps~\cite{kerbl2023gs} from several agents with a central optimizer; HAMMER builds
+heterogeneous semantic Gaussian maps on a server~\cite{yu2025hammer}. MNE-SLAM distributes
+neural mapping with peer-to-peer communication~\cite{deng2025mneslam}. Consensus-based methods
+train a shared implicit map with C-ADMM~\cite{yu2022dinno}, and RAMEN weights consensus by
+parameter uncertainty to tolerate asynchronous, lossy links~\cite{zhao2025ramen}.
+\todo{contrast: RGB-D/radio, single medium.}
+
+\subsection{Underwater and cross-medium multi-robot SLAM}
+Acoustic cooperative localization has a long history~\cite{bahr2009cl}. DRACo-SLAM and
+DRACo-SLAM2 perform distributed, acoustic-communication-efficient SLAM for sonar-equipped AUV
+teams~\cite{mcconnell2022draco, huang2025draco2}. Closest to our work, McConnell
+\textit{et al.}~\cite{mcconnell2026aboveandbelow} close inter-robot loops between a USV and
+AUVs using structures observable above and below the surface, merging all estimates in a
+centralized graph. \todo{precise differences after full reading (T-R1-01).}
+
+\subsection{Acoustic and opti-acoustic neural reconstruction}
+Neural and Gaussian scene representations have been adapted to imaging sonar and camera--sonar
+fusion~\cite{qadri2024aoneus, qu2025zsplat, sethuraman2025sonarsplat}; these are single-agent
+methods and motivate the sonar rasterizer of our neural layer (Paper~B).
+
+\subsection{Simulation}
+Underwater simulators include DAVE~\cite{zhang2022dave}, HoloOcean~\cite{potokar2022holoocean}
+and Stonefish~\cite{cieslak2019stonefish}; LOTUSim targets multi-domain maritime
+scenarios~\cite{lotusim2026}. \todo{none provides a C-SLAM benchmark with GT + comm traces.}

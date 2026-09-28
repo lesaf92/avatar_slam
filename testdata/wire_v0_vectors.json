@@ -1,0 +1,98 @@
+{
+  "spec": "docs/spec/wire_format_v0.md",
+  "version": 0,
+  "crc16_check": {
+    "ascii": "123456789",
+    "crc": 10673
+  },
+  "vectors": [
+    {
+      "name": "digest_empty",
+      "type": "LANDMARK_DIGEST",
+      "sender_id": 3,
+      "seq": 42,
+      "stamp_ms": 1000,
+      "domain": 2,
+      "descriptor_dim": 0,
+      "records": [],
+      "hex": "a70103002a00e8030000020000e962"
+    },
+    {
+      "name": "digest_two_records",
+      "type": "LANDMARK_DIGEST",
+      "sender_id": 0,
+      "seq": 65535,
+      "stamp_ms": 4000000000,
+      "domain": 3,
+      "descriptor_dim": 4,
+      "records": [
+        {
+          "landmark_id": 17,
+          "position": [
+            12.34,
+            -4.2,
+            -3.0
+          ],
+          "sigma_xy": 0.1,
+          "sigma_z": 0.83,
+          "extent": [
+            0.6,
+            0.6,
+            12.1
+          ],
+          "class_id": 1,
+          "flags": 18,
+          "n_obs": 7,
+          "descriptor": [
+            0.5,
+            -0.25,
+            1.0,
+            -1.0
+          ]
+        },
+        {
+          "landmark_id": 65535,
+          "position": [
+            -1638.35,
+            1638.35,
+            0.024
+          ],
+          "sigma_xy": 9.0,
+          "sigma_z": 0.0,
+          "extent": [
+            100.0,
+            0.1,
+            0.0
+          ],
+          "class_id": 3,
+          "flags": 13,
+          "n_obs": 300,
+          "descriptor": [
+            0.0,
+            0.004,
+            -0.996,
+            0.33
+          ]
+        }
+      ],
+      "hex": "a7010000ffff00286bee0304021100f700acffc4ff052a02023001120740e07f81ffff0180ff7f0000ff00ff0000030dff0001822a7ffa"
+    },
+    {
+      "name": "frame_alignment",
+      "type": "FRAME_ALIGNMENT",
+      "sender_id": 4,
+      "seq": 7,
+      "stamp_ms": 123456,
+      "other_id": 1,
+      "n_inliers": 12,
+      "x": 1.5,
+      "y": -2.25,
+      "z": 0.125,
+      "yaw": 0.5,
+      "sigma_xy": 0.05,
+      "sigma_z": 0.1,
+      "sigma_yaw": 0.01,
+      "hex": "a7020400070040e20100010c0000c03f000010c00000003e0000003fcdcc4c3dcdcccc3d0ad7233c1b25"
+    }
+  ]
+}
