@@ -26,8 +26,14 @@ from numpy.typing import NDArray
 from avatar.backend.graph import FactorGraph, VarType
 from avatar.comm import codec
 from avatar.comm.scheduler import AlignmentInformation, match_probability, select_voi
+from avatar.eval.metrics import chain_frames
 from avatar.frontend.association import Alignment, AssociationParams, LandmarkSet, align
-from avatar.frontend.frame_consistency import CycleGate, FrameEdge, consistent_subset
+from avatar.frontend.frame_consistency import (
+    CycleGate,
+    FrameEdge,
+    consistent_subset,
+    optimize_frame_graph,
+)
 from avatar.geometry import compose, transform_points
 from avatar.semantics import normalize
 from avatar.sim.agents import AgentConfig
@@ -61,6 +67,7 @@ class AvatarParams:
     association: AssociationParams = field(default_factory=AssociationParams)
     cycle_check: bool = True  # team frame-graph cycle consistency (T-X2-02)
     point_obs_robust_k: float | None = None  # Huber on landmark observations (front-end errors)
+    fuse_team_frames: bool = True  # pose graph over agent frames (else: least-σ chain only)
     cycle_gate: CycleGate = field(default_factory=CycleGate)
 
 
@@ -149,6 +156,7 @@ class AvatarAgent:
         self.frames_about_me: dict[int, FrameEstimate] = {}
         self.vetoed: set[int] = set()  # own alignments rejected by the cycle check
         self.rejected_frames: set[tuple[int, int]] = set()  # received ones rejected
+        self.rejected_about_me: set[int] = set()
         self.seq = 0
         self.decode_errors = 0
         # Domains whose agents (directly or through a gateway) receive each link.
@@ -484,7 +492,7 @@ class AvatarAgent:
         The check is re-run from scratch every time, so a veto is lifted when
         new evidence makes the estimate consistent again.
         """
-        self.vetoed, self.rejected_frames = set(), set()
+        self.vetoed, self.rejected_frames, self.rejected_about_me = set(), set(), set()
         if not self.params.cycle_check:
             return
         own = {
@@ -497,22 +505,46 @@ class AvatarAgent:
             for k, fe in self.frames.items()
             if fe.source != self.id
         }
-        about_me = [
-            FrameEdge(j, self.id, fe.T, fe.sigma_xy, fe.sigma_yaw, fe.n_inliers)
+        about_me = {
+            j: FrameEdge(j, self.id, fe.T, fe.sigma_xy, fe.sigma_yaw, fe.n_inliers)
             for j, fe in self.frames_about_me.items()
-        ]
+        }
         _, rejected = consistent_subset(
-            [*own.values(), *received.values(), *about_me], self.params.cycle_gate
+            [*own.values(), *received.values(), *about_me.values()], self.params.cycle_gate
         )
         bad = {id(e) for e in rejected}
         self.vetoed = {s for s, e in own.items() if id(e) in bad}
         self.rejected_frames = {k for k, e in received.items() if id(e) in bad}
+        self.rejected_about_me = {j for j, e in about_me.items() if id(e) in bad}
         for s in self.vetoed:
             self.frames.pop((self.id, s), None)
 
     def consistent_frames(self) -> dict[tuple[int, int], FrameEstimate]:
         """Known ``T_a_from_b`` estimates that passed the cycle check."""
         return {k: fe for k, fe in self.frames.items() if k not in self.rejected_frames}
+
+    def team_frames(self, fuse: bool | None = None) -> dict[int, FloatArray]:
+        """``T_self_from_j`` [x, y, z, yaw] for every agent reachable in the frame graph.
+
+        The chain of least accumulated σ initialises a small 4-DoF pose graph
+        over the agents' frames that fuses every cycle-consistent estimate this
+        agent knows: its own, the received ones, and its neighbours' estimates
+        of its own frame (``fuse``, default ``params.fuse_team_frames``).
+        """
+        known = self.consistent_frames()
+        edges = [
+            FrameEdge(a, b, fe.T, fe.sigma_xy, fe.sigma_yaw, fe.n_inliers, fe.sigma_z)
+            for (a, b), fe in known.items()
+        ]
+        edges += [
+            FrameEdge(j, self.id, fe.T, fe.sigma_xy, fe.sigma_yaw, fe.n_inliers, fe.sigma_z)
+            for j, fe in self.frames_about_me.items()
+            if j not in self.rejected_about_me
+        ]
+        init = chain_frames(self.id, {(e.a, e.b): (e.T, e.sigma_xy) for e in edges})
+        if not (self.params.fuse_team_frames if fuse is None else fuse):
+            return init
+        return optimize_frame_graph(self.id, edges, init)
 
     # ------------------------------------------------------------------ fused solve
     def solve_fused(self) -> None:

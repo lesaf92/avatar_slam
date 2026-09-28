@@ -77,3 +77,26 @@ def test_cycle_check_keeps_the_fleet_run_intact():
     res = run_decentralized(sc, sim, params, 0)
     assert res.metrics["team_connected_s"] is not None
     assert res.metrics["vetoed_alignments"] == 0
+
+
+def test_frame_graph_fusion_is_exact_on_exact_edges_and_averages_noisy_ones():
+    from avatar.eval.metrics import chain_frames
+    from avatar.frontend.frame_consistency import optimize_frame_graph
+
+    edges = [true_edge(0, 1), true_edge(1, 2), true_edge(0, 2), true_edge(3, 0)]
+    init = chain_frames(0, {(e.a, e.b): (e.T, e.sigma_xy) for e in edges})
+    out = optimize_frame_graph(0, edges, init)
+    for j in range(4):
+        assert np.allclose(out[j], compose(inverse(WORLD[0]), WORLD[j]), atol=1e-6)
+    # A biased direct edge (preferred by the least-σ chain) is pulled toward the
+    # two-hop evidence and a reverse estimate of equal weight.
+    bias = np.array([1.0, -0.6, 0.0, 0.02])
+    bad = FrameEdge(0, 2, compose(true_edge(0, 2).T, bias), 0.05, 0.005, 15)
+    rev = true_edge(2, 0, s=0.05, sy=0.005)
+    edges = [true_edge(0, 1, s=0.2, sy=0.01), true_edge(1, 2, s=0.2, sy=0.01), bad, rev]
+    init = chain_frames(0, {(e.a, e.b): (e.T, e.sigma_xy) for e in edges})
+    fused = optimize_frame_graph(0, edges, init)
+    truth = compose(inverse(WORLD[0]), WORLD[2])
+    err_chain = np.hypot(*(init[2] - truth)[:2])
+    err_fused = np.hypot(*(fused[2] - truth)[:2])
+    assert err_fused < 0.6 * err_chain

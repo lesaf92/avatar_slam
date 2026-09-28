@@ -231,9 +231,7 @@ def run_decentralized(
         ag.solve_fused()
 
     anchor = scenario.anchor_id
-    known = agents[anchor].consistent_frames()
-    edges = {k: (fe.T, fe.sigma_xy) for k, fe in known.items()}
-    T_anchor_from = chain_frames(anchor, edges)
+    T_anchor_from = agents[anchor].team_frames()
     fused = {i: ag.trajectory("fused") for i, ag in agents.items()}
     local = {i: ag.trajectory("local") for i, ag in agents.items()}
     team = {i: transform_poses(T_anchor_from[i], fused[i]) for i in T_anchor_from if i in fused}

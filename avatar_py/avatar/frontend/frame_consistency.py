@@ -41,6 +41,7 @@ class FrameEdge:
     sigma_xy: float
     sigma_yaw: float
     n_inliers: int
+    sigma_z: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -132,3 +133,39 @@ def consistent_subset(
         else:
             rejected.append(e)
     return accepted, rejected
+
+
+def optimize_frame_graph(
+    anchor: int,
+    edges: list[FrameEdge],
+    init: dict[int, FloatArray],
+    floor_xy_m: float = 0.05,
+    floor_z_m: float = 0.05,
+    floor_yaw_rad: float = 0.005,
+) -> dict[int, FloatArray]:
+    """Fuse all frame estimates in a 4-DoF pose graph over the agents' frames.
+
+    Variables are ``T_anchor_from_j`` for the agents in ``init`` (the anchor is
+    fixed at identity); each edge ``T_a_from_b`` becomes a between factor with
+    σ ``(σ_xy, σ_xy, σ_z, σ_yaw)`` floored at the given values (alignment σ are
+    often optimistic). Edges touching agents outside ``init`` are ignored.
+    """
+    from avatar.backend.graph import FactorGraph, VarType
+
+    use = [e for e in edges if e.a in init and e.b in init and e.a != e.b]
+    if len(init) < 2 or not use:
+        return dict(init)
+    g = FactorGraph()
+    for j, T in init.items():
+        g.add_variable(("F", j), VarType.POSE4, np.asarray(T, dtype=float))
+    g.add_pose_prior(("F", anchor), np.zeros(4), [1e-6] * 4)
+    for e in use:
+        sxy = max(e.sigma_xy, floor_xy_m)
+        g.add_between(
+            ("F", e.a),
+            ("F", e.b),
+            np.asarray(e.T, dtype=float),
+            [sxy, sxy, max(e.sigma_z, floor_z_m), max(e.sigma_yaw, floor_yaw_rad)],
+        )
+    g.optimize(max_iters=20)
+    return {j: g.value(("F", j)) for j in init}
