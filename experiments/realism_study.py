@@ -40,9 +40,11 @@ LEVELS = {
 def kernel_params(spec: str) -> dict:
     """``none`` | ``<k>`` / ``huber:<k>`` (Huber) | ``gnc:<c>`` (GNC-TLS) → AvatarParams kwargs."""
     if spec == "none":
-        return {}
+        return {"point_obs_gnc": None}
     kind, _, val = spec.partition(":") if ":" in spec else ("huber", "", spec)
-    return {"point_obs_gnc" if kind == "gnc" else "point_obs_robust_k": float(val)}
+    if kind == "gnc":
+        return {"point_obs_gnc": float(val)}
+    return {"point_obs_gnc": None, "point_obs_robust_k": float(val)}
 
 
 def run_one(job: tuple[str, str, str, int]) -> dict:

@@ -69,9 +69,9 @@ class AvatarParams:
     association: AssociationParams = field(default_factory=AssociationParams)
     cycle_check: bool = True  # team frame-graph cycle consistency (T-X2-02)
     point_obs_robust_k: float | None = None  # Huber on landmark observations (front-end errors)
-    # GNC-TLS on landmark observations (inlier bound, whitened; e.g. 4.03 =
-    # sqrt(chi2_3(0.999))). Takes precedence over Huber (LOG L25).
-    point_obs_gnc: float | None = None
+    # GNC-TLS on landmark observations (inlier bound, whitened; 4.03 =
+    # sqrt(chi2_3(0.999))). Takes precedence over Huber; None disables (LOG L25).
+    point_obs_gnc: float | None = 4.03
     fuse_team_frames: bool = True  # pose graph over agent frames (else: least-σ chain only)
     # Estimate a per-agent heading bias [rad/m] when heading is dead-reckoned
     # (platform heading_source != "compass"); prior σ from the platform spec (D9, L24).

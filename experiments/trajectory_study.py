@@ -48,12 +48,13 @@ def main() -> None:
     ap.add_argument("--out", default="results/trajectory_study.csv")
     ap.add_argument("--align-window", type=int, default=0, help="AvatarParams.align_window_kf")
     ap.add_argument("--heading-bias", action="store_true", help="model the heading bias (D9)")
-    ap.add_argument("--gnc", type=float, default=None, help="GNC-TLS bound on landmark obs")
+    ap.add_argument("--gnc", type=float, default=4.03,
+                    help="GNC-TLS bound on landmark obs (<= 0 disables)")  # fmt: skip
     args = ap.parse_args()
     params = AvatarParams(
         align_window_kf=args.align_window,
         model_heading_bias=args.heading_bias,
-        point_obs_gnc=args.gnc,
+        point_obs_gnc=args.gnc if args.gnc > 0 else None,
     )
     rev = commit()
     rows = []

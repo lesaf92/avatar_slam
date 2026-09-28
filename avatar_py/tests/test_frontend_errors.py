@@ -53,13 +53,17 @@ def test_switches_stay_nearby_in_the_same_medium_and_clutter_is_unique():
 
 def test_robust_kernel_contains_association_errors():
     errors = {"id_switch_prob": 0.1, "clutter_per_kf": 0.5}
-    plain = AvatarParams()
-    robust = AvatarParams(point_obs_robust_k=3.0)
+    plain = AvatarParams(point_obs_gnc=None)  # no robust kernel at all
+    robust = AvatarParams(point_obs_gnc=None, point_obs_robust_k=3.0)
+    gnc = AvatarParams()  # default: GNC-TLS
     sc, sim = make_sim("harbor_fleet", 0, 200.0, plain, frontend_errors=errors)
     ate_plain = run_independent(sc, sim, plain, 0).metrics["ate_local_m"]
     ate_robust = run_independent(sc, sim, robust, 0).metrics["ate_local_m"]
+    ate_gnc = run_independent(sc, sim, gnc, 0).metrics["ate_local_m"]
     uuv = next(a.agent_id for a in sc.agents if a.name == "uuv_0")
+    uav = next(a.agent_id for a in sc.agents if a.name == "uav_0")
     assert ate_robust[uuv] < 0.5 * ate_plain[uuv]
+    assert ate_gnc[uav] < ate_robust[uav]  # GNC beats Huber where errors dominate (L25)
     # the oracle uses ground-truth association: clutter and switches do not reach it
     _, clean = make_sim("harbor_fleet", 0, 200.0, plain)
     a = run_centralized(sc, sim, plain, 0).metrics["ate_team_m"]

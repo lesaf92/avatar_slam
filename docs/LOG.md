@@ -11,6 +11,42 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L25. Graduated non-convexity makes the team immune to front-end errors (GNC default)
+
+`experiments/realism_study.py` with three kernels on landmark observations:
+none, Huber (k = 3), and GNC-TLS (inlier bound 4.03 = √χ²₃(0.999), warm
+started; Yang, Antonante, Tzoumas and Carlone, RA-L 2020). Seeds 0–2, 600 s,
+M64, commit `d5337e4`. "low" = 5 % identity switches + 0.5 clutter/keyframe;
+"high" = 15 % + 1.0. Team ATE, Avatar [m] (oracle: 0.078 / 0.092, unaffected):
+
+| Preset | Errors | None | Huber k = 3 | **GNC-TLS** |
+|---|---|---|---|---|
+| `fleet_default` | none | 0.111 | 0.110 | 0.111 |
+| `fleet_default` | low | 1.926 | 0.326 | **0.108** |
+| `fleet_default` | high | 18.66 (0/3 merged) | 0.727 (2/3) | **0.120** (3/3) |
+| `fleet_exploration` | none | 0.170 | 0.170 | 0.173 |
+| `fleet_exploration` | low | 2.270 (1/3) | 0.329 | **0.158** |
+| `fleet_exploration` | high | 12.38 (0/3) | 0.815 | **0.168** |
+
+```
+python experiments/realism_study.py --seeds 0 1 2    # none | huber:3 | gnc:4.03
+```
+
+- With GNC every agent stays at its error-free accuracy, even at 15 %
+  identity switches plus clutter (UAV solo: 0.153 m error-free, 0.160 m with
+  high errors, versus 1.109 m with Huber). The team ATE stays at its
+  error-free level.
+- Without errors GNC changes nothing (0.111 vs. 0.111 m); it rejects about
+  0.1 % of true observations (the χ² tail).
+- Cost: about 3× the wall time of a decentralized run (16 → 45–60 s for
+  600 s), with warm starts. A cold start at every exchange was 15× slower.
+  Early warm-start bug: new factors were cut before they could pull the
+  estimate, which rejected up to 75 % of a UAV's true observations. Fixed by
+  one LM pass before the weight update.
+- **Default changed:** `point_obs_gnc = 4.03` (decision D10). This changes
+  the default code path of every run from this commit on. The oracle keeps
+  ground-truth association and is unaffected.
+
 ### L23. Why drift is not corrected: the start anchor has no correct link to the team
 
 Diagnostic on `fleet_transit_3uuv`, seed 2, 1 kbit/s (commit `f07863c`).
