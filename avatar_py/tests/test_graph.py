@@ -180,3 +180,44 @@ def test_copy_is_independent():
     h.set_value("a", [9.0, 9.0, 9.0])
     assert not g.has("b") and g.num_factors() == 1
     assert np.allclose(g.value("a"), [1.0, 2.0, 3.0])
+
+
+def _point_with_outliers(rng, kernel, n_in=30, n_out=20):
+    g = FactorGraph()
+    g.add_variable("p", VarType.POINT3, np.zeros(3))
+    truth = np.array([2.0, -1.0, 0.5])
+    for _ in range(n_in):
+        g.add_point_prior("p", truth + rng.normal(0, 0.1, 3), [0.1, 0.1, 0.1])
+    for _ in range(n_out):  # gross, one-sided outliers
+        g.add_point_prior("p", truth + np.array([4.0, 3.0, 0.0]) + rng.normal(0, 1.0, 3),
+                          [0.1, 0.1, 0.1])  # fmt: skip
+    g.set_kernel("point_prior", kernel, 4.03)  # sqrt(chi2_3(0.999))
+    g.optimize()
+    return g, truth
+
+
+def test_gnc_tls_rejects_gross_outliers_that_bias_huber(rng):
+    g_gnc, truth = _point_with_outliers(rng, "gnc")
+    g_hub, _ = _point_with_outliers(np.random.default_rng(1), "huber")
+    assert np.linalg.norm(g_gnc.value("p") - truth) < 0.05
+    assert np.linalg.norm(g_hub.value("p") - truth) > 0.2  # Huber is pulled by 40 % outliers
+    mask = g_gnc.outlier_mask("point_prior")
+    assert mask[:30].sum() <= 1 and mask[30:].all()  # TLS may drop a 3-sigma inlier
+
+
+def test_gnc_is_plain_least_squares_without_outliers(rng):
+    g1 = FactorGraph()
+    g2 = FactorGraph()
+    for g in (g1, g2):
+        g.add_variable("p", VarType.POINT3, np.zeros(3))
+    meas = [rng.normal(0, 0.1, 3) for _ in range(20)]
+    for g in (g1, g2):
+        for m in meas:
+            g.add_point_prior("p", m, [0.1, 0.1, 0.1])
+    g2.set_kernel("point_prior", "gnc", 4.03)
+    g1.optimize()
+    g2.optimize()
+    assert np.allclose(g1.value("p"), g2.value("p"), atol=1e-8)
+    assert not g2.outlier_mask("point_prior").any()
+    with pytest.raises(ValueError):
+        g2.set_kernel("point_prior", "cauchy", 1.0)

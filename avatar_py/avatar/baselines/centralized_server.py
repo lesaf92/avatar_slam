@@ -418,6 +418,8 @@ def _joint_graph(server: Server, accepted, T_anchor_from, anchor: int, params: A
                 if ra != rb:
                     parent[rb] = ra
     g = FactorGraph(point_obs_robust_k=params.point_obs_robust_k)
+    if params.point_obs_gnc is not None:
+        g.set_kernel("point_obs", "gnc", params.point_obs_gnc)
     keys: dict[int, list] = {}
     for i in members:
         sh = server.shadows[i]

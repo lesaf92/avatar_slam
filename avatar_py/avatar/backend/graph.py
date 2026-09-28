@@ -59,7 +59,9 @@ class _FactorBlock:
     meas: list[FloatArray] = field(default_factory=list)
     sigmas: list[FloatArray] = field(default_factory=list)
     flags: list[bool] = field(default_factory=list)  # per-factor boolean option
-    robust_k: float | None = None
+    robust_k: float | None = None  # Huber threshold, or the TLS inlier bound for GNC
+    kernel: str = "huber"  # "huber" (IRLS) or "gnc" (graduated non-convexity, TLS)
+    gnc_w: FloatArray | None = field(default=None, repr=False)  # fixed GNC weights
     _arrays: tuple | None = field(default=None, repr=False)  # cache, reset by add()
 
     def add(self, var_idx: tuple[int, ...], meas, sigmas, flag: bool = False) -> None:
@@ -90,7 +92,8 @@ class _FactorBlock:
         """Copy with its own lists; the (never mutated) arrays and cache are shared."""
         return _FactorBlock(
             list(self.vars), list(self.meas), list(self.sigmas), list(self.flags),
-            self.robust_k, self._arrays,
+            self.robust_k, self.kernel,
+            None if self.gnc_w is None else self.gnc_w.copy(), self._arrays,
         )  # fmt: skip
 
     def __len__(self) -> int:
@@ -284,7 +287,11 @@ class FactorGraph:
             valid = np.isfinite(r).all(axis=1)
             r = np.where(np.isfinite(r), r, 0.0)
             e = np.linalg.norm(r, axis=1)
-            if blk.robust_k is not None:
+            if blk.kernel == "gnc" and blk.gnc_w is not None:
+                w = np.ones(n)
+                w[: min(n, len(blk.gnc_w))] = blk.gnc_w[:n]
+                cost += float(0.5 * np.sum((w * e**2)[valid]))
+            elif blk.robust_k is not None:
                 k = blk.robust_k
                 w = np.where(e <= k, 1.0, k / np.maximum(e, 1e-12))
                 cost += float(np.sum(np.where(e <= k, 0.5 * e**2, k * (e - 0.5 * k))[valid]))
@@ -450,7 +457,110 @@ class FactorGraph:
         c, _, _ = self._linearize(self._state(), jacobian=False)
         return c
 
+    def set_kernel(self, factor_type: str, kernel: str, threshold: float | None) -> None:
+        """Robust kernel of one factor type: ``"huber"`` (IRLS), ``"gnc"`` (GNC-TLS)
+        or ``"none"``. ``threshold`` is the whitened Huber threshold or TLS inlier
+        bound c̄ (a factor with whitened residual > c̄ is an outlier)."""
+        blk = self._blocks[factor_type]
+        if kernel == "none":
+            blk.kernel, blk.robust_k, blk.gnc_w = "huber", None, None
+        elif kernel in ("huber", "gnc"):
+            if threshold is None or threshold <= 0:
+                raise ValueError("robust kernels need a positive threshold")
+            blk.kernel, blk.robust_k, blk.gnc_w = kernel, float(threshold), None
+        else:
+            raise ValueError(f"unknown kernel {kernel!r}")
+
+    def _block_norms(self, x: FloatArray, name: str) -> FloatArray:
+        """Whitened residual norm of every factor of one type (non-finite → 0)."""
+        blk = self._blocks[name]
+        off = np.asarray(self._offsets, dtype=np.int64)
+        r, _ = getattr(self, f"_lin_{name}")(x, off, blk, False)
+        r = np.where(np.isfinite(r), r, 0.0)
+        return np.linalg.norm(r, axis=1)
+
     def optimize(
+        self,
+        max_iters: int = 30,
+        rel_tol: float = 1e-8,
+        step_tol: float = 1e-8,
+        lambda0: float = 1e-4,
+        gnc_mu_step: float = 1.4,
+        gnc_max_outer: int = 30,
+        gnc_inner_iters: int = 3,
+        gnc_warm_mu: float = 10.0,
+    ) -> OptimizeResult:
+        """Levenberg–Marquardt; robust factors use IRLS-Huber or GNC-TLS.
+
+        GNC (graduated non-convexity with a truncated least-squares cost; Yang,
+        Antonante, Tzoumas and Carlone, RA-L 2020) runs when a factor type has
+        ``kernel="gnc"``: start from the convex surrogate (μ small, all weights
+        1), then alternate a few LM iterations with fixed weights and the TLS
+        weight update, increasing μ by ``gnc_mu_step`` until the weights are
+        binary. The final LM pass uses those weights (``max_iters`` iterations).
+
+        **Warm start** (incremental use, e.g. a local graph re-solved every
+        exchange): if weights from a previous solve exist, they are kept, new
+        factors start at weight 1 and first pull the estimate (a few LM
+        iterations), then μ starts at ``gnc_warm_mu`` (close to TLS), so only
+        a few outer steps run.
+        """
+        gnc = [n for n, b in self._blocks.items() if b.kernel == "gnc" and b.vars]
+        if not gnc or self._dim == 0:
+            return self._lm(max_iters, rel_tol, step_tol, lambda0)
+        initial = self.cost()
+        c2 = {n: self._blocks[n].robust_k ** 2 for n in gnc}
+        warm = all(
+            self._blocks[n].gnc_w is not None and len(self._blocks[n].gnc_w) > 0 for n in gnc
+        )
+        if warm:
+            for n in gnc:
+                blk = self._blocks[n]
+                w = np.ones(len(blk))
+                k = min(len(blk), len(blk.gnc_w))
+                w[:k] = blk.gnc_w[:k]
+                blk.gnc_w = w
+            # let new factors pull the estimate before any of them can be cut
+            self._lm(gnc_inner_iters, rel_tol, step_tol, lambda0)
+            norms = {n: self._block_norms(self._state(), n) for n in gnc}
+            mu = gnc_warm_mu
+        else:
+            for n in gnc:
+                self._blocks[n].gnc_w = np.ones(len(self._blocks[n]))
+            self._lm(gnc_inner_iters, rel_tol, step_tol, lambda0)
+            norms = {n: self._block_norms(self._state(), n) for n in gnc}
+            r2max = max(float(np.max(norms[n] ** 2)) for n in gnc)
+            mu = min(c2.values()) / max(2.0 * r2max - min(c2.values()), 1e-9)
+        it = 0
+        for it in range(1, gnc_max_outer + 1):  # noqa: B007 - reported below
+            binary = True
+            for n in gnc:
+                r2 = norms[n] ** 2
+                lo, hi = mu / (mu + 1.0) * c2[n], (mu + 1.0) / mu * c2[n]
+                mid = np.sqrt(c2[n] * mu * (mu + 1.0)) / np.maximum(np.sqrt(r2), 1e-12) - mu
+                w = np.where(r2 <= lo, 1.0, np.where(r2 >= hi, 0.0, np.clip(mid, 0.0, 1.0)))
+                binary &= bool(np.all((w < 1e-3) | (w > 1 - 1e-3)))
+                self._blocks[n].gnc_w = w
+            self._lm(gnc_inner_iters, rel_tol, step_tol, lambda0)
+            norms = {n: self._block_norms(self._state(), n) for n in gnc}
+            if binary:
+                break
+            mu *= gnc_mu_step
+        for n in gnc:  # final binary weights
+            self._blocks[n].gnc_w = (norms[n] <= np.sqrt(c2[n])).astype(float)
+        res = self._lm(max_iters, rel_tol, step_tol, lambda0)
+        return OptimizeResult(initial, res.final_cost, res.iterations + it, res.converged)
+
+    def outlier_mask(self, factor_type: str) -> NDArray[np.bool_]:
+        """Factors of one type that GNC rejected (weight 0); all False otherwise."""
+        blk = self._blocks[factor_type]
+        if blk.kernel != "gnc" or blk.gnc_w is None:
+            return np.zeros(len(blk), dtype=bool)
+        w = np.ones(len(blk))
+        w[: len(blk.gnc_w)] = blk.gnc_w[: len(blk)]
+        return w < 0.5
+
+    def _lm(
         self,
         max_iters: int = 30,
         rel_tol: float = 1e-8,

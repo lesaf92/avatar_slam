@@ -37,11 +37,19 @@ LEVELS = {
 }
 
 
-def run_one(job: tuple[str, str, float | None, int]) -> dict:
+def kernel_params(spec: str) -> dict:
+    """``none`` | ``<k>`` / ``huber:<k>`` (Huber) | ``gnc:<c>`` (GNC-TLS) → AvatarParams kwargs."""
+    if spec == "none":
+        return {}
+    kind, _, val = spec.partition(":") if ":" in spec else ("huber", "", spec)
+    return {"point_obs_gnc" if kind == "gnc" else "point_obs_robust_k": float(val)}
+
+
+def run_one(job: tuple[str, str, str, int]) -> dict:
     preset, level, robust_k, seed = job
     doc = yaml.safe_load((HERE / "scenarios" / f"{preset}.yaml").read_text())
     duration = float(doc.get("duration_s", 600))
-    params = AvatarParams(point_obs_robust_k=robust_k)
+    params = AvatarParams(**kernel_params(robust_k))
     args = {**doc["args"], "frontend_errors": LEVELS[level]}
     scenario, sim = make_sim(doc["scenario"], seed, duration, params, **args)
     ind = run_independent(scenario, sim, params, seed).metrics
@@ -50,7 +58,7 @@ def run_one(job: tuple[str, str, float | None, int]) -> dict:
     row = {
         "preset": preset,
         "errors": level,
-        "robust_k": robust_k if robust_k is not None else "",
+        "kernel": robust_k,
         "seed": seed,
         "team_ate_dec_m": dec["ate_team_m"],
         "team_ate_cen_m": cen["ate_team_m"],
@@ -67,12 +75,13 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--presets", nargs="+", default=["fleet_default", "fleet_exploration"])
     ap.add_argument("--levels", nargs="+", default=list(LEVELS), choices=list(LEVELS))
-    ap.add_argument("--robust", nargs="+", default=["none", "3"], help="Huber k or 'none'")
+    ap.add_argument("--robust", nargs="+", default=["none", "huber:3", "gnc:4.03"],
+                    help="none | huber:<k> | gnc:<c> (whitened thresholds)")  # fmt: skip
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2])
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--out", default="results/realism_study.csv")
     args = ap.parse_args()
-    ks = [None if r == "none" else float(r) for r in args.robust]
+    ks = list(args.robust)
     jobs = [
         (p, lv, k, s) for p in args.presets for lv in args.levels for k in ks for s in args.seeds
     ]
@@ -87,13 +96,13 @@ def main() -> None:
         w.writeheader()
         w.writerows(rows)
     agents = [c[len("alone_") : -2] for c in cols if c.startswith("alone_")]
-    print(f"{'preset':>18} {'errors':>6} {'k':>4} | " + " ".join(f"{a:>13}" for a in agents)
+    print(f"{'preset':>18} {'errors':>6} {'kernel':>8} | " + " ".join(f"{a:>13}" for a in agents)
           + " | team dec | team cen | all conn")  # fmt: skip
     for p in args.presets:
         for lv in args.levels:
             for k in ks:
                 sel = [r for r in rows if r["preset"] == p and r["errors"] == lv
-                       and r["robust_k"] == (k if k is not None else "")]  # fmt: skip
+                       and r["kernel"] == k]  # fmt: skip
 
                 def m(key: str, sel=sel) -> float:
                     return float(np.nanmean([r[key] for r in sel]))
@@ -103,7 +112,7 @@ def main() -> None:
                 )
                 full = sum(r["n_connected_dec"] == len(agents) for r in sel)
                 print(
-                    f"{p:>18} {lv:>6} {k or '-':>4} | {per} | {m('team_ate_dec_m'):8.3f} | "
+                    f"{p:>18} {lv:>6} {k:>8} | {per} | {m('team_ate_dec_m'):8.3f} | "
                     f"{m('team_ate_cen_m'):8.3f} | {full}/{len(sel)}"
                 )
     print("(per agent: alone / oracle team ATE [m])")
