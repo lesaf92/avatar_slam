@@ -11,6 +11,47 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L19. Feature-poor transit: the H1 test case exists, and Avatar does not exploit it yet
+
+`fleet_transit.yaml`: `uuv_1` leaves the piers at (12, 42), crosses the sparse
+outer mooring field, returns along the pipeline and ends among the piles at
+(15, 0), about 275 m one way with no self-revisits. `uuv_0` surveys the outer
+field. Seeds 0–4, M64, commit `9287911`.
+
+| Seed | `uuv_1` alone [m] | Oracle (`uuv_1`) [m] | Ratio | `uuv_1` Avatar fused [m] |
+|---|---|---|---|---|
+| 0 | 2.876 | 0.221 | 13.0 | 2.876 |
+| 1 | 3.541 | 0.347 | 10.2 | 3.544 |
+| 2 | 5.495 | 0.172 | 31.9 | 5.494 |
+| 3 | 2.379 | 0.167 | 14.3 | 2.245 |
+| 4 | 4.691 | 0.215 | 21.8 | 4.690 |
+
+```
+python experiments/trajectory_study.py --presets fleet_transit --seeds 0 1 2 3 4
+```
+
+**Findings.**
+- **T-S1-04's acceptance is met:** single-agent AUV ATE is 10–32× the oracle's
+  (no front-end errors needed). With the team's landmarks, the drift is
+  recoverable in principle.
+- **Avatar recovers none of it.** The team never merges within 600 s at 64 bit/s,
+  and even at 1 kbit/s `uuv_1`'s fused ATE equals its solo ATE. Diagnosis:
+  (1) whole-map rigid alignment fails once the map is bent by metres of
+  drift; (2) sliding-window alignment (`align_window_kf`, commit `7cf2806`,
+  off by default) finds the end-of-transit cluster (13 inliers against the
+  UGV), but the sparse middle has 2–4 parts per window and the start window's
+  8 below-water parts do not reach the 8-inlier cross-medium minimum. With a
+  single anchored cluster, the frame variable absorbs it rigidly and nothing
+  bends. Lowering the cross-only minimum to 5 connects the team (380–540 s)
+  but still does not correct `uuv_1`.
+- Fixed on the way: the anchor now counts a neighbour's estimate of the
+  anchor's frame when checking team connectivity (before, `uuv_1`'s alignment
+  of the anchor was ignored).
+- Next (T-X1-02): anchor at least two drift-separated clusters (same-medium
+  teammate coverage at both ends, or a cross-medium window test that is safe
+  with fewer inliers under the cycle check), and check that the fused graph
+  then bends the trajectory. This is the core H1 experiment for the paper.
+
 ### L16. Team frames: fuse every consistent estimate, not one chain (T-X2-04)
 
 The Avatar X150 outlier (seed 7, team ATE 0.53 m, L15) is a frame problem, not a

@@ -30,13 +30,14 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-01 | **Deep-read *Above and Below*** (method, association, data, code). Update ledger N3 and the Paper A positioning | P0 | – | todo | | Notes in `docs/research/above_and_below.md`; N3 status updated |
 | T-R1-02 | Deep-read DRACo-SLAM2 + SlideSLAM (comm numbers, association) | P1 | – | todo | | Notes in `docs/research/` |
 | T-R1-04 | Verify every bib entry by DOI (`verified-web` / `UNVERIFIED` → `verified`) | P1 | – | todo | | `make -C paper check` shows no unverified cited entries |
-| T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | in-progress | Claude · `claude/relaxed-ramanujan-bzrqyd` | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario. Error model + robust kernel done; **not met** with a robust front-end (LOG L14) |
+| T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario: **10–32×** on `fleet_transit` (LOG L19); front-end errors in L14 |
 | T-S1-03 | Occlusion model (footprint ray casting) | P1 | – | todo | | Test: pile behind hull not detected |
 | T-S1-05 | Profile + speed up decentralized runs (incremental solves, cached marginals) | P1 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | 600 s harbour ≤ 60 s wall: 49 s (LOG L10) |
 | T-X2-02 | **Team frame-graph cycle consistency**: reject `T_ij` inconsistent with `T_ik ∘ T_kj` (evidence: all 4 wrong alignments in 20 seeds were ugv_0↔auv_1, pairs with no true overlap) | P0 | T-X1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | 0 wrong alignments over 50 seeds (`experiments/association_precision.py`): 14 → 0, no correct one vetoed (LOG L11) |
 | T-X2-01 | Aliasing-grid scenario + association benchmark → `paper/data/` | P1 | T-S4-02 | todo | | CSV with precision/recall per seed |
 | T-X2-04 | Team frame fusion: pose graph over agent frames from all cycle-consistent estimates (`team_frames`) | P1 | T-X2-02 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Beats the least-σ chain on seeds with a biased edge (LOG L16) |
 | T-S1-07 | Sim realism: pile rake/sway (above/below parts offset), so `cross_medium_model_sigma_m` models something real; investigate over-confident cross-only alignments (X150 seed 7, LOG L16) | P1 | – | todo | | Test + LOG entry |
+| T-X1-02 | **Drift-tolerant association (core H1 result)**: anchor ≥ 2 drift-separated clusters of a drifting AUV's map so that the fused graph bends its trajectory; windowed alignment exists (`align_window_kf`) | P0 | T-S1-04 | todo | | `fleet_transit`: Avatar fused `uuv_1` ATE ≤ 2× oracle (LOG L19) |
 | T-X2-03 | GNC/PCM-style robust inter-agent factors in the fused graph | P1 | T-X1-01 | todo | | Injected outliers do not move frames > 0.2 m |
 | T-C2-01 | **VoI-per-byte digest scheduler** (replace heuristic in `build_digests`) | P0 | T-B1-02 | in-progress | Claude · `claude/relaxed-ramanujan-bzrqyd` | H2 curve: ≥ 90 % accuracy at ≤ 20 % bytes vs. FIFO. Implemented (`avatar/comm/scheduler.py`); no measurable gain at M64 yet (LOG L12); needs the T-C5-01 sweep |
 | T-C3-01 | Surface gateway: store-and-forward relay RF ↔ acoustic with dedup (v0 policy, ADR-0006) | P0 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | UAV↔UUV alignment through the relay in `harbor_fleet` (test_fleet.py) |
@@ -122,7 +123,9 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
   robust kernel on by default? **T-C2-01:** VoI implemented but no gain at
   64 bps (L12); acceptance needs T-C5-01. **Paper:** `make -C experiments
   paper-data` regenerates `paper/data/` (L15); method text for budgets, VoI,
-  cycle check, and team frame is in `paper/sections/`.
+  cycle check, and team frame is in `paper/sections/`. **H1:** `fleet_transit`
+  shows 10–32× single-AUV drift, but Avatar does not yet correct it (L19,
+  T-X1-02 is the next core task).
 
 - *2026-09-28 (Claude):* the PI fixed the fleet, venue, and authorship. The
   comm stack was delegated and is decided in ADR-0006. The default fleet has no
