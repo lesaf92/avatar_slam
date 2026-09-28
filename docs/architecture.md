@@ -47,7 +47,8 @@ flowchart TB
 | Frames, 4-DoF algebra | `geometry.py` ✅ | `frames.hpp/.cpp` ✅ | TF conventions (`conventions.md` §7) |
 | Semantics | `semantics.py` ✅ | – | – |
 | World / agents / sensors | `sim/world.py`, `sim/agents.py`, `sim/sensors.py`, `sim/measurements.py`, `sim/scenarios.py` ✅ | – | Gazebo worlds 🔜 |
-| Channel + network | `comm/channel.py`, `comm/network.py` ✅ | – | comm emulator node 🔜 |
+| Channel + network | `comm/channel.py` (incl. Wi-Fi mesh, M64, X150 profiles), `comm/network.py` ✅ | – | comm emulator node 🔜 |
+| Surface gateway relay | `comm/gateway.py` ✅ (ADR-0006) | – | gateway node 🔜 |
 | Wire codec | `comm/codec.py` ✅ | `comm/codec.hpp/.cpp` ✅ | `EncodedPacket.msg` ✅ |
 | Factor graph | `backend/graph.py` ✅ | GTSAM port 🔜 (T-B2-01) | – |
 | Association | `frontend/association.py` ✅ | port 🔜 | – |
@@ -82,7 +83,15 @@ sequenceDiagram
 
 **Invariant (ADR-0004):** digests are built from `local` only.
 
-**Team frame:** the anchor agent (default `usv_0`) composes its own and received
+**Budgets (ADR-0006):** each (node, link) has a token bucket. Unspent bytes carry
+over to the next tick (cap: max(4 ticks, 1 MTU)), frame-alignment packets count
+against it, and acoustic digests omit descriptors.
+
+**Gateways:** nodes with `role="gateway"` run no SLAM. At each tick they forward
+acoustic packets to RF unchanged and re-encode RF records for acoustic, keeping the
+originator's `sender_id`.
+
+**Team frame:** the anchor agent (`usv_0` in `harbor`, `ugv_0` in `harbor_fleet`) composes its own and received
 `FRAME_ALIGNMENT` estimates (`eval.metrics.chain_frames`, best-first by σ).
 
 ## 4. Estimator details (v0)
@@ -111,16 +120,32 @@ sequenceDiagram
 | RF | 2 Mbps | 5 ms | 300 m | 1 % → 30 % | 1400 B | 10 % utilization |
 | Acoustic | 1000 bps | 0.2 s + d/1500 | 1500 m | 5 % → 40 % | 256 B | TDMA 1/n, 50 % utilization |
 
+Reference fleet (`harbor_fleet`, ADR-0006, [`hardware.md`](hardware.md)):
+
+| Agent | Sensors (`SENSOR_LIBRARY`) | Odometry (`PLATFORM_ODOMETRY`) | Absolute z | Links |
+|---|---|---|---|---|
+| `ugv_0` Husky (anchor) | `vlp16`, `d435i` | `husky_lio` | start z known | Wi-Fi mesh |
+| `uav_0` Tarot 680 | `d435i_down30` | `tarot_vio` | `baro` | Wi-Fi mesh |
+| `uuv_k` BlueROV2 | `gemini_720s`, `bluerov2_camera` | `bluerov2_dvl` (1 % scale bias) | `bar30` | acoustic (M64 by default) |
+| `gw_0` gateway | none | static | – | Wi-Fi mesh + acoustic |
+| `usv_0` BlueBoat (optional) | `d435i`, `gemini_720s` | `blueboat_vio` | `surface` | both |
+
+| Channel profile | Rate | Latency | Range | MTU |
+|---|---|---|---|---|
+| `wifi_mesh` | 10 Mbps | 5 ms | 250 m | 1400 B |
+| `m64` | 64 bps | 2.0 s + d/1500 | 200 m | 64 B |
+| `x150` | 100 bps | 1.0 s (UNVERIFIED) | 1000 m | 64 B |
+
 Known simplifications (all are tracked tasks): oracle intra-agent data
 association (T-S1-04), no occlusion (T-S1-03), static water level, 4-DoF only
-(T-B1-05), no relaying (T-C3-01).
+(T-B1-05), a class-priority relay policy only (T-C7-01).
 
 ## 6. Extension points (where parallel work plugs in)
 
 | Task | Hook |
 |---|---|
 | VoI scheduler (T-C2-01) | Replace the ordering in `AvatarAgent.build_digests` |
-| Gateway relay (T-C3-01) | New role in `runner.run_decentralized` + `Network` store-and-forward |
+| Gateway policy v1 (T-C7-01) | `Gateway._candidates` ordering in `comm/gateway.py` |
 | Cycle consistency (T-X2-02) | After `update_alignments`, before `solve_fused`, using `self.frames` |
 | Range factors (T-B4-01) | `FactorGraph.add_range` exists; needs cross-frame variant + timestamps |
 | GTSAM port (T-B2-01) | Mirror `FactorGraph` API. Shared graph vectors in `testdata/` |

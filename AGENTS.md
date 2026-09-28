@@ -23,6 +23,7 @@ here conflict, stop and ask the PI (repository owner).
 | 4 | [`docs/architecture.md`](docs/architecture.md) | System layers, data flow, module map |
 | 5 | [`docs/conventions.md`](docs/conventions.md) | Frames, units, naming, IDs |
 | 6 | [`docs/spec/wire_format_v0.md`](docs/spec/wire_format_v0.md) | Inter-agent byte protocol (contract) |
+| 6b | [`docs/hardware.md`](docs/hardware.md) | Reference fleet, sensors, communication stack |
 | 7 | [`docs/decisions/`](docs/decisions/) | Architecture Decision Records (ADRs) |
 | 8 | [`docs/research/`](docs/research/) | Gap analysis and verified related work |
 | 9 | [`docs/LOG.md`](docs/LOG.md) | Lab notebook: dated findings and results |

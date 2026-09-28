@@ -37,8 +37,12 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-X2-01 | Aliasing-grid scenario + association benchmark → `paper/data/` | P1 | T-S4-02 | todo | | CSV with precision/recall per seed |
 | T-X2-03 | GNC/PCM-style robust inter-agent factors in the fused graph | P1 | T-X1-01 | todo | | Injected outliers do not move frames > 0.2 m |
 | T-C2-01 | **VoI-per-byte digest scheduler** (replace heuristic in `build_digests`) | P0 | T-B1-02 | todo | | H2 curve: ≥ 90 % accuracy at ≤ 20 % bytes vs. FIFO |
-| T-C3-01 | USV gateway: store-and-forward relay RF ↔ acoustic with dedup | P0 | T-C1-01 | todo | | UAV↔AUV alignment through relay in harbour |
+| T-C3-01 | Surface gateway: store-and-forward relay RF ↔ acoustic with dedup (v0 policy, ADR-0006) | P0 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | UAV↔UUV alignment through the relay in `harbor_fleet` (test_fleet.py) |
+| T-S4-03 | `harbor_fleet` scenario: the PI's reference fleet (Husky, Tarot 680, BlueROV2, gateway, optional BlueBoat) with device-specific sensor, odometry, and channel profiles | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Team connects over M64 (LOG L6) |
+| T-C1-02 | Token-bucket budgets per (node, link); frame alignments inside the budget; no descriptors on acoustic | P0 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Acoustic bytes ≤ modem capacity (test) |
 | T-C4-01 | Surfacing windows (AUV RF bursts when z > −0.5 m) | P1 | T-C1-01 | todo | | Scenario + test |
+| T-C6-01 | Modem-M64 driver + link adapter: fragment ≤ 64 B wire packets into modem frames, reassemble, drop incomplete (verify the M64 frame size) | P0 | – | todo | | Loopback test with the recorded frame format |
+| T-C7-01 | Gateway policy v1: VoI-based RF→acoustic selection (shares code with T-C2-01) | P1 | T-C2-01 | todo | | Beats the class-priority v0 on time-to-team-connection |
 | T-C5-01 | Bandwidth (100 bps–10 kbps) and loss sweep experiment → `paper/data/` | P1 | T-C2-01 | todo | | CSV + figure script |
 | T-S4-01 | Scenario YAML (world, team, links) shared by Tier 1 and Tier 2 | P0 | – | todo | | `harbor.yaml` reproduces current harbour |
 | T-S4-02 | Dam-face, offshore-jacket, aliasing-grid scenarios | P1 | T-S4-01 | todo | | Registered in `SCENARIOS` |
@@ -49,8 +53,8 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 |---|---|---|---|---|---|---|
 | T-I1-03 | Docker image: `ros:jazzy` + Gazebo Harmonic + DAVE (ros2 branch) + PX4 SITL | P0 | – | todo | | `docker compose up` spawns the empty world |
 | T-S2-01 | Gazebo Harmonic harbour world (piles, hulls, quay, buoys) from scenario YAML | P0 | T-S4-01, T-I1-03 | todo | | World loads; GT exported |
-| T-S2-02 | Spawn UAV (PX4 x500), UGV, USV, AUV (DAVE) in `unified.launch.py` | P0 | T-S2-01 | todo | | All four move on scripted paths |
-| T-S2-03 | Sensor bridges: LiDAR, cameras, multibeam/FLS sonar, DVL, depth, IMU (`ros_gz_bridge`), NED→ENU at the boundary | P0 | T-S2-02 | todo | | Topics per `conventions.md` §7 |
+| T-S2-02 | Spawn the reference fleet in `unified.launch.py`: Husky (`clearpath_simulator`), PX4 SITL hexacopter (Tarot-like), BlueROV2 (DAVE), static gateway, optional BlueBoat | P0 | T-S2-01 | todo | | All move on scripted paths |
+| T-S2-03 | Sensor bridges: VLP-16 (`gpu_lidar`), D435i (`rgbd_camera`), Micron Gemini (DAVE multibeam: 90°, 128 beams, 50 m), DVL A50, Bar30, IMU (`ros_gz_bridge`), NED→ENU at the boundary | P0 | T-S2-02 | todo | | Topics per `conventions.md` §7 |
 | T-S2-04 | Evaluate LOTUSim as the Tier-2 host (vs. DAVE) | P2 | – | todo | | ADR if adopted |
 | T-S3-01 | ROS 2 comm emulator (`EncodedPacket` gateway enforcing `avatar.comm` models) | P0 | T-C1-01 | todo | | Same stats as Tier 1 on a replay |
 | T-F1-01 | Odometry adapters → 4-DoF increments with covariance | P0 | T-S2-03 | todo | | – |
@@ -75,6 +79,10 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-E3-01 | Experiment matrix + `make -C experiments paper-data` | P0 | T-E2-* | todo | | Regenerates every paper number |
 | T-E4-01 | Real-data validation (A&B / DRACo2 data, ARACATI, PI's data) | P0 | T-R1-05 | todo | | At least one real sequence |
 | T-R1-05 | Obtain real datasets (ask authors; licences) | P0 | – | todo | | Data + licence noted |
+| T-H1-01 | Hardware bring-up, ROS 2 Jazzy drivers per platform: `velodyne`, `realsense2_camera`, PX4 uXRCE-DDS, BlueROV2 (ArduSub + MAVROS/BlueOS), Water Linked DVL, Tritech Gemini SDK | P0 | D6 | todo | | Each sensor publishes per `conventions.md` §7 |
+| T-H1-02 | Comm bring-up: 5 GHz mesh + `rmw_zenoh` (only `/avatar/*` shared), M64 modems through T-C6-01, tether ACL (no Avatar traffic) | P0 | T-C6-01 | todo | | Bench test: packets over real M64 |
+| T-H1-03 | Ground truth: RTK for UGV/UAV/gateway, UGPS G2 for UUVs, survey of pile tops and quay | P0 | D6 | todo | | GT logs with uncertainty |
+| T-H1-04 | Verify every UNVERIFIED spec in `docs/hardware.md` (Gemini vertical aperture, M64 frame size, X150 payload rate) | P1 | – | todo | | Table updated with datasheet sources |
 | T-P2-01 | Introduction + related work from the ledgers | P1 | T-R1-01 | todo | | – |
 | T-P3-01 | Method sections (formal statement of the no-double-counting property) | P1 | – | todo | | – |
 | T-P4-01 | Experiments section from `paper/data` | P0 | T-E3-01 | todo | | – |
@@ -97,6 +105,11 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-03 | Monthly novelty re-search (next: 2026-10-28) | P1 | – | todo (recurring) | |
 
 ## Notes / hand-offs
+
+- *2026-09-28 (Claude):* the PI fixed the fleet, venue, and authorship. The
+  comm stack was delegated and is decided in ADR-0006. The default fleet has no
+  surface vessel, so a sensorless gateway relays. Its v0 policy is simple
+  (waterline-crossing classes first) and is the obvious place for T-C7-01.
 
 - *2026-09-28 (Claude, foundation session):* everything marked `done` above is on
   branch `claude/relaxed-ramanujan-bzrqyd`. The ROS 2 packages have **not been

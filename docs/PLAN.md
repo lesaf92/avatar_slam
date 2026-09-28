@@ -5,10 +5,11 @@ underwater robot teams.*
 
 | | |
 |---|---|
-| **PI** | Luiz Eugênio Filho (repository owner) |
+| **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v1.0 (update the version and the changelog at the bottom whenever you change scope) |
-| **Goal** | A journal paper accepted at IEEE T-RO / RA-L (or IJRR / T-FR), with open code and an open benchmark |
+| **Plan version** | v1.1 (update the version and the changelog at the bottom whenever you change scope) |
+| **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
+| **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
 > **Why "Avatar"?** The Avatar masters every element. Avatar SLAM makes robots
 > in the air, on earth, and in the water build one map.
@@ -38,10 +39,15 @@ underwater robot teams.*
    ROS 2 Jazzy + Gazebo Harmonic worlds (DAVE for underwater, PX4 for aerial),
    comparison with Kimera-Multi, Swarm-SLAM, SlideSLAM, DRACo-SLAM2, and an
    *Above and Below*-style centralized baseline, then real-data validation.
-5. **Recommended venue strategy (decision D1).** Paper A (backbone +
+5. **Venue (decided: RA-L or T-RO).** Paper A (backbone +
    medium-aware communication + cross-medium association) goes to **RA-L**,
    with an IROS 2027 option (target submission ≈ 2027-03-01). Paper B (full
    system + neural layer + field data) goes to **T-RO**, ≈ 2027-Q4.
+6. **Fleet (decided).** Husky (VLP-16 + D435i), Tarot 680 (D435i + Cube), and
+   BlueROV2 (DVL A50 + Micron Gemini 720s). A quay-side **surface gateway**
+   relays between the Wi-Fi mesh and the acoustic modems (Water Linked M64,
+   64 bps). The BlueROV2 tether never carries SLAM traffic. See
+   [`hardware.md`](hardware.md).
 
 ---
 
@@ -113,9 +119,10 @@ separated by `‖` can run **in parallel** by different agents.
 ### WP-S: Simulation
 - **S1 (done v0).** Fast Python multi-domain simulator: harbour world, 4 domains,
   LiDAR, camera, imaging-sonar, and odometry models, and a comm network.
-- **S2.** Gazebo Harmonic multi-domain world: DAVE (underwater; ROS 2 Jazzy branch),
-  PX4 SITL x500 (aerial), a Clearpath/TurtleBot-class UGV, and a USV (DAVE/VRX-style
-  model or LOTUSim). A single `unified.launch.py` spawns all of them.
+- **S2.** Gazebo Harmonic multi-domain world with the reference fleet: Husky
+  (`clearpath_simulator`, VLP-16 + D435i), PX4 SITL hexacopter (D435i), BlueROV2
+  (DAVE, Gemini-configured multibeam, DVL), a static surface gateway, and an
+  optional BlueBoat. A single `unified.launch.py` spawns all of them.
 - **S3.** ROS 2 comm emulator: a gateway node that enforces the `avatar.comm`
   channel models on `EncodedPacket` topics, using the same parameters as S1.
 - **S4.** Scenario suite: Harbour, Dam face, Offshore jacket, and Aliasing grid.
@@ -225,8 +232,12 @@ and M6 moves to ≈ 2027-06, with the neural layer scoped down.
 - **Scenarios:** Harbour (pier piles, moored hulls, buoys, quay), Dam face
   (the PI's inspection background), Offshore jacket (large spanning legs),
   Aliasing grid (a regular pile field: stress test).
-- **Teams:** {USV + 2 AUV} (the *A&B* setting: direct comparison), {UAV + UGV}
-  (the air/ground baselines' home turf), {UAV + UGV + USV + 2 AUV} (full Avatar).
+- **Teams:** reference fleet {Husky + Tarot + 2 BlueROV2 + gateway} (main
+  result); {BlueBoat + 2 BlueROV2} (the *A&B* setting: direct comparison, needs the
+  optional USV); {Tarot + Husky} (the air/ground baselines' home turf).
+- **Communication conditions:** M64 (64 bps, primary), SeaTrac X150 class
+  (~100 bps), generic 1 kbps, and a sweep. Real modem vs. "emulated acoustic" is
+  always labelled.
 - **Conditions:** independent · centralized oracle (ground-truth association,
   unlimited comm) · A&B-style centralized server (estimated association,
   every byte counted) · baselines on their supported subsets · **Avatar SLAM**.
@@ -244,7 +255,10 @@ and M6 moves to ≈ 2027-06, with the neural layer scoped down.
 |---|---|---|---|---|---|
 | R1 | *Above and Below*'s authors extend to decentralized / air agents first | M | H | Move fast (Paper A by 2027-03). Put the weight on C3 (medium-aware comm) + the UAV↔AUV link. Post an arXiv preprint at submission | R |
 | R2 | Simulated sonar too idealized for cross-medium association | M | H | Use DAVE's physics-based multibeam; validate on real sonar data (E4); report the sim-to-real gap honestly | S, X |
-| R3 | No real multi-domain hardware experiment | H | M | Real single-medium datasets + a partial field test (USV + ROV + UAV) with the PI's lab; say explicitly which results are sim | E |
+| R3 | No real multi-domain field experiment | M | M | Reference fleet exists (ADR-0006). Still needed: modems, UGPS, RTK and a site (T-H1-*). Fall back to real single-medium datasets; label sim vs. real | E |
+| R8 | 64 bps acoustic too slow to connect the team within one BlueROV2 battery | M | H | Token buckets + descriptor stripping (done), VoI scheduler (T-C2-01), SeaTrac X150 upgrade path, longer exchange periods under water | C |
+| R9 | UUV heading drift near steel piles (compass) | H | M | Model it in sim (yaw bias); cross-medium constraints; report it as a motivating result | X |
+| R10 | D435i-only UAV contributes few landmarks (≤ 6 m depth) | H | L | Stand-off inspection paths; optional light LiDAR (D6) | S |
 | R4 | Perceptual aliasing in regular pile grids yields wrong alignments | M | H | PCM/GNC + object-graph matching (X2); the Aliasing scenario as a gate | X |
 | R5 | Neural layer scope creep delays Paper A | H | M | Neural layer is Paper B only; gate G2 | N |
 | R6 | Multi-agent development drifts (contracts break) | M | M | ADRs, golden vectors, CI on every PR, TASKS.md ownership | I |
@@ -279,16 +293,21 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 
 ## 9. Decisions requested from the PI
 
-| ID | Decision | Options | Recommendation |
+| ID | Decision | Options | Status |
 |---|---|---|---|
-| D1 | Venue strategy | (a) one T-RO paper; (b) Paper A to RA-L (+IROS'27), then Paper B to T-RO | **(b)**: it plants the flag early against R1 |
-| D2 | Hardware available (ITA/partners) | e.g. BlueROV2, quadrotor, UGV, USV, sonar model | Needed for E4 and R3 |
-| D3 | Authors and collaborators | Contact the *A&B* / DRACo authors for data? | Contact them for the dataset after G1 |
-| D4 | Compute | GPU workstation for Gazebo + 3DGS | Needed by M1 |
+| D1 | Venue | RA-L or T-RO | **Decided (PI, 2026-09-28):** aim for RA-L or T-RO. Plan: Paper A → RA-L (+IROS'27 option), Paper B → T-RO |
+| D2 | Hardware | – | **Decided (PI):** Husky + VLP-16 + D435i; Tarot 680 + D435i + Cube; BlueROV2 + DVL A50 + Micron Gemini 720s. Comm stack delegated to Claude and decided in ADR-0006 |
+| D3 | Authors | – | **Decided (PI):** sole confirmed author Luiz Eugenio Santos Araujo Filho. Affiliation still to be given. Contacting *A&B* / DRACo authors for data remains open |
+| D4 | Compute | GPU workstation for Gazebo + 3DGS | Open. Needed by M1 |
 | D5 | Scenario priority | Harbour first vs. Dam first | Harbour (it matches A&B for comparison) |
+| D6 | Purchases for field work | M64 modems, UGPS G2, mesh radios, RTK; optional BlueBoat and a UAV LiDAR | Open. See [`hardware.md`](hardware.md) §6 |
+| D7 | Affiliation / funding line for the paper | – | Open |
 
 ## 10. Changelog
 
+- **v1.1 (2026-09-28).** PI decisions D1–D3 recorded. Reference fleet and comm
+  stack added (ADR-0006, `hardware.md`). The USV becomes optional and the
+  surface gateway relays. New risks R8–R10. New decisions D6–D7.
 - **v1.0 (2026-09-28).** Initial plan. Gap re-scoped after the literature check
   (*Above and Below* found; Kimera-Multi corrected to distributed; DAVE ROS 2
   replaces the uuv_simulator port). v0 code for S1, X1, B1, C1, E1, V1, and P1
