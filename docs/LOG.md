@@ -11,6 +11,81 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L14. Front-end errors: a robust kernel saves single agents, not the team (T-S1-04, partly negative)
+
+`FrontEndErrors` (commit `aecaef2`) adds Poisson clutter per keyframe and
+sensor, and identity switches to another part of the same medium within 10 m
+(the measured position stays that of the true part). It uses its own random
+stream, so everything else is identical. The oracle keeps ground-truth
+association and is unaffected. Seeds 0–2, 600 s, M64. "low" = 5 % switches +
+0.5 clutter/kf; "high" = 15 % + 1.0. k = Huber threshold on landmark
+observations (`AvatarParams.point_obs_robust_k`, default off).
+
+| Preset | Errors | k | Alone ugv / uav / uuv_0 / uuv_1 [m] | Oracle (same agents) [m] | Team, Avatar [m] | Team merged |
+|---|---|---|---|---|---|---|
+| `fleet_default` | none | – | 0.022 / 0.153 / 0.041 / 0.100 | 0.030 / 0.127 / 0.044 / 0.071 | 0.118 | 3/3 |
+| `fleet_default` | low | – | 0.286 / 2.081 / 0.635 / 0.829 | same | 1.260 | 2/3 |
+| `fleet_default` | low | 3 | 0.024 / 0.557 / 0.053 / 0.112 | same | 0.481 | 3/3 |
+| `fleet_default` | high | – | 0.672 / 3.103 / 1.533 / 2.253 | same | 12.3 | 0/3 |
+| `fleet_default` | high | 3 | 0.034 / 1.109 / 0.095 / 0.213 | same | 0.956 | 2/3 |
+| `fleet_exploration` | none | – | 0.022 / 0.153 / 0.064 / 0.140 | 0.031 / 0.130 / 0.073 / 0.101 | 0.161 | 3/3 |
+| `fleet_exploration` | low | 3 | 0.024 / 0.557 / 0.079 / 0.163 | same | 0.516 | 3/3 |
+| `fleet_exploration` | high | 3 | 0.034 / 1.109 / 0.104 / 0.248 | same | 0.950 | 3/3 |
+
+```
+python experiments/realism_study.py --seeds 0 1 2     # → results/realism_study.csv
+```
+
+**Findings.**
+- Without a robust kernel, 5 % identity switches wreck every agent (UAV
+  2.1 m, AUVs 0.6–0.8 m). The team merges in 3 of 6 low-error runs and in 0 of 6
+  high-error runs. Any realistic front-end needs a robust kernel. Huber at k = 3 barely changes the error-free case (solo ATEs
+  identical to 3 decimals; team 0.118 vs. 0.119 m).
+- With the kernel, the Husky and the BlueROV2s stay near their error-free
+  accuracy (AUV alone ≤ 2.5× the oracle). **T-S1-04's acceptance (AUV alone
+  ≥ 5× the oracle) is not met.** The harbor is feature-rich and the DVL is good,
+  so a robust single agent does not drift much here. Next: feature-poor
+  transits (long open-water legs) and compass disturbance near steel.
+- The **UAV** suffers most (0.56 m low, 1.11 m high; 4–9× the oracle): its
+  D435i sees few parts, so wrong matches dominate. **Avatar's team ATE follows
+  the UAV** (0.48–0.96 m), because the fused graphs keep each agent's own
+  corrupted local factors and the team metric aligns all agents at once. This
+  is where collaboration *should* help and does not yet: the oracle's
+  ground-truth association hides the problem. The fair comparator under
+  front-end errors is the server with ideal links (estimated association
+  everywhere), still to run (T-S1-04 notes).
+- Decision for the PI: turn the robust kernel on by default? It is harmless
+  without errors and essential with them, but it changes the default code
+  path of every earlier run.
+
+### L15. First paper data: 10 seeds for the server comparison, 50 for the cycle check
+
+`make -C experiments paper-data` at commit `c9d61af` (clean) wrote
+`paper/data/server_vs_avatar.csv`, `paper/data/association_cycle_check.csv` and the
+generated tables `tab_*.tex` that the manuscript inputs (Tables `tab:server`,
+`tab:cycle`). Summary (Tier-1 simulation, `fleet_default`, 600 s):
+
+| Acoustic | Method | Team merged | Connected at [s] median | Team ATE [m], mean ± 95 % CI (merged runs) |
+|---|---|---|---|---|
+| M64 | Avatar | 10/10 | 280 | 0.139 ± 0.019 |
+| M64 | server, stride 10 / 30 | 0/10 / 0/10 | – | – |
+| X150 | Avatar | 10/10 | 200 | 0.192 ± 0.088 |
+| X150 | server, stride 10 | 5/10 | 580 | 2.17 ± 5.54 |
+| 1 kbps | Avatar | 10/10 | 90 | 0.131 ± 0.020 |
+| 1 kbps | server, stride 10 / 30 | 10/10 / 8/10 | 150 / 480 | 0.125 ± 0.015 / 0.257 ± 0.091 |
+| – | oracle | 10/10 | – | 0.085 ± 0.006 |
+
+- The 5-seed picture of L13 holds at 10 seeds. At 64 bit/s only Avatar merges
+  the team. At 1 kbit/s the server (stride 10) is as accurate as Avatar
+  (0.125 vs. 0.131 m) but merges later (150 vs. 90 s).
+- Outliers behind the wide intervals: Avatar X150 seed 7 (0.53 m; not yet
+  investigated) and the server's wrong 4-inlier AUV↔AUV alignment at X150 seed 1
+  (10.2 m, L13).
+- Cycle check, harbor, 50 seeds: 834/1000 alignments accepted, pair precision
+  0.994, 14 wrong → 0, 0 correct vetoed (reproduces L11 at the new commit).
+- Still missing for the paper: a paired test against the strongest baseline, the
+  T-E2-06 fairness sweep, and the investigation of the X150 outlier.
+
 ### L9. Trajectory shape and height: turns cost the UAV, altitude blinds it
 
 Presets in `experiments/scenarios/`, seeds 0–2, commit `8cf50e8`. "Alone" is

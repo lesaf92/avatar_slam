@@ -30,7 +30,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-01 | **Deep-read *Above and Below*** (method, association, data, code). Update ledger N3 and the Paper A positioning | P0 | – | todo | | Notes in `docs/research/above_and_below.md`; N3 status updated |
 | T-R1-02 | Deep-read DRACo-SLAM2 + SlideSLAM (comm numbers, association) | P1 | – | todo | | Notes in `docs/research/` |
 | T-R1-04 | Verify every bib entry by DOI (`verified-web` / `UNVERIFIED` → `verified`) | P1 | – | todo | | `make -C paper check` shows no unverified cited entries |
-| T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | todo | | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario |
+| T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | in-progress | Claude · `claude/relaxed-ramanujan-bzrqyd` | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario. Error model + robust kernel done; **not met** with a robust front-end (LOG L14) |
 | T-S1-03 | Occlusion model (footprint ray casting) | P1 | – | todo | | Test: pile behind hull not detected |
 | T-S1-05 | Profile + speed up decentralized runs (incremental solves, cached marginals) | P1 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | 600 s harbour ≤ 60 s wall: 49 s (LOG L10) |
 | T-X2-02 | **Team frame-graph cycle consistency**: reject `T_ij` inconsistent with `T_ik ∘ T_kj` (evidence: all 4 wrong alignments in 20 seeds were ugv_0↔auv_1, pairs with no true overlap) | P0 | T-X1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | 0 wrong alignments over 50 seeds (`experiments/association_precision.py`): 14 → 0, no correct one vetoed (LOG L11) |
@@ -87,8 +87,8 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-H1-03 | Ground truth: RTK for UGV/UAV/gateway, UGPS G2 for UUVs, survey of pile tops and quay | P0 | D6 | todo | | GT logs with uncertainty |
 | T-H1-04 | Verify every UNVERIFIED spec in `docs/hardware.md` (Gemini vertical aperture, M64 frame size, X150 payload rate) | P1 | – | todo | | Table updated with datasheet sources |
 | T-P2-01 | Introduction + related work from the ledgers | P1 | T-R1-01 | todo | | – |
-| T-P3-01 | Method sections (formal statement of the no-double-counting property) | P1 | – | todo | | – |
-| T-P4-01 | Experiments section from `paper/data` | P0 | T-E3-01 | todo | | – |
+| T-P3-01 | Method sections (formal statement of the no-double-counting property) | P1 | – | in-progress | Claude · `claude/relaxed-ramanujan-bzrqyd` | – |
+| T-P4-01 | Experiments section from `paper/data` | P0 | T-E3-01 | in-progress | Claude · `claude/relaxed-ramanujan-bzrqyd` | – |
 | T-P5-01 | Figures (teaser, coaxial parts, bandwidth curves) via scripts | P1 | – | todo | | – |
 | T-P6-01 | Internal Reviewer-2 pass (`paper/README.md` checklist) | P0 | T-P4-01 | todo | | Checklist all ticked |
 
@@ -108,6 +108,19 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-03 | Monthly novelty re-search (next: 2026-10-28) | P1 | – | todo (recurring) | |
 
 ## Notes / hand-offs
+
+- *2026-09-28 (Claude, second session):* **T-S1-04 hand-off.** Works:
+  `FrontEndErrors` (clutter, identity switches; own RNG stream, off by default),
+  optional Huber on landmark observations, `experiments/realism_study.py`.
+  Doesn't: with the robust kernel on, AUVs drift ≤ 2.5× the oracle, so H1's
+  acceptance is not met in this harbor. Next: (1) feature-poor transits
+  (long open-water legs), compass disturbance near steel; (2) run the server
+  with ideal links as the estimated-association comparator; (3) find out why
+  Avatar's team ATE follows the corrupted UAV (L14). **PI decision pending:**
+  robust kernel on by default? **T-C2-01:** VoI implemented but no gain at
+  64 bps (L12); acceptance needs T-C5-01. **Paper:** `make -C experiments
+  paper-data` regenerates `paper/data/` (L15); method text for budgets, VoI,
+  cycle check, and team frame is in `paper/sections/`.
 
 - *2026-09-28 (Claude):* the PI fixed the fleet, venue, and authorship. The
   comm stack was delegated and is decided in ADR-0006. The default fleet has no
