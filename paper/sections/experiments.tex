@@ -33,7 +33,7 @@ With ideal links, the server matches the oracle, so any gap comes from the bytes
 the estimator. On acoustic links of 64--100\,bit/s the keyframe stream cannot keep up, and the
 server rarely merges the AUVs, whereas \avatar{}'s condensed landmarks bring the whole team into
 one frame in every run. At 1\,kbit/s the stream keeps up: the server merges the team, later
-than \avatar{}, with comparable accuracy. The server's failure case is instructive: with a small
+than \avatar{} and with slightly larger error. The server's failure case is instructive: with a small
 fraction of an AUV's keyframes it can accept an aliased AUV--AUV alignment that no cycle vetoes,
 which produces the large error at 100\,bit/s.
 
@@ -46,6 +46,25 @@ which produces the large error at 100\,bit/s.
   \scriptsize
   \setlength{\tabcolsep}{3pt}
   \IfFileExists{data/tab_server_vs_avatar.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_server_vs_avatar.tex}}}{\todo{run make -C experiments paper-data}}
+\end{table}
+
+\paragraph{Correcting a drifting AUV}
+\IfFileExists{data/drift_summary.tex}{\input{data/drift_summary.tex}}{\newcommand{\driftSmallRuns}{?}\newcommand{\driftSmallMeanChange}{?}}
+We claim collaboration only for small drift (Table~\ref{tab:drift}). A BlueROV2 makes a
+one-way transit through the sparse outer harbor, and both ends of the transit lie in water
+that another AUV surveys. Over the \driftSmallRuns{} runs whose solo drift stays below 1\,m,
+sharing changes the drifting vehicle's error by \driftSmallMeanChange\,\% on average. The gain
+is not uniform: some runs improve substantially, and a few get slightly worse. Metre-level
+drift is not yet corrected (Sec.~\ref{sec:discussion}).
+
+\begin{table}[t]
+  \centering
+  \caption{Drifting AUV, one-way transit with both ends in surveyed water: ATE of the transit
+  vehicle alone, with \avatar{}, and in the oracle (Tier-1 simulation, 600\,s, M64). Runs are
+  sorted by solo drift; $^\dagger$: solo drift above 1\,m, outside the claimed regime.}
+  \label{tab:drift}
+  \footnotesize
+  \IfFileExists{data/tab_drift.tex}{\input{data/tab_drift.tex}}{\todo{run make -C experiments paper-data}}
 \end{table}
 
 \subsection{Ablations}

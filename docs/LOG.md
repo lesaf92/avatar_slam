@@ -11,6 +11,25 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L27. Paper data at the final defaults (`ad5241f`): GNC, heading bias, frozen bias
+
+`make -C experiments paper-data` at `ad5241f` (clean), which regenerated all
+five tables:
+- **Server vs. Avatar** (10 seeds): Avatar team ATE 0.119 ± 0.016 m (M64),
+  0.127 ± 0.024 m (X150), 0.107 ± 0.013 m (1 kbit/s); server stride 10 at
+  1 kbit/s 0.121 ± 0.014 m, merged later (150 vs. 90 s); still 0/10 merges at
+  64 bit/s. Avatar improved from L21 (0.129 / 0.169 / 0.109 m) through GNC,
+  heading bias and team-frame fusion.
+- **Drift (H1, small-drift regime, D8/D11)**, `fleet_transit_anchored`, 10
+  seeds: over the 9 runs with solo drift ≤ 1 m, collaboration changes the
+  drifting AUV's error by −6 % on average. Per run: −40 % … +18 %. Four runs
+  get slightly worse (+2 … +18 %; the largest is +1 cm on a 0.08 m run).
+  Reported as measured; the 30 % of H1 is a reference value (D11). T-X1-04
+  (never hurt) stays open.
+- **Realism** (3 seeds): GNC keeps team ATE at its error-free level with 15 %
+  identity switches plus clutter (0.12 m; Huber 0.75–0.76 m; none 12 m).
+- **Bandwidth** and **cycle check:** same conclusions as L17 and L21.
+
 ### L26. Remote pairs were overfitting the heading bias: freeze it in the fused graph
 
 Hypothesis from L24: pairs from one end cluster also tune the drifting agent's

@@ -55,7 +55,7 @@ underwater robot teams.*
 
 | RQ | Question | Hypothesis (falsifiable) | Primary metric |
 |---|---|---|---|
-| RQ1 | Can a decentralized team whose members perceive **disjoint media** build one globally consistent map without a server or prior calibration? | **H1.** Coaxial landmark parts (above ↔ below parts of piles, hulls, buoys) give enough inter-agent constraints to align all local maps. They reduce AUV ATE by ≥ 30 % versus single-agent SLAM **when solo drift is small (≲ 1 m, decision D8)**, and bring the team ATE within 1.5× of a centralized oracle. | Team ATE, per-agent ATE, frame-alignment error |
+| RQ1 | Can a decentralized team whose members perceive **disjoint media** build one globally consistent map without a server or prior calibration? | **H1.** Coaxial landmark parts (above ↔ below parts of piles, hulls, buoys) give enough inter-agent constraints to align all local maps. They reduce AUV ATE versus single-agent SLAM **when solo drift is small (≲ 1 m, decision D8)** (reference value: 30 %) and bring the team ATE close to a centralized oracle (reference: 1.5×). Reference values are ideals for comparison, not pass/fail thresholds (D11). | Team ATE, per-agent ATE, frame-alignment error |
 | RQ2 | How should map content be shared when link bandwidths differ by ≥ 10³× and connectivity is intermittent? | **H2.** A value-of-information-per-byte scheduler reaches ≥ 90 % of the full-communication accuracy while sending ≤ 20 % of the bytes of FIFO/greedy sharing. On acoustic links it beats FIFO at equal bytes. | ATE vs. bytes curves (per link type) |
 | RQ3 | Does a decentralized, modality-aware neural layer improve the map beyond the object level without breaking consistency? | **H3.** Per-agent Gaussian submaps anchored to backbone keyframes and fused through backbone frames give better geometry (Chamfer, depth L1) than any single-agent map, at a bounded RF cost. | Chamfer / PSNR / depth-L1 vs. bytes |
 
@@ -305,6 +305,7 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 | D8 | Scope of H1 (drift correction) | All drift vs. small drift | **Decided (PI, 2026-09-28):** claim correction only for small drift (solo AUV drift ≲ 1 m over the mission); metre-level correction is later work (T-X1-03). LOG L20–L23 |
 | D9 | AUV heading model | Compass-aided (bias-free) vs. gyro-integrated (bias) | **Decided (PI, 2026-09-28):** if heading is mostly magnetometer-based, ignore the bias; if the magnetometer is unreliable (steel in harbours), model it. See LOG L24 |
 | D10 | Robust estimation | Huber vs. certifiable / GNC methods | **PI guidance (2026-09-28):** adopt Carlone-group robust estimation (graduated non-convexity) where it helps; decide the default from data (LOG L25) |
+| D11 | Hypothesis targets | Pass/fail thresholds vs. reference values | **Decided (PI, 2026-09-28):** numeric targets in H1–H3 are ideal reference values for comparison; the paper reports measured gains and their trend, step by step |
 
 ## 10. Changelog
 

@@ -1,6 +1,17 @@
 \section{Discussion and Limitations}
 \label{sec:discussion}
-\draftnote{Tier-1 sensors are abstracted at the landmark-part level; the v0 simulator uses
-oracle intra-agent association and no occlusion (docs/LOG.md). Single-agent drift is small in
-feature-rich harbors; the benefit of collaboration concentrates in the common team frame and in
-feature-poor segments. Multi-hop sharing without double counting is future work.}
+All results are from the Tier-1 simulator, in which sensors are abstracted at the level of
+landmark parts. Front-end errors (identity switches, clutter) are injected, but occlusion is
+not modelled. Four limitations shape the claims of this paper.
+First, collaboration corrects a drifting AUV only when its solo drift is small. With metre-level
+drift, each neighbour's frame absorbs the nearest cluster of matches rigidly, and the
+trajectory does not bend. This needs anchors at both ends of the drift that are linked to the
+team.
+Second, the gain is not uniform: in a few runs the shared constraints make a drifting vehicle
+slightly worse. Holding its heading bias at the local estimate removed most such cases.
+Third, ordering records by expected information did not beat a simple quality order. At
+tens of bit/s the binding constraint is to deliver enough matchable records, not their
+geometry.
+Fourth, cycle consistency cannot check an alignment that closes no cycle. The centralized
+baseline shows how an aliased alignment on sparse data can then corrupt the whole team.
+Multi-hop sharing without double counting is future work.
