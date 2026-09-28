@@ -11,6 +11,14 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L21. Paper data at `0c3cba2` (clean provenance)
+
+`make -C experiments paper-data` at `0c3cba2`; all three CSVs carry the clean
+label (the provenance helper ignores `paper/data`). The only change from L18 is
+the connectivity fix (L19): at 512 and 1024 bit/s the team connects at 100 s
+instead of 110–120 s. Server-vs-Avatar rows and the cycle-check counts are
+unchanged.
+
 ### L20. Anchored transit: collaboration corrects small drift, not metre-level drift (T-X1-02, partial)
 
 `fleet_transit_anchored.yaml`: `uuv_1`'s one-way transit (≈ 200 m) starts and
