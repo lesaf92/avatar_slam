@@ -75,7 +75,7 @@ class AvatarParams:
     fuse_team_frames: bool = True  # pose graph over agent frames (else: least-σ chain only)
     # Estimate a per-agent heading bias [rad/m] when heading is dead-reckoned
     # (platform heading_source != "compass"); prior σ from the platform spec (D9, L24).
-    model_heading_bias: bool = False
+    model_heading_bias: bool = True
     # Drift-tolerant association: also align sliding windows of this many own
     # keyframes (0 = whole map only). Recent sub-maps stay nearly rigid when the
     # whole map is bent by drift (LOG L19).

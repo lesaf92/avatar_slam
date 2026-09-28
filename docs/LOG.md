@@ -11,6 +11,51 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L24. Heading bias: model it (default), and a correction to every "alone" number
+
+**Heading model (decision D9).** Platforms declare a heading source. A compass
+heading gets no bias; a dead-reckoned one (BlueROV2 near steel, LIO, VIO)
+keeps a per-agent bias [rad/m], and the estimator now carries a matching
+scalar state with a prior from the platform spec (factor `between_bias`).
+The oracle and the server use the same model.
+
+**Methodology correction.** `run_independent` ran a single batch solve of 10
+LM iterations. On long drifting trajectories that stops short of the optimum,
+and the stopping point can score better or worse than the optimum
+(`fleet_transit_anchored`, seed 2: 0.56 m unconverged vs. 1.56 m at the
+optimum). From commit `980e47d` the solo baseline re-solves every exchange
+period, like each agent's local graph inside the decentralized run. **Every
+"alone" number before that commit may be biased, in either direction** (L9,
+L14, L19, L20, L22). Team, fused, and oracle numbers are not affected.
+
+Corrected comparison, commit `980e47d`, GNC on, seeds 0–4, M64 (bias off →
+on; ATE [m]):
+
+| Preset | Team ATE, Avatar | `uuv_1` alone | `uuv_1` fused | UAV alone | Team merged |
+|---|---|---|---|---|---|
+| `fleet_default` | 0.118 → **0.110** | 0.117 → 0.107 | 0.100 → 0.095 | 0.167 → 0.151 | 5 → 5 |
+| `fleet_exploration` | 0.176 → **0.133** | 0.133 → 0.127 | 0.100 → 0.106 | 0.167 → 0.151 | 5 → 5 |
+| `fleet_transit_anchored` | 0.726 → **0.633** | 1.649 → 0.770 | 1.485 → 0.755 | 0.167 → 0.151 | 4 → 5 |
+| `fleet_transit` | 0.113 → 0.112 (3 agents) | 3.797 → 2.805 | 3.785 → 2.572 | 0.167 → 0.151 | 0 → 0 |
+
+```
+python experiments/trajectory_study.py --presets fleet_default fleet_exploration fleet_transit_anchored fleet_transit --seeds 0 1 2 3 4 [--no-heading-bias]
+```
+
+- **Default changed:** `model_heading_bias = True`. It improves team ATE on
+  every preset, the UAV solo, and halves the drifting AUV's solo error on
+  the anchored transit.
+- L19 re-checked with the corrected baseline: on `fleet_transit`, solo `uuv_1`
+  ATE is 2.4–5.5 m (bias off) and 1.5–4.5 m (bias on), against oracle
+  0.11–0.36 m, which is ≥ 5× in 9 of 10 runs. T-S1-04's acceptance still holds.
+- **H1 (collaboration helps the drifting AUV) is mixed with the bias
+  modelled.** Anchored transit, fused vs. alone per seed: −7 %, −41 %, −9 %,
+  +15 %, +31 % (without the bias state: −21 %, −61 %, 0 %, −8 %, −4 %, never
+  worse). Hypothesis, not yet tested: pairs from one end cluster also tune
+  the bias state (a global shape parameter) and overfit it. In the normal
+  presets, collaboration improves `uuv_1` by 11–17 % and the UAV by 13 %:
+  real, but below the plan's "≥ 30 %" (H1 text, D8).
+
 ### L25. Graduated non-convexity makes the team immune to front-end errors (GNC default)
 
 `experiments/realism_study.py` with three kernels on landmark observations:
