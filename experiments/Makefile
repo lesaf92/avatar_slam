@@ -7,9 +7,9 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data tables server cycle bandwidth drift
+.PHONY: paper-data tables server cycle bandwidth drift realism
 
-paper-data: server cycle bandwidth drift tables
+paper-data: server cycle bandwidth drift realism tables
 
 server:
 	$(PY) server_vs_avatar.py --seeds $(SEEDS) --profiles m64 x150 acoustic_generic \
@@ -26,6 +26,9 @@ bandwidth:
 drift:
 	$(PY) trajectory_study.py --presets fleet_transit_anchored --seeds $(SEEDS) \
 		--out $(DATA)/drift_anchored.csv
+
+realism:
+	$(PY) realism_study.py --seeds 0 1 2 --out $(DATA)/realism.csv
 
 tables:
 	$(PY) make_paper_tables.py

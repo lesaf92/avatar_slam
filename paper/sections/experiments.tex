@@ -65,4 +65,21 @@ three digest orders. Below a few tens of bit/s the team cannot merge within the 
   \IfFileExists{data/tab_bandwidth.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_bandwidth.tex}}}{\todo{run make -C experiments paper-data}}
 \end{table}
 
-\todo{coaxial parts, gateway, descriptors; loss sweep; front-end errors (docs/LOG.md L14).}
+\paragraph{Front-end errors}
+Table~\ref{tab:realism} injects identity switches (a detection attributed to a nearby part of
+the same medium) and clutter into every agent's front-end. Without a robust kernel the team
+falls apart; a Huber kernel limits the damage; graduated non-convexity keeps every agent,
+and the team, at its error-free accuracy. The oracle keeps ground-truth association and is
+not shown.
+
+\begin{table}[t]
+  \centering
+  \caption{Team ATE [m] of \avatar{} under front-end errors (identity-switch rate + clutter
+  per keyframe and sensor) for three kernels on the landmark observations (Tier-1
+  simulation, 600\,s, M64). In parentheses: runs in which the whole team merged, if not all.}
+  \label{tab:realism}
+  \footnotesize
+  \IfFileExists{data/tab_realism.tex}{\input{data/tab_realism.tex}}{\todo{run make -C experiments paper-data}}
+\end{table}
+
+\todo{coaxial parts, gateway, descriptors; loss sweep.}

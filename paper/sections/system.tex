@@ -23,7 +23,7 @@ alternates a few Levenberg--Marquardt iterations with fixed weights and the clos
 weight update, until every weight is 0 or 1. The inlier bound is the 0.999 quantile of the
 $\chi^2_3$ distribution. Because the local graph is re-solved at every exchange, weights are
 warm-started: previous weights are kept, new observations first pull the estimate, and the
-surrogate then starts close to the truncated cost. \todo{result: realism study (LOG L25).}
+surrogate then starts close to the truncated cost. Table~\ref{tab:realism} shows the effect.
 
 \subsection{Heading bias}
 Near steel structures the magnetometer of an underwater vehicle is unreliable, so its
