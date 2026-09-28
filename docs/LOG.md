@@ -5,6 +5,158 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-09-28: trajectories, VoI scheduler, cycle check, speed, server baseline (Claude)
+
+All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)**.
+The commit is recorded in every CSV under `results/` (git-ignored; re-run the
+command to regenerate).
+
+### L9. Trajectory shape and height: turns cost the UAV, altitude blinds it
+
+Presets in `experiments/scenarios/`, seeds 0–2, commit `8cf50e8`. "Alone" is
+single-agent ATE; "team" is the team ATE over the agents in the anchor's frame
+graph (4-DoF alignment).
+
+| Preset | Alone uuv_0 | Alone uuv_1 | Alone uav_0 | Team, Avatar | Team, oracle | Team connected [s] |
+|---|---|---|---|---|---|---|
+| `fleet_default` | 0.041 | 0.100 | 0.153 | 0.118 | 0.078 | 280–300 |
+| `fleet_complex_turns` | 0.042 | 0.059 | 0.189 | 0.110 | 0.090 | 340–360 |
+| `fleet_heights` | 0.038 | 0.131 | 0.193 | 0.135 (3 agents) | 0.116 | never |
+| `fleet_surfacing` | 0.037 | 0.082 | 0.153 | 0.117 | 0.077 | 280–320 |
+| `fleet_exploration` | 0.064 | 0.140 | 0.153 | 0.161 | 0.092 | 280 |
+
+```
+python experiments/trajectory_study.py --seeds 0 1 2              # → results/trajectory_study.csv
+python experiments/uav_altitude_sweep.py --heights 3 4.5 6 7      # → results/uav_altitude_sweep.csv
+```
+
+**Findings.**
+- **Complex turns** (UAV zig-zag, turn-dependent yaw noise) raise the UAV's solo
+  ATE from 0.153 to 0.189 m and delay team connection by about 60 s. The
+  BlueROV2 on a figure-8 improves (0.100 → 0.059 m) because it re-observes the
+  same structures.
+- **Height.** In `fleet_heights` the UAV (helix, 2–7 m) never joins the team.
+  The altitude sweep (default stand-off path, commit `f5f9e34`, seeds 0–2) shows
+  a sharp cut-off set by the D435i model (30° down, ≤ 6 m range):
+
+  | UAV height [m] | Parts seen | Common with UGV (≥ 3 obs) | UAV first aligned [s] | Team connected |
+  |---|---|---|---|---|
+  | 3.0 | 20–22 | 12–14 | 60 (all seeds) | 3/3, 280–300 s |
+  | 4.5 | 20–22 | 11–12 | 120–160 | 3/3, 280–400 s |
+  | 6.0 | 4–8 | 1–6 | 260 in 2/3 seeds | 2/3, 440–460 s |
+  | 7.0 | 0 | 0 | never | 0/3 |
+
+  With the reference sensor, the Tarot must stay below about 5 m to take part in
+  the map. Above that it needs another sensor (new task T-S1-06). This is a
+  **sensor-model result, not a field result**. The D435i range and noise model
+  should be checked against data before it goes into the paper.
+- **Surfacing windows** give the first RF ↔ UUV alignment at 60 s instead of
+  200–260 s (L12 table). Team connection is not earlier, because the other UUV
+  still depends on the acoustic path.
+- **Exploration-only coverage** hurts the team most: Avatar 0.161 m vs. oracle
+  0.092 m (ratio 1.75; seed 0 alone is 0.242 m).
+- An earlier run of this study at `4d14543-dirty` is superseded by this one.
+
+### L10. Speed: 2.6× faster, and BLAS threads were the hidden cost
+
+Profiling (cProfile) showed half the time in marginal covariances, which
+solved a full sparse LU for every requested landmark column, plus a deep copy
+of the graph at each fused solve. Changes (commit `8cf50e8`, T-S1-05):
+Schur-complement marginals (factorise only the pose block, invert the dense
+landmark block), a symmetric minimum-degree ordering (`MMD_AT_PLUS_A`: 4× less
+fill-in than COLAMD), cached factor arrays, and a structural graph copy.
+
+| 600 s run, seed 0, 1 thread | Before | After |
+|---|---|---|
+| `harbor` | 125 s | 49 s (target ≤ 60 s met) |
+| `harbor_fleet` | 47 s | 16 s |
+| test suite | 68 s | 37 s |
+
+Metrics are identical to 6 decimals. **Negative finding:** multi-threaded
+OpenBLAS made the same solves 5–10× *slower* on these small matrices, and far
+worse when several runs shared the 4-core container (4 workers × 4 threads).
+Every entry point now pins BLAS to one thread before importing NumPy.
+
+### L11. Cycle consistency removes every wrong alignment in 50 seeds
+
+Kruskal-style check over the team frame graph (T-X2-02, commit `434da8a`):
+edges are taken strongest first. An edge that closes a cycle is kept only if
+the cycle error is inside a σ-scaled gate (≥ 1 m, ≥ 0.1 rad), so a rejected
+edge is always the weakest in its cycle.
+
+```
+python experiments/association_precision.py --scenario harbor --duration 90 --seeds $(seq 0 49)
+```
+
+`harbor`, 90 s, seeds 0–49: **14 wrong alignments before the check, 0 after,
+0 correct alignments vetoed** (all wrong ones are 8-pair cross-only matches
+between `ugv_0` and `auv_1`). Limitation: an edge with no cycle cannot be
+checked. L13 shows such a case when data is sparse.
+
+### L12. VoI scheduler: no measurable gain at 64 bps (negative result)
+
+`quality` (v0) vs. `voi` (expected D-optimal alignment gain per byte, summed
+over receiver domains; T-C2-01) on the same data, seeds 0–4, commit `8cf50e8`.
+
+| Preset | Scheduler | Team connected [s] median | First RF ↔ UUV align [s] median | Team ATE [m] mean |
+|---|---|---|---|---|
+| `fleet_default` | quality / voi | 280 / 280 | 220 / 260 | 0.125 / 0.124 |
+| `fleet_exploration` | quality / voi | 280 / 280 | 260 / 220 | 0.177 / 0.151 |
+| `fleet_surfacing` | quality / voi | 280 / 280 | 60 / 60 | 0.136 / 0.136 |
+
+```
+python experiments/scheduler_comparison.py --seeds 0 1 2 3 4 \
+    --presets fleet_default fleet_exploration fleet_surfacing
+```
+
+At 64 bps each node earns about one record per tick, and every run spends
+exactly the same 2 340 acoustic bytes. The order of a handful of records barely
+changes when frames first connect. Differences are within seed noise; VoI is
+slightly better in exploration (0.151 vs. 0.177 m, 5 seeds, not significant).
+H2 needs the bandwidth sweep (T-C5-01) with a byte-matched FIFO baseline. VoI
+stays the default because it is never worse here. Do not claim H2 from this
+table.
+
+### L13. A centralized server with every byte counted cannot close the team at 64 bps
+
+*A&B*-style server (T-E2-05, commit `cd5b610`): robots stream keyframes
+(odometry + detections, 27 B + 13 B per detection, descriptors as in Avatar)
+to the quay gateway over the same links and budgets. The server applies the
+same association front-end and cycle check, then one joint solve. The acoustic
+stride sends every n-th keyframe with composed odometry. The downlink is free
+(favours the baseline). `fleet_default`, seeds 0–4.
+
+| Acoustic | Method | Whole team connected | Connected at [s] median | UUV keyframes at server | Team ATE [m] mean |
+|---|---|---|---|---|---|
+| M64 | Avatar | 5/5 | 280 | – | 0.124 |
+| M64 | server, stride 10 / 30 | 0/5 / 0/5 | – | 9 % / 26 % | (UGV + UAV only) |
+| X150 | Avatar | 5/5 | 200 | – | 0.137 |
+| X150 | server, stride 10 / 30 | 1/5 / 0/5 | 600 | 14 % / 41 % | see below |
+| 1 kbps | Avatar | 5/5 | 80 | – | 0.113 |
+| 1 kbps | server, stride 10 / 30 | 5/5 / 4/5 | 140 / 480 | 99 % / 99 % | 0.120 / 0.250 |
+| any | oracle | – | – | – | 0.081 |
+
+```
+python experiments/server_vs_avatar.py --seeds 0 1 2 3 4 --profiles m64 x150 acoustic_generic
+```
+
+**Findings.**
+- Raw keyframes do not fit an M64/X150 modem: the server receives 9–41 % of the
+  AUV keyframes. It never merges the whole team at 64 bps, while Avatar's
+  condensed landmarks do in every run. At 1 kbps the server works, but connects
+  later (140 vs. 80 s) with similar accuracy. With ideal links it reaches
+  0.083 m vs. the oracle's 0.081 m, so the gap is the bytes, not the estimator.
+- **Failure case (X150, seed 1, stride 10):** with 5 % of `uuv_0`'s keyframes,
+  the server accepted a 4-inlier `uuv_0` ↔ `uuv_1` alignment that is 25.5 m off.
+  No cycle existed to veto it, and the team ATE is 10.2 m. Sparse data makes
+  aliasing likely. This is a fairness caveat as much as a result: a stricter
+  inlier gate for the server is part of T-E2-06.
+- Caveats: 5 seeds; the uplink format and strides are ours, not A&B's (they had
+  no acoustic comms). T-E2-06 sweeps a landmark-only uplink and adaptive
+  strides before any paper claim.
+
+---
+
 ## 2026-09-28: reference fleet (Claude, after PI decisions D1–D3)
 
 ### L6. The reference fleet over a 64 bps modem: bandwidth sets *when* the team connects

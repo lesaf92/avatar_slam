@@ -50,9 +50,12 @@ flowchart TB
 | Trajectory library | `sim/trajectories.py` ✅: 10 kinds + CSV replay, `TrajectorySpec`, YAML presets in `experiments/scenarios/` | – | – |
 | Channel + network | `comm/channel.py` (incl. Wi-Fi mesh, M64, X150 profiles), `comm/network.py` ✅ | – | comm emulator node 🔜 |
 | Surface gateway relay | `comm/gateway.py` ✅ (ADR-0006) | – | gateway node 🔜 |
+| Digest scheduler (VoI per byte) | `comm/scheduler.py` ✅ (T-C2-01) | – | – |
 | Wire codec | `comm/codec.py` ✅ | `comm/codec.hpp/.cpp` ✅ | `EncodedPacket.msg` ✅ |
-| Factor graph | `backend/graph.py` ✅ | GTSAM port 🔜 (T-B2-01) | – |
+| Factor graph | `backend/graph.py` ✅ (Schur marginals, MMD ordering) | GTSAM port 🔜 (T-B2-01) | – |
 | Association | `frontend/association.py` ✅ | port 🔜 | – |
+| Frame-graph cycle check | `frontend/frame_consistency.py` ✅ (T-X2-02) | – | – |
+| Baselines | `baselines/centralized_server.py` ✅ (*A&B*-style server, T-E2-05) | – | – |
 | Agent runtime | `agent.py` ✅ | – | `avatar_ros` node 🔜 |
 | Evaluation / runner / CLI | `eval/metrics.py`, `runner.py`, `cli.py` ✅ | – | – |
 | Visualization | `cli.py export-viz` ✅ | – | live web viewer 🔜 |
