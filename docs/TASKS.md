@@ -32,11 +32,11 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-04 | Verify every bib entry by DOI (`verified-web` / `UNVERIFIED` → `verified`) | P1 | – | todo | | `make -C paper check` shows no unverified cited entries |
 | T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | todo | | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario |
 | T-S1-03 | Occlusion model (footprint ray casting) | P1 | – | todo | | Test: pile behind hull not detected |
-| T-S1-05 | Profile + speed up decentralized runs (incremental solves, cached marginals) | P1 | – | todo | | 600 s harbour ≤ 60 s wall |
-| T-X2-02 | **Team frame-graph cycle consistency**: reject `T_ij` inconsistent with `T_ik ∘ T_kj` (evidence: all 4 wrong alignments in 20 seeds were ugv_0↔auv_1, pairs with no true overlap) | P0 | T-X1-01 | todo | | 0 wrong alignments over 50 seeds (`experiments/association_precision.py`) |
+| T-S1-05 | Profile + speed up decentralized runs (incremental solves, cached marginals) | P1 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | 600 s harbour ≤ 60 s wall: 49 s (LOG L10) |
+| T-X2-02 | **Team frame-graph cycle consistency**: reject `T_ij` inconsistent with `T_ik ∘ T_kj` (evidence: all 4 wrong alignments in 20 seeds were ugv_0↔auv_1, pairs with no true overlap) | P0 | T-X1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | 0 wrong alignments over 50 seeds (`experiments/association_precision.py`): 14 → 0, no correct one vetoed (LOG L11) |
 | T-X2-01 | Aliasing-grid scenario + association benchmark → `paper/data/` | P1 | T-S4-02 | todo | | CSV with precision/recall per seed |
 | T-X2-03 | GNC/PCM-style robust inter-agent factors in the fused graph | P1 | T-X1-01 | todo | | Injected outliers do not move frames > 0.2 m |
-| T-C2-01 | **VoI-per-byte digest scheduler** (replace heuristic in `build_digests`) | P0 | T-B1-02 | todo | | H2 curve: ≥ 90 % accuracy at ≤ 20 % bytes vs. FIFO |
+| T-C2-01 | **VoI-per-byte digest scheduler** (replace heuristic in `build_digests`) | P0 | T-B1-02 | in-progress | Claude · `claude/relaxed-ramanujan-bzrqyd` | H2 curve: ≥ 90 % accuracy at ≤ 20 % bytes vs. FIFO. Implemented (`avatar/comm/scheduler.py`); no measurable gain at M64 yet (LOG L12); needs the T-C5-01 sweep |
 | T-C3-01 | Surface gateway: store-and-forward relay RF ↔ acoustic with dedup (v0 policy, ADR-0006) | P0 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | UAV↔UUV alignment through the relay in `harbor_fleet` (test_fleet.py) |
 | T-S4-03 | `harbor_fleet` scenario: the PI's reference fleet (Husky, Tarot 680, BlueROV2, gateway, optional BlueBoat) with device-specific sensor, odometry, and channel profiles | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Team connects over M64 (LOG L6) |
 | T-C1-02 | Token-bucket budgets per (node, link); frame alignments inside the budget; no descriptors on acoustic | P0 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Acoustic bytes ≤ modem capacity (test) |
@@ -45,6 +45,8 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-C6-01 | Modem-M64 driver + link adapter: fragment ≤ 64 B wire packets into modem frames, reassemble, drop incomplete (verify the M64 frame size) | P0 | – | todo | | Loopback test with the recorded frame format |
 | T-C7-01 | Gateway policy v1: VoI-based RF→acoustic selection (shares code with T-C2-01) | P1 | T-C2-01 | todo | | Beats the class-priority v0 on time-to-team-connection |
 | T-C5-01 | Bandwidth (100 bps–10 kbps) and loss sweep experiment → `paper/data/` | P1 | T-C2-01 | todo | | CSV + figure script |
+| T-S1-06 | UAV sensing at altitude: a longer-range or nadir sensor option (e.g. downward mapping camera) so the UAV can join the team above ~5 m | P1 | – | todo | | `fleet_heights.yaml` connects (LOG L9) |
+| T-E2-06 | Server baseline fairness: landmark-only uplink and adaptive acoustic stride, swept | P1 | T-E2-05 | todo | | CSV over strides/policies in `paper/data/` |
 | T-S4-01 | Scenario YAML (world, team, links) shared by Tier 1 and Tier 2 | P0 | – | todo | | `harbor.yaml` reproduces current harbour |
 | T-S4-02 | Dam-face, offshore-jacket, aliasing-grid scenarios | P1 | T-S4-01 | todo | | Registered in `SCENARIOS` |
 
@@ -76,7 +78,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-E2-02 | Kimera-Multi baseline adapter | P1 | M2 | todo | | – |
 | T-E2-03 | SlideSLAM baseline adapter | P1 | M2 | todo | | – |
 | T-E2-04 | DRACo-SLAM2 baseline adapter | P1 | M2 | todo | | Runs on underwater subset |
-| T-E2-05 | *A&B*-style centralized server baseline (estimated association, all bytes counted) | P0 | T-X1-01 | todo | | Mode in `runner.py` |
+| T-E2-05 | *A&B*-style centralized server baseline (estimated association, all bytes counted) | P0 | T-X1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Mode `server` in `runner.py` (`avatar/baselines/centralized_server.py`); LOG L13 |
 | T-E3-01 | Experiment matrix + `make -C experiments paper-data` | P0 | T-E2-* | todo | | Regenerates every paper number |
 | T-E4-01 | Real-data validation (A&B / DRACo2 data, ARACATI, PI's data) | P0 | T-R1-05 | todo | | At least one real sequence |
 | T-R1-05 | Obtain real datasets (ask authors; licences) | P0 | – | todo | | Data + licence noted |
