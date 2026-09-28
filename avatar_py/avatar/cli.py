@@ -66,8 +66,29 @@ def _summary_row(res: RunResult) -> dict:
     return row
 
 
+def _scenario_kwargs(args) -> dict:
+    """Parse repeated ``--scenario-arg KEY=VALUE`` (int, float, bool or string)."""
+    out: dict = {}
+    for item in args.scenario_arg or []:
+        key, sep, raw = item.partition("=")
+        if not sep:
+            raise SystemExit(f"--scenario-arg expects KEY=VALUE, got {item!r}")
+        value: object = raw
+        if raw.lower() in ("true", "false"):
+            value = raw.lower() == "true"
+        else:
+            for cast in (int, float):
+                try:
+                    value = cast(raw)
+                    break
+                except ValueError:
+                    continue
+        out[key] = value
+    return out
+
+
 def cmd_run(args) -> int:
-    res = run(args.scenario, args.mode, args.seed, args.duration)
+    res = run(args.scenario, args.mode, args.seed, args.duration, **_scenario_kwargs(args))
     out = {
         "provenance": _provenance(args),
         "mode": res.mode,
@@ -86,7 +107,7 @@ def cmd_compare(args) -> int:
     rows = []
     for seed in args.seeds:
         for mode in args.modes:
-            res = run(args.scenario, mode, seed, args.duration)
+            res = run(args.scenario, mode, seed, args.duration, **_scenario_kwargs(args))
             rows.append(_summary_row(res))
             print(
                 f"seed {seed} {mode:>13}: team ATE {rows[-1]['ate_team_m']:.3f} m "
@@ -112,8 +133,9 @@ def cmd_compare(args) -> int:
 
 def cmd_export_viz(args) -> int:
     params = AvatarParams()
-    scenario, sim = make_sim(args.scenario, args.seed, args.duration, params)
-    dec = run(args.scenario, "decentralized", args.seed, args.duration, params)
+    kwargs = _scenario_kwargs(args)
+    scenario, sim = make_sim(args.scenario, args.seed, args.duration, params, **kwargs)
+    dec = run(args.scenario, "decentralized", args.seed, args.duration, params, **kwargs)
     step = max(1, int(args.subsample))
     world = [
         {
@@ -169,7 +191,13 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p):
-        p.add_argument("--scenario", default="harbor")
+        p.add_argument("--scenario", default="harbor", help="harbor | harbor_fleet")
+        p.add_argument(
+            "--scenario-arg",
+            action="append",
+            metavar="KEY=VALUE",
+            help="scenario option, e.g. acoustic=x150, n_uuv=3, with_usv=true (repeatable)",
+        )
         p.add_argument("--duration", type=float, default=300.0, help="mission length [s]")
 
     p = sub.add_parser("run", help="one mode, one seed")

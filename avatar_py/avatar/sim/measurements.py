@@ -18,7 +18,7 @@ from avatar.sim.agents import AgentConfig, sample_trajectory
 from avatar.sim.sensors import SENSOR_LIBRARY, Detection, detect
 from avatar.sim.world import World
 
-ABS_Z_SIGMA_M: dict[str, float] = {"depth": 0.05, "surface": 0.05, "baro": 0.3}
+ABS_Z_SIGMA_M: dict[str, float] = {"depth": 0.05, "bar30": 0.02, "surface": 0.05, "baro": 0.3}
 
 
 @dataclass(eq=False)
@@ -97,6 +97,7 @@ def generate_measurements(
         gt = sample_trajectory(cfg, times)
         noise = cfg.odometry_noise
         bias = float(rng.normal(0.0, noise.yaw_bias_std_rad_per_m))
+        scale = 1.0 + float(rng.normal(0.0, noise.scale_bias_std)) if noise.scale_bias_std else 1.0
         sensors = [SENSOR_LIBRARY[name] for name in cfg.sensors]
         kfs: list[KeyframeData] = []
         for k, t in enumerate(times):
@@ -106,6 +107,7 @@ def generate_measurements(
                 dist = float(np.linalg.norm(true_inc[:3]))
                 odom_sig = noise.sigmas(dist)
                 odom = true_inc + rng.normal(0.0, odom_sig)
+                odom[:3] = scale * odom[:3]
                 odom[3] += bias * dist
             dets: list[Detection] = []
             for sensor in sensors:

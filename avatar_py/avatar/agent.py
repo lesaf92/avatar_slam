@@ -16,6 +16,7 @@ simulated :class:`avatar.comm.network.Network` or a ROS 2 node.
 
 from __future__ import annotations
 
+import dataclasses
 from collections import Counter
 from dataclasses import dataclass, field
 
@@ -40,6 +41,7 @@ class AvatarParams:
 
     exchange_period_s: float = 20.0
     descriptor_dim: int = 8
+    acoustic_descriptor_dim: int = 0  # descriptors are not worth their bytes at 10²-10³ bps
     min_obs_to_share: int = 2
     max_share_sigma_m: float = 3.0
     coaxial_sigma_m: float = 0.1
@@ -203,7 +205,7 @@ class AvatarAgent:
             sz = float(np.sqrt(max(C[2, 2], 0.0)))
             self._lm_cache[lid] = (self.local.value(("l", lid)), sxy, sz)
 
-    def _record(self, lid: int) -> codec.LandmarkRecord:
+    def _record(self, lid: int, dim: int) -> codec.LandmarkRecord:
         pos, sxy, sz = self._lm_cache[lid]
         m = self.meta[lid]
         return codec.LandmarkRecord(
@@ -215,7 +217,7 @@ class AvatarAgent:
             class_id=m.class_id,
             flags=m.flags,
             n_obs=m.n_obs,
-            descriptor=tuple(float(v) for v in m.descriptor(self.params.descriptor_dim)),
+            descriptor=tuple(float(v) for v in m.descriptor(dim)),
         )
 
     def _shareable(self) -> list[int]:
@@ -233,8 +235,10 @@ class AvatarAgent:
         v0 priority: never-sent first, then landmarks that moved > 0.25 m or doubled
         their observation count since last sent on this link; within a group, by
         ``n_obs / (σ_xy + 0.05)``. (The VoI-per-byte scheduler is task T-C2-01.)
+        Acoustic packets use ``acoustic_descriptor_dim`` (default 0: no descriptors).
         """
-        dim = self.params.descriptor_dim
+        p = self.params
+        dim = p.acoustic_descriptor_dim if link == LinkType.ACOUSTIC else p.descriptor_dim
         per_pkt = codec.max_records_per_packet(mtu_B, dim)
         if per_pkt == 0:
             return []
@@ -259,7 +263,7 @@ class AvatarAgent:
             n = min(per_pkt, room // codec.record_size(dim), len(order) - i)
             if n <= 0:
                 break
-            recs = tuple(self._record(lid) for lid in order[i : i + n])
+            recs = tuple(self._record(lid, dim) for lid in order[i : i + n])
             msg = codec.LandmarkDigest(
                 sender_id=self.id,
                 seq=self._next_seq(),
@@ -316,6 +320,10 @@ class AvatarAgent:
         if isinstance(msg, codec.LandmarkDigest):
             box = self.inbox.setdefault(msg.sender_id, {})
             for rec in msg.records:
+                old = box.get(rec.landmark_id)
+                if not rec.descriptor and old is not None and old.descriptor:
+                    # e.g. a relayed/acoustic copy without descriptor: keep the RF one
+                    rec = dataclasses.replace(rec, descriptor=old.descriptor)
                 box[rec.landmark_id] = rec
             self.inbox_domain[msg.sender_id] = msg.domain
             self._dirty.add(msg.sender_id)
@@ -361,6 +369,11 @@ class AvatarAgent:
     def _landmark_set(self, ids, pos, sxy, sz, ext, cls, flags, desc) -> LandmarkSet:
         dim = self.params.descriptor_dim
         n = len(ids)
+        # Records may carry D = 0 (acoustic / relayed) or another D: zero-pad or truncate.
+        padded = np.zeros((n, dim))
+        for i, d in enumerate(desc):
+            d = np.asarray(d, dtype=float)[:dim]
+            padded[i, : len(d)] = d
         return LandmarkSet(
             ids=np.asarray(ids, dtype=np.int64),
             positions=np.asarray(pos, dtype=float).reshape(n, 3),
@@ -369,7 +382,7 @@ class AvatarAgent:
             extents=np.asarray(ext, dtype=float).reshape(n, 3),
             class_ids=np.asarray(cls, dtype=np.int64).reshape(n),
             flags=np.asarray(flags, dtype=np.int64).reshape(n),
-            descriptors=np.asarray(desc, dtype=float).reshape(n, dim),
+            descriptors=padded,
         )
 
     def update_alignments(self) -> None:

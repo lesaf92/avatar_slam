@@ -17,8 +17,10 @@ class OdometryNoise:
 
     The per-increment standard deviation grows with the distance ``d`` travelled:
     ``σ = sqrt(σ0² + k² d)`` (random-walk drift). ``yaw_bias_std_rad_per_m`` draws
-    a constant per-agent heading bias (rad per metre) that the estimator does
-    **not** know about, which models unmodelled systematic drift.
+    a constant per-agent heading bias (rad per metre), and ``scale_bias_std`` a
+    constant per-agent scale error on translation (e.g. the ±1 % long-term
+    accuracy of a DVL). The estimator does **not** know about either bias, which
+    models unmodelled systematic drift.
     """
 
     sigma_xy_per_sqrt_m: float = 0.03
@@ -28,6 +30,7 @@ class OdometryNoise:
     sigma_z_floor_m: float = 0.005
     sigma_yaw_floor_rad: float = 0.001
     yaw_bias_std_rad_per_m: float = 5e-4
+    scale_bias_std: float = 0.0
 
     def sigmas(self, distance_m: float) -> NDArray[np.float64]:
         """Nominal 1-σ of an increment ``[x, y, z, yaw]`` after ``distance_m``."""
@@ -46,6 +49,24 @@ ODOMETRY_DEFAULTS: dict[Domain, OdometryNoise] = {
     Domain.UNDERWATER: OdometryNoise(0.02, 0.005, 0.002, yaw_bias_std_rad_per_m=1.5e-3),  # DVL-INS
 }
 
+# Reference-fleet odometry (docs/hardware.md). Order-of-magnitude values for the
+# estimators these platforms would run; tune after the first field logs (T-H1-01).
+PLATFORM_ODOMETRY: dict[str, OdometryNoise] = {
+    # Husky + VLP-16 LiDAR-inertial odometry (wheel odometry as fallback).
+    "husky_lio": OdometryNoise(0.02, 0.01, 0.0015, yaw_bias_std_rad_per_m=3e-4),
+    # Tarot 680 + D435i visual-inertial odometry fused with the Cube IMU.
+    "tarot_vio": OdometryNoise(0.04, 0.02, 0.003, yaw_bias_std_rad_per_m=5e-4),
+    # BlueROV2 + DVL A50 dead reckoning (±1.01 % long-term accuracy, standard model);
+    # heading from the vehicle IMU/compass, degraded near steel structures.
+    "bluerov2_dvl": OdometryNoise(
+        0.01, 0.005, 0.002, yaw_bias_std_rad_per_m=1.5e-3, scale_bias_std=0.01
+    ),
+    # BlueBoat (optional) with D435i VIO and GNSS-denied operation near the quay.
+    "blueboat_vio": OdometryNoise(0.04, 0.005, 0.003, yaw_bias_std_rad_per_m=1e-3),
+}
+
+ROLES = ("slam", "gateway")
+
 
 @dataclass(frozen=True)
 class AgentConfig:
@@ -56,10 +77,13 @@ class AgentConfig:
     sensors
         Names of sensor models attached (keys of ``avatar.sim.sensors.SENSOR_LIBRARY``).
     absolute_z
-        Absolute vertical sensing: ``"depth"`` (pressure), ``"surface"`` (USV hull
-        on the waterline), ``"baro"`` (barometric altitude) or ``None``.
+        Absolute vertical sensing: ``"depth"`` / ``"bar30"`` (pressure), ``"surface"``
+        (USV hull on the waterline), ``"baro"`` (barometric altitude) or ``None``.
     comm
         Link types this agent carries a radio/modem for.
+    role
+        ``"slam"`` (runs Avatar SLAM) or ``"gateway"`` (sensorless relay between
+        link types, e.g. a quay-side modem + Wi-Fi node; ADR-0006).
     """
 
     agent_id: int
@@ -72,6 +96,7 @@ class AgentConfig:
     absolute_z: str | None = None
     loop: bool = True
     odometry: OdometryNoise | None = None
+    role: str = "slam"
     extra: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -82,6 +107,10 @@ class AgentConfig:
             raise ValueError("waypoints must have shape (n>=2, 3)")
         if self.speed_mps <= 0:
             raise ValueError("speed_mps must be positive")
+        if self.role not in ROLES:
+            raise ValueError(f"role must be one of {ROLES}")
+        if self.role == "gateway" and self.sensors:
+            raise ValueError("gateways carry no mapping sensors")
 
     @property
     def odometry_noise(self) -> OdometryNoise:
@@ -94,9 +123,13 @@ def sample_trajectory(cfg: AgentConfig, times_s: NDArray[np.float64]) -> NDArray
 
     Yaw follows the direction of horizontal motion (the previous heading is kept
     on purely vertical segments). If ``cfg.loop`` the path is closed and
-    repeated; otherwise the agent stops at the last waypoint.
+    repeated; otherwise the agent stops at the last waypoint. If all waypoints
+    coincide, the node is static (e.g. a quay-side gateway) with yaw 0.
     """
     wp = np.asarray(cfg.waypoints, dtype=float)
+    times_s = np.asarray(times_s, dtype=float)
+    if np.all(np.linalg.norm(wp - wp[0], axis=1) < 1e-9):
+        return np.column_stack([np.tile(wp[0], (len(times_s), 1)), np.zeros(len(times_s))])
     if cfg.loop:
         wp = np.vstack([wp, wp[:1]])
     seg = np.diff(wp, axis=0)
@@ -112,7 +145,7 @@ def sample_trajectory(cfg: AgentConfig, times_s: NDArray[np.float64]) -> NDArray
         if not horizontal[k]:
             heading[k] = heading[k - 1] if k > 0 else 0.0
 
-    s = np.asarray(times_s, dtype=float) * cfg.speed_mps
+    s = times_s * cfg.speed_mps
     s = np.mod(s, total) if cfg.loop else np.clip(s, 0.0, total - 1e-9)
     k = np.clip(np.searchsorted(cum, s, side="right") - 1, 0, len(seg) - 1)
     frac = (s - cum[k]) / seg_len[k]

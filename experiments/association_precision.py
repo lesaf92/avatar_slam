@@ -8,6 +8,7 @@ alignments were accepted, how many pairs they contain, and the fraction of
 pairs that link the same ground-truth structure.
 
     python experiments/association_precision.py --seeds 0 1 2 3 4 --duration 90
+    python experiments/association_precision.py --scenario harbor_fleet --duration 300
 """
 
 from __future__ import annotations
@@ -22,11 +23,13 @@ from avatar.runner import make_sim
 from avatar.types import LinkType
 
 
-def evaluate(seed: int, duration_s: float, params: AvatarParams) -> dict:
-    scenario, data = make_sim("harbor", seed, duration_s, params)
+def evaluate(seed: int, duration_s: float, params: AvatarParams, scenario_name: str) -> dict:
+    scenario, data = make_sim(scenario_name, seed, duration_s, params)
     obj_ids = np.array([p.object_id for p in data.world.parts])
     agents: dict[int, AvatarAgent] = {}
     for cfg in scenario.agents:
+        if cfg.role != "slam":
+            continue
         ag = AvatarAgent(
             cfg,
             params,
@@ -69,10 +72,11 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     ap.add_argument("--duration", type=float, default=90.0)
+    ap.add_argument("--scenario", default="harbor", help="harbor | harbor_fleet")
     ap.add_argument("--json", action="store_true", help="print full JSON per seed")
     args = ap.parse_args()
     params = AvatarParams()
-    rows = [evaluate(s, args.duration, params) for s in args.seeds]
+    rows = [evaluate(s, args.duration, params, args.scenario) for s in args.seeds]
     for r in rows:
         if args.json:
             print(json.dumps(r))

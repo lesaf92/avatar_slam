@@ -21,8 +21,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from avatar.comm.channel import ACOUSTIC_DEFAULT, RF_DEFAULT, ChannelModel
-from avatar.sim.agents import AgentConfig, lawnmower, rectangle
+from avatar.comm.channel import ACOUSTIC_DEFAULT, CHANNEL_PROFILES, RF_DEFAULT, ChannelModel
+from avatar.sim.agents import PLATFORM_ODOMETRY, AgentConfig, lawnmower, rectangle
 from avatar.sim.world import Structure, World
 from avatar.types import Domain, LinkType
 
@@ -200,4 +200,104 @@ def harbor(rng: np.random.Generator, n_auv: int = 2, include_air_ground: bool = 
     return Scenario("harbor", world, agents, anchor_id=0)
 
 
-SCENARIOS = {"harbor": harbor}
+def harbor_fleet(
+    rng: np.random.Generator,
+    n_uuv: int = 2,
+    acoustic: str = "m64",
+    rf: str = "wifi_mesh",
+    with_usv: bool = False,
+) -> Scenario:
+    """Harbour world with the PI's **reference fleet** (ADR-0006, docs/hardware.md).
+
+    * ``ugv_0``: Clearpath Husky, VLP-16 + D435i (level), Wi-Fi mesh. **Anchor.**
+      It patrols the quay (land), so it sees pile tops and bollards.
+    * ``uav_0``: Tarot 680 hexacopter + Cube, D435i pitched 30° down (≤ 6 m
+      useful depth), barometer, Wi-Fi mesh. It circles pier A's pile rows at a
+      2.5 m stand-off, 3 m up (the D435i sees nothing useful beyond ~6 m).
+    * ``uuv_k``: BlueROV2, Micron Gemini 720s imaging sonar + low-light camera +
+      Bar30 depth, DVL A50 dead reckoning. SLAM traffic goes **only** over the
+      acoustic modem (the tether is for safety/logging, never for SLAM data).
+    * ``gw_0``: quay-side surface gateway (topside modem + Wi-Fi), sensorless relay.
+    * optional ``usv_0``: BlueBoat with D435i above and a Gemini below (bridge).
+
+    ``acoustic``/``rf`` select entries of ``avatar.comm.channel.CHANNEL_PROFILES``.
+    """
+    world = harbor_world(rng)
+    RF, AC = LinkType.RF, LinkType.ACOUSTIC
+    odo = PLATFORM_ODOMETRY
+    land = world.land_z
+    agents = [
+        AgentConfig(
+            0,
+            "ugv_0",
+            Domain.GROUND,
+            rectangle((-14, -3), (-50, 55), land + 0.7),
+            1.0,
+            sensors=("vlp16", "d435i"),
+            comm=(RF,),
+            odometry=odo["husky_lio"],
+        ),
+        AgentConfig(
+            1,
+            "uav_0",
+            Domain.AERIAL,
+            rectangle((2, 60), (-6.5, 6.5), 3.0),  # 2.5 m stand-off around pier A's pile rows
+            1.0,
+            sensors=("d435i_down30",),
+            comm=(RF,),
+            absolute_z="baro",
+            odometry=odo["tarot_vio"],
+        ),
+    ]
+    uuv_paths = [
+        (lawnmower((2, 60), (-8, 8), 8.0, -4.0), 0.5),
+        (rectangle((8, 50), (-18, 38), -5.0), 0.5),
+        (lawnmower((10, 45), (38, 52), 7.0, -3.0), 0.5),
+    ]
+    for k in range(n_uuv):
+        wp, v = uuv_paths[k % len(uuv_paths)]
+        agents.append(
+            AgentConfig(
+                2 + k,
+                f"uuv_{k}",
+                Domain.UNDERWATER,
+                wp,
+                v,
+                sensors=("gemini_720s", "bluerov2_camera"),
+                comm=(AC,),
+                absolute_z="bar30",
+                odometry=odo["bluerov2_dvl"],
+            )
+        )
+    gw_id = 2 + n_uuv
+    agents.append(
+        AgentConfig(
+            gw_id,
+            "gw_0",
+            Domain.SURFACE,
+            np.array([(0.5, 0.0, 0.0)] * 2),
+            1.0,
+            sensors=(),
+            comm=(RF, AC),
+            role="gateway",
+        )
+    )
+    if with_usv:
+        agents.append(
+            AgentConfig(
+                gw_id + 1,
+                "usv_0",
+                Domain.SURFACE,
+                rectangle((6, 66), (-20, 20), 0.0),
+                1.0,
+                sensors=("d435i", "gemini_720s"),
+                comm=(RF, AC),
+                absolute_z="surface",
+                odometry=odo["blueboat_vio"],
+            )
+        )
+    channels = {RF: CHANNEL_PROFILES[rf], AC: CHANNEL_PROFILES[acoustic]}
+    return Scenario("harbor_fleet", world, agents, channels=channels, anchor_id=0)
+
+
+SCENARIOS = {"harbor": harbor, "harbor_fleet": harbor_fleet}
