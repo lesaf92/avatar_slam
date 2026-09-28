@@ -23,25 +23,13 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
 
 import argparse
 import csv
-import subprocess
 from pathlib import Path
 
 import numpy as np
+from _provenance import commit
 
 from avatar.agent import AvatarParams
 from avatar.runner import make_sim, run_centralized, run_decentralized
-
-
-def commit() -> str:
-    try:
-        return subprocess.run(
-            ["git", "describe", "--always", "--dirty", "--abbrev=7"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
 
 
 def main() -> None:

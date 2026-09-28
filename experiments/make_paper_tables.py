@@ -123,7 +123,7 @@ def bandwidth_sweep() -> None:
         "\\begin{tabular}{l" + "cc" * len(scheds) + "}",
         "\\toprule",
         f"Acoustic & {head} \\\\",
-        f"[bit/s] & {sub} \\\\",
+        f"{{[bit/s]}} & {sub} \\\\",  # braces: a leading [ would be read as \\'s option
         "\\midrule",
     ]
     for bps in rates:

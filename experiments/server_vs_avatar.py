@@ -22,12 +22,12 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
 
 import argparse
 import csv
-import subprocess
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
 
 import numpy as np
 import yaml
+from _provenance import commit
 
 from avatar.agent import AvatarParams
 from avatar.baselines.centralized_server import ServerParams, run_server
@@ -35,18 +35,6 @@ from avatar.runner import make_sim, run_centralized, run_decentralized
 from avatar.types import Domain
 
 HERE = Path(__file__).resolve().parent
-
-
-def commit() -> str:
-    try:
-        return subprocess.run(
-            ["git", "describe", "--always", "--dirty", "--abbrev=7"],
-            capture_output=True,
-            text=True,
-            check=True,
-        ).stdout.strip()
-    except (OSError, subprocess.CalledProcessError):
-        return "unknown"
 
 
 def run_one(job: tuple[str, str, int, list[int], float | None]) -> list[dict]:

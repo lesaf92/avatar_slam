@@ -38,8 +38,15 @@ waterline-crossing part seen from the other medium (a horizontal-only coaxial ma
 grows with the observation count. After each pick, $\mathbf{J}_d \leftarrow \mathbf{J}_d + \rho_d\mathbf{J}_{\mathbf{q}}$.
 All records cost the same number of bytes on a given link, so this greedy order is also the order of value per
 byte. The criterion prefers well-observed parts that are spread out, which constrain yaw
-at long lever arms. \todo{H2 result: bandwidth sweep (T-C5-01); at 64\,bit/s the order barely
-matters, docs/LOG.md L12.}
+at long lever arms.
+
+We compare this criterion with two simpler orders: first observed, first sent (FIFO), and a
+quality order that sends parts with the most observations per unit of uncertainty first
+(Sec.~\ref{sec:experiments}, Table~\ref{tab:bandwidth}). The order matters only at the lowest
+rates, and there the quality order does best. At these rates the binding constraint is to
+deliver enough \emph{matchable} parts to pass the association tests, not their geometric
+information. \avatar{} therefore uses the quality order. A value of information that models the
+probability of an accepted alignment is future work.
 
 \subsection{Gateway and surfacing}
 A sensorless quay-side gateway stores and forwards: acoustic packets are relayed to RF verbatim,

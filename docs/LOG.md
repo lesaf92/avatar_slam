@@ -11,6 +11,82 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L16. Team frames: fuse every consistent estimate, not one chain (T-X2-04)
+
+The Avatar X150 outlier (seed 7, team ATE 0.53 m, L15) is a frame problem, not a
+trajectory problem: every agent's fused ATE is small, but the anchor's frame of
+`uuv_1` is off by 1.6 m / 2.8°. The anchor's own alignment of `uuv_1` (15
+cross-medium coaxial pairs) is 1.5 m / 2.7° off while claiming σ_yaw = 0.32°
+(≈ 8.5σ). `uuv_1`'s estimate of the reverse edge is 0.5 m / 0.4° off. The
+least-σ chain used only the direct edge.
+
+`team_frames()` (commit `8a526a4`) now solves a small 4-DoF pose graph over the
+agents' frames with every cycle-consistent estimate the agent knows (own,
+received, and the neighbours' estimates of its own frame; σ floors 5 cm /
+0.3°). Ad-hoc check on 5 runs (not a script; the 10-seed paper data below
+includes the change): team ATE drops in all 5, by 2–10 % (seed 7: 0.53 →
+0.49 m). The remaining error is the over-confident cross-only alignment
+itself. The simulator places above/below parts on the same axis (no pile rake),
+so the bias is not a model artifact; the likely cause is a partly shifted
+pairing along a pile row (T-S1-07).
+
+### L17. Bandwidth sweep: ordering matters only at low rates, and VoI does not help (negative)
+
+`experiments/bandwidth_sweep.py`, `fleet_default`, acoustic rate 16 → 1024 bit/s
+(raw modem rate, shared by the three acoustic nodes), schedulers FIFO (first
+observed, first sent), quality (v0), VoI. Seeds 0–9; Table `tab:bandwidth`.
+A 5-seed run at `6b705b6` (`results/`) showed the same pattern.
+
+| Acoustic [bit/s] | FIFO merged / at [s] | Quality merged / at [s] | VoI merged / at [s] | UUV frame error [m], FIFO / quality / VoI |
+|---|---|---|---|---|
+| 16 | 0/10 / – | 0/10 / – | 0/10 / – | – |
+| 32 | 4/10 / 540 | 8/10 / 540 | 5/10 / 560 | 0.166 / 0.175 / 0.157 |
+| 64 | 10/10 / 280 | 10/10 / 280 | 10/10 / 280 | 0.135 / 0.153 / 0.144 |
+| 128 | 10/10 / 180 | 10/10 / 180 | 10/10 / 180 | **0.388** / 0.174 / 0.219 |
+| 256 | 10/10 / 120 | 10/10 / 130 | 10/10 / 130 | 0.135 / 0.129 / 0.135 |
+| 512 | 10/10 / 120 | 10/10 / 110 | 10/10 / 120 | 0.133 / 0.132 / 0.131 |
+| 1024 | 10/10 / 120 | 10/10 / 120 | 10/10 / 120 | 0.134 / 0.131 / 0.132 |
+
+```
+make -C experiments bandwidth      # → paper/data/bandwidth_sweep.csv, 10 seeds
+```
+
+Provenance: code at `d40b8ed`. The CSV says `d40b8ed-dirty` only because the
+preceding `make paper-data` step had rewritten tracked files in `paper/data/`;
+the same applies to `association_cycle_check.csv`. Experiment scripts now use
+`experiments/_provenance.py`, which ignores output directories.
+
+**Findings.**
+- At 16 bit/s no order merges the team within 600 s. At 32 bit/s the quality
+  order merges it in 8/10 runs, VoI in 5/10 and FIFO in 4/10. From 64 bit/s up,
+  all orders connect at about the same time; the token bucket, not the order,
+  sets the schedule (L6).
+- At 128 bit/s FIFO's UUV frames are 2× worse on average (0.39 vs. 0.17 m),
+  driven by bad alignments on individual seeds (e.g. 2.1 m at seed 4 in the
+  5-seed run). The quality order prefers well-observed parts, which are the
+  ones that match.
+- **VoI never beats the quality order.** At the lowest rates the binding
+  constraint is getting enough *matchable* records across to pass the
+  association tests (≥ 8 inliers for cross-only matches), not their geometric
+  information. A VoI that models the probability of passing those tests
+  (records → accepted alignment) is the next idea (T-C2-01 stays open). The
+  default is back to `quality` (commit `d40b8ed`).
+- H2 as written (≥ 90 % accuracy at ≤ 20 % of the bytes vs. FIFO) is not
+  shown. What the sweep does show: this fleet merges down to a 32 bit/s modem
+  (8/10 runs with the quality order), and the order matters only at and below
+  128 bit/s.
+
+### L18. Paper data at `d40b8ed` (frame fusion + quality order)
+
+`make -C experiments paper-data` regenerated all three tables. Changes from L15
+(`c9d61af`) come from team-frame fusion (L16) and the default order (L17):
+Avatar team ATE, mean ± 95 % CI over 10 seeds, M64 0.139 ± 0.019 → **0.129 ±
+0.019** m, X150 0.192 ± 0.088 → **0.169 ± 0.076** m, 1 kbit/s 0.131 ± 0.020 →
+**0.109 ± 0.011** m (server, stride 10: 0.125 ± 0.015 m, merged at 150 s vs.
+Avatar's 90 s). The server rows are unchanged, because its joint solve does not
+use the team-frame code. Cycle check: 830/1000 accepted (834 at `c9d61af`),
+14 → 0 wrong, 0 correct vetoed.
+
 ### L14. Front-end errors: a robust kernel saves single agents, not the team (T-S1-04, partly negative)
 
 `FrontEndErrors` (commit `aecaef2`) adds Poisson clutter per keyframe and
