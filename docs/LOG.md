@@ -11,6 +11,40 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L20. Anchored transit: collaboration corrects small drift, not metre-level drift (T-X1-02, partial)
+
+`fleet_transit_anchored.yaml`: `uuv_1`'s one-way transit (≈ 200 m) starts and
+ends in the piers that `uuv_0` surveys (same medium, 4-inlier minimum), so the
+team knows both ends. Seeds 0–4, M64, commit `5b5e685`. `uuv_1` ATE [m]:
+
+| Seed | Alone | Avatar fused (windows off / 120 kf) | Oracle | Team ATE, Avatar / oracle |
+|---|---|---|---|---|
+| 0 | 0.340 | 0.263 / 0.263 | 0.300 | 0.272 / 0.183 |
+| 1 | 0.640 | 0.248 / 0.234 | 0.183 | 0.222 → 0.196 (windows) / 0.114 |
+| 2 | 1.345 | 1.344 / 1.342 | 0.219 | 0.092 (3 agents) → 1.599 (windows, 4 agents) / 0.132 |
+| 3 | 2.555 | 2.330 / 2.330 | 0.219 | 1.362 / 0.133 |
+| 4 | 3.345 | 3.166 / 3.166 | 0.314 | 1.665 / 0.193 |
+
+```
+python experiments/trajectory_study.py --presets fleet_transit_anchored --seeds 0 1 2 3 4 [--align-window 120]
+```
+
+**Findings.**
+- **First positive H1 evidence:** with small drift (seeds 0–1), the team
+  reduces the drifting AUV's error by 23–63 % and reaches about the oracle's
+  level. Windows help a little (seed 1: 0.248 → 0.234 m).
+- **Metre-level drift is not corrected** (seeds 2–4: ≤ 9 %). The AUV merges
+  into the team frame (it connects at 400–460 s), but its map is bent by 1–3 m
+  and is placed rigidly, so team ATE degrades to 1.4–1.7 m. In seed 2,
+  windows merge the AUV (4 agents) but make team ATE worse (1.6 m): merging a
+  bent map without bending it hurts the team metric.
+- So H1 holds only in the small-drift regime so far. Next for T-X1-02:
+  (1) check that both end clusters get pairs when drift is large (per-window
+  pair counts); (2) if they do, the fused solve is the bottleneck (Huber on
+  linked points treats metre-level residuals as outliers; try a
+  graduated/annealed kernel or a per-cluster frame initialisation); (3) keep
+  a drifting agent out of the team frame until its map is consistent.
+
 ### L19. Feature-poor transit: the H1 test case exists, and Avatar does not exploit it yet
 
 `fleet_transit.yaml`: `uuv_1` leaves the piers at (12, 42), crosses the sparse
