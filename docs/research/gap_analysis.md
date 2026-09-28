@@ -54,7 +54,7 @@ Legend: ✓ yes · ✗ no · ~ partial · ? unverified
 | DiNNO / Di-NeRF / MACIM | – | ✓ | ✗ | ✗ | ✓ (C-ADMM) | ✗ (synchronous) | ✗ | ✓ implicit | ✗ | ~ |
 | RAMEN (RSS'25) / UDON ('25) | – | ✓ | ✗ | ✗ | ✓ | ✓ (async, lossy; RF) | ✗ | ✓ implicit | ✗ | ✓ / ? |
 | DRACo-SLAM2 (IROS'25) | ✗ | ✗ | ✗ | ✓ | ✓ | ✓ (acoustic) | ✗ | ✗ | ✗ | ✓ |
-| Above and Below (RA-L'26) | ✗ | ✗ | ✓ | ✓ | ✗ (centralized) | ✗ (future work) | ✗ | ✗ | ✓ | ? |
+| Above and Below (RA-L'26) | ✗ | ✗ | ✓ | ~ (sonar on the surface vessel) | ✗ (centralized) | ✗ (simulated comms, ~1–3 kbit/s; future work) | ✗ | ✗ | ✓ (scan-level, Go-ICP + PCM) | ✓ (announced) |
 | AONeuS / Z-Splat / SonarSplat | ✗ | ✗ | ✗ | ✓ (single agent) | – | – | ✗ | ✓ sonar(+cam) | ✗ | ~ |
 | **Avatar SLAM (target)** | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ (layer 2) | ✓ | ✓ |
 
@@ -65,8 +65,8 @@ A claim may appear in the paper only once its row is `confirmed`.
 | ID | Claim (draft wording) | Closest prior work | Why prior does not do it | Risk | Status |
 |---|---|---|---|---|---|
 | N1 | First **decentralized** C-SLAM whose team spans **aerial, ground, surface and underwater** agents | Above and Below; SlideSLAM; DRACo-SLAM2 | A&B is centralized and has no air/ground agents; SlideSLAM is air/ground only; DRACo2 is underwater only | Medium: A&B's authors list acoustic comm as future work | draft |
-| N2 | **Medium-aware map sharing**: one scheduler allocates map content across RF and acoustic links (≥10³× bandwidth ratio, intermittent), with the USV as gateway | DRACo(2), Swarm-SLAM, RAMEN/UDON, Choudhary et al. IJRR'17 | Each handles one link class; none schedules across heterogeneous media | Medium | draft |
-| N3 | **Cross-medium landmark association** (above-water LiDAR/camera ↔ below-water sonar) via a coaxial landmark-part model, decentralized | Above and Below | Must read A&B's association method. If it matches ours, drop "first" and claim only the decentralized, gateway-free variant | **High** | needs-reading (`T-R1-01`) |
+| N2 | **Medium-aware map sharing** that works over a real modem profile (64 bit/s): per-link token budgets, a store-and-forward gateway, and condensed landmark records. The team merges where a keyframe-streaming server does not (LOG L15–L21). *Not* the VoI order, which does not beat a quality order (LOG L17) | DRACo(2), Swarm-SLAM, RAMEN/UDON, Above and Below | A&B needs ~1–3 kbit/s on simulated links; the others handle one link class | Medium | draft (evidence in paper/data) |
+| N3 | **Landmark-level** cross-medium association (coaxial landmark parts: horizontal-only above ↔ below matches), run on every agent over condensed records, which also links **UAV/UGV** maps to AUVs. *Not* "first cross-medium association" | Above and Below | A&B registers scans (LiDAR waterline slice ↔ in-plane sonar, Go-ICP + PCM) on a central USV, with no air/ground agents (`docs/research/above_and_below.md`) | Medium | reworded after reading (T-R1-01 done) |
 | N4 | **Decentralized heterogeneous neural map layer**: per-agent Gaussian submaps with modality-specific rasterizers (pinhole, LiDAR, imaging sonar) fused through the backbone | HAMMER; MNE-SLAM; SonarSplat; Z-Splat | HAMMER is server/camera; MNE is RGB-D; sonar splatting is single-agent | Medium–high (effort) | draft (Paper B) |
 | N5 | First **open benchmark** for air-ground-surface-underwater C-SLAM with ground truth and communication traces | LOTUSim, HoloOcean 2.0, DAVE; C-SLAM datasets | Simulators are not SLAM benchmarks; datasets are single-medium | Low | draft |
 
@@ -89,6 +89,7 @@ A claim may appear in the paper only once its row is `confirmed`.
 > kbps acoustic links that are intermittent and slow). Avatar SLAM is a
 > decentralized metric-semantic SLAM system that (i) models waterline-crossing
 > structures as coaxial landmark parts, which connect above- and below-water
-> maps; (ii) schedules map content across heterogeneous links by information
-> value per byte; and (iii) layers per-agent neural submaps on top of a
-> lightweight object-level backbone.
+> maps; (ii) shares condensed landmark maps under per-link budgets and a
+> surface gateway, so the whole team merges over a 64 bit/s acoustic modem;
+> and (iii) layers per-agent neural submaps on top of a lightweight
+> object-level backbone.

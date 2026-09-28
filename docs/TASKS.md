@@ -27,7 +27,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 
 | ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
 |---|---|---|---|---|---|---|
-| T-R1-01 | **Deep-read *Above and Below*** (method, association, data, code). Update ledger N3 and the Paper A positioning | P0 | – | todo | | Notes in `docs/research/above_and_below.md`; N3 status updated |
+| T-R1-01 | **Deep-read *Above and Below*** (method, association, data, code). Update ledger N3 and the Paper A positioning | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Notes in `docs/research/above_and_below.md`; N3 reworded (not "first"), N2 re-scoped |
 | T-R1-02 | Deep-read DRACo-SLAM2 + SlideSLAM (comm numbers, association) | P1 | – | todo | | Notes in `docs/research/` |
 | T-R1-04 | Verify every bib entry by DOI (`verified-web` / `UNVERIFIED` → `verified`) | P1 | – | todo | | `make -C paper check` shows no unverified cited entries |
 | T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario: **10–32×** on `fleet_transit` (LOG L19); front-end errors in L14 |
