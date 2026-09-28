@@ -93,9 +93,9 @@ flowchart LR
 
 **Capacity check (simulated).** Two BlueROV2s and the gateway share the M64
 channel through TDMA, so each node gets 21 bps. At 50 % utilization that is about
-1.3 kB per node per 10 minutes, or about 80 landmark records. In the 600 s
-simulation, the whole team shared one frame after 280 s on the M64, and after
-80 s with a 1 kbps modem (seed 0, 300 s run; docs/LOG.md L6).
+1.3 kB per node per 10 minutes, or about 80 landmark records. In 600 s
+simulations (5 seeds, docs/LOG.md L6), the whole team shared one frame after
+280 s on the M64, a median of 220 s on an X150-class modem, and 120 s at 1 kbps.
 
 ## 4. Ground truth for field experiments (plan)
 

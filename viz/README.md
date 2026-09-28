@@ -15,5 +15,7 @@ avatar export-viz --duration 300 --seed 0 --out viz/data/harbor_seed0.json
 python -m http.server -d viz 8000   # then open http://localhost:8000/scenario_viewer.html
 ```
 
-To view another run, use **Load run JSON**. The page draws with Canvas 2D and
+The **Run** selector switches between the bundled runs: the reference fleet
+(`harbor_fleet`, M64 64 bps, 600 s) and the v0 generic team. To view any other
+run, use **Load run JSON**. The page draws with Canvas 2D and
 loads no libraries. Planned: a live ROS 2 viewer (T-V2-01).
