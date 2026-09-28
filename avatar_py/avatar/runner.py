@@ -33,7 +33,7 @@ from avatar.sim.scenarios import SCENARIOS, Scenario
 from avatar.types import Domain, LinkType, Medium
 
 FloatArray = NDArray[np.float64]
-MODES = ("independent", "decentralized", "centralized")
+MODES = ("independent", "decentralized", "centralized", "server")
 
 
 @dataclass
@@ -340,10 +340,18 @@ def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed
     return RunResult(scenario.name, "centralized", seed, sim.duration_s, metrics, trajs, local)
 
 
+def run_server(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
+    """*A&B*-style centralized server (``avatar.baselines.centralized_server``)."""
+    from avatar.baselines.centralized_server import run_server as _run
+
+    return _run(scenario, sim, params, seed)
+
+
 RUNNERS = {
     "independent": run_independent,
     "decentralized": run_decentralized,
     "centralized": run_centralized,
+    "server": run_server,
 }
 
 
