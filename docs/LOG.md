@@ -21,23 +21,21 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ### L2. v0 pipeline runs end to end, but the Tier-1 harbour is too easy for H1
 
-Harbour, 5 agents (USV anchor, 2 AUVs, UAV, UGV), seed 1, 600 s:
+Harbour, 5 agents (USV anchor, 2 AUVs, UAV, UGV), seed 1, 600 s, code at `f674a52`
+(sonar 20 m / p_det 0.6, association v0.1):
 
-| Mode | Local ATE per agent [cm] (usv, auv0, auv1, uav, ugv) | Team ATE [cm] |
-|---|---|---|
-| independent | 3, 6, 6, 5, 3 | – (no common frame) |
-| centralized oracle | 3, 5, 6, 5, 3 | 4.6 |
-| decentralized (Avatar v0) | fused: 3, 5, 6, 5, 3 | 6.8 |
-
-Comm: RF 33.4 kB sent, acoustic 26.1 kB sent (41 acoustic losses). Wall time 168 s.
+| Mode | ATE per agent [cm] (usv, auv0, auv1, uav, ugv) | Team ATE [cm] | Bytes sent (RF / acoustic) | Wall [s] |
+|---|---|---|---|---|
+| independent | 3.0, 7.1, 8.2, 4.7, 2.7 | – (no common frame) | 0 / 0 | 7 |
+| centralized oracle | 2.9, 6.9, 7.4, 4.7, 2.6 | 5.5 | unlimited | 19 |
+| decentralized (Avatar v0) | fused: 3.0, 7.1, 8.0, 4.7, 2.7 | 7.0 | 30.9 kB / 22.6 kB | 164 |
 
 ```
-python -c "from avatar.runner import run; print(run('harbor','decentralized',seed=1,duration_s=600).metrics)"
+avatar compare --scenario harbor --duration 600 --seeds 1
 ```
 
-(These runs used sonar range 30 m / p_det 0.8. Defaults are now 20 m / 0.6. A
-repeat with 20 m / 0.6 and 15 m / 0.5 changed the independent AUV ATE to only
-7–10 cm.)
+(Before the association rewrite and the sonar default change, the same seed gave
+team ATE 6.8 cm vs. 4.6 cm for the oracle. The conclusion is unchanged.)
 
 **Finding.** The decentralized team reaches a common frame close to the oracle.
 But single-agent drift is negligible because Tier 1 gives each agent
