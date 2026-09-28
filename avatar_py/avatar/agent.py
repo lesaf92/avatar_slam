@@ -55,7 +55,9 @@ class AvatarParams:
     exchange_period_s: float = 20.0
     descriptor_dim: int = 8
     acoustic_descriptor_dim: int = 0  # descriptors are not worth their bytes at 10²-10³ bps
-    scheduler: str = "voi"  # digest ordering: "voi" (T-C2-01), "quality" (v0) or "fifo"
+    # Digest ordering: "quality" (v0, best in the bandwidth sweep, LOG L17), "voi"
+    # (expected D-optimal alignment gain per byte, T-C2-01) or "fifo" (baseline).
+    scheduler: str = "quality"
     min_obs_to_share: int = 2
     max_share_sigma_m: float = 3.0
     coaxial_sigma_m: float = 0.1
@@ -263,11 +265,12 @@ class AvatarAgent:
     def build_digests(self, t: float, link: LinkType, budget_B: int, mtu_B: int) -> list[bytes]:
         """Condensed-landmark packets for one link, prioritised and within ``budget_B``.
 
-        ``scheduler="voi"`` (default, T-C2-01): never-sent records are ordered by
+        ``scheduler="voi"`` (T-C2-01): never-sent records are ordered by
         expected D-optimal information gain for the receivers' frame alignment
         (``avatar.comm.scheduler``), accounting for what was already sent on this
         link and for whether the receivers' media can match each record.
-        ``scheduler="quality"`` (v0): never-sent first by ``n_obs / (σ_xy + 0.05)``.
+        ``scheduler="quality"`` (v0, default): never-sent first by
+        ``n_obs / (σ_xy + 0.05)``.
         ``scheduler="fifo"``: never-sent first in the order they were first
         observed (the naive baseline for H2). In all, landmarks that moved > 0.25 m
         or doubled their observation count since last sent follow, then the rest.

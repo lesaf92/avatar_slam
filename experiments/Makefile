@@ -7,9 +7,9 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data tables server cycle
+.PHONY: paper-data tables server cycle bandwidth
 
-paper-data: server cycle tables
+paper-data: server cycle bandwidth tables
 
 server:
 	$(PY) server_vs_avatar.py --seeds $(SEEDS) --profiles m64 x150 acoustic_generic \
@@ -18,6 +18,10 @@ server:
 cycle:
 	$(PY) association_precision.py --scenario harbor --duration 90 --seeds $$(seq 0 49) \
 		--out $(DATA)/association_cycle_check.csv
+
+bandwidth:
+	$(PY) bandwidth_sweep.py --seeds $(SEEDS) --rates 16 32 64 128 256 512 1024 \
+		--out $(DATA)/bandwidth_sweep.csv
 
 tables:
 	$(PY) make_paper_tables.py
