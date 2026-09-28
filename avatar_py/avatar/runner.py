@@ -1,0 +1,282 @@
+"""Experiment runner: one scenario, one seed, one estimation mode.
+
+Modes
+-----
+``independent``
+    Each agent runs its local graph only (single-robot SLAM baseline).
+``decentralized``
+    Avatar SLAM v0: periodic condensed-landmark and frame-alignment exchange
+    over the simulated heterogeneous network, then per-agent fused graphs.
+``centralized``
+    Oracle upper bound: all measurements in one graph with ground-truth data
+    association (including coaxial links), unlimited communication.
+
+All modes consume the same pre-generated measurements (paired comparison).
+"""
+
+from __future__ import annotations
+
+import time
+from dataclasses import dataclass, field
+
+import numpy as np
+from numpy.typing import NDArray
+
+from avatar.agent import AvatarAgent, AvatarParams
+from avatar.backend.graph import FactorGraph, VarType
+from avatar.comm.network import Network
+from avatar.eval.metrics import ate_rmse, chain_frames, frame_error, team_ate
+from avatar.geometry import compose, inverse, transform_poses
+from avatar.sim.measurements import SimData, generate_measurements
+from avatar.sim.scenarios import SCENARIOS, Scenario
+from avatar.types import Medium
+
+FloatArray = NDArray[np.float64]
+MODES = ("independent", "decentralized", "centralized")
+
+
+@dataclass
+class RunResult:
+    """Outputs of one run (metrics are JSON-serialisable)."""
+
+    scenario: str
+    mode: str
+    seed: int
+    duration_s: float
+    metrics: dict
+    trajectories_team: dict[int, FloatArray] = field(default_factory=dict)
+    trajectories_local: dict[int, FloatArray] = field(default_factory=dict)
+    comm_events: list[dict] = field(default_factory=list)
+
+
+def make_sim(
+    scenario_name: str, seed: int, duration_s: float, params: AvatarParams, **kwargs
+) -> tuple[Scenario, SimData]:
+    """Build a scenario and pre-generate its measurements for ``seed``."""
+    rng = np.random.default_rng(seed)
+    scenario = SCENARIOS[scenario_name](rng, **kwargs)
+    sim = generate_measurements(
+        scenario.world, scenario.agents, duration_s, 1.0, params.descriptor_dim, rng
+    )
+    return scenario, sim
+
+
+def _gt_frames(sim: SimData) -> dict[int, FloatArray]:
+    return {i: a.T_world_from_local for i, a in sim.agents.items()}
+
+
+def _gt_trajs(sim: SimData) -> dict[int, FloatArray]:
+    return {i: a.gt for i, a in sim.agents.items()}
+
+
+def _local_ates(trajs: dict[int, FloatArray], sim: SimData) -> dict[int, float]:
+    return {i: ate_rmse(t, sim.agents[i].gt) for i, t in trajs.items()}
+
+
+def _names(sim: SimData) -> dict[int, str]:
+    return {i: a.config.name for i, a in sim.agents.items()}
+
+
+def _make_agents(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int):
+    obj_ids = np.array([p.object_id for p in sim.world.parts], dtype=np.int64)
+    zrng = np.random.default_rng(seed + 10_000)
+    agents = {}
+    for cfg in scenario.agents:
+        z0 = float(sim.agents[cfg.agent_id].gt[0, 2] + zrng.normal(0.0, params.initial_z_sigma_m))
+        agents[cfg.agent_id] = AvatarAgent(
+            cfg, params, obj_ids, z0, np.random.default_rng(seed * 1000 + cfg.agent_id)
+        )
+    return agents
+
+
+def run_independent(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
+    """Single-agent SLAM for every agent (no communication)."""
+    agents = _make_agents(scenario, sim, params, seed)
+    for i, ag in agents.items():
+        for kf in sim.agents[i].keyframes:
+            ag.on_keyframe(kf)
+        ag.solve_local(with_marginals=False)
+    trajs = {i: ag.trajectory("local") for i, ag in agents.items()}
+    metrics = {"ate_local_m": _local_ates(trajs, sim), "agents": _names(sim)}
+    return RunResult(scenario.name, "independent", seed, sim.duration_s, metrics, {}, trajs)
+
+
+def run_decentralized(
+    scenario: Scenario, sim: SimData, params: AvatarParams, seed: int
+) -> RunResult:
+    """Avatar SLAM v0 over the simulated heterogeneous network."""
+    agents = _make_agents(scenario, sim, params, seed)
+    times = sim.agents[scenario.agents[0].agent_id].times
+
+    def position(agent_id: int, t: float) -> FloatArray:
+        k = int(np.clip(np.searchsorted(times, t, side="right") - 1, 0, len(times) - 1))
+        return sim.agents[agent_id].gt[k, :3]
+
+    net = Network(
+        channels=scenario.channels,
+        memberships={a.agent_id: a.comm for a in scenario.agents},
+        position_fn=position,
+        rng=np.random.default_rng(seed + 20_000),
+    )
+    period = params.exchange_period_s
+    next_exchange = period
+    for k, t in enumerate(times):
+        for i, ag in agents.items():
+            ag.on_keyframe(sim.agents[i].keyframes[k])
+        for dlv in net.pop_until(t):
+            agents[dlv.receiver].on_packet(dlv.payload)
+        if t + 1e-9 >= next_exchange:
+            next_exchange += period
+            for ag in agents.values():
+                ag.solve_local()
+                ag.update_alignments()
+                ag.solve_fused()
+            for i, ag in agents.items():
+                for link in ag.cfg.comm:
+                    ch = scenario.channels[link]
+                    budget = ch.budget_B(period, net.share(link))
+                    for pkt in ag.build_digests(t, link, budget, ch.mtu_B):
+                        net.send(t, i, link, pkt)
+                    for pkt in ag.build_alignment_messages(t):
+                        net.send(t, i, link, pkt)
+    for dlv in net.pop_until(float(times[-1])):
+        agents[dlv.receiver].on_packet(dlv.payload)
+    for ag in agents.values():
+        ag.solve_local()
+        ag.update_alignments()
+        ag.solve_fused()
+
+    anchor = scenario.anchor_id
+    known = agents[anchor].frames
+    edges = {k: (fe.T, fe.sigma_xy) for k, fe in known.items()}
+    T_anchor_from = chain_frames(anchor, edges)
+    fused = {i: ag.trajectory("fused") for i, ag in agents.items()}
+    local = {i: ag.trajectory("local") for i, ag in agents.items()}
+    team = {i: transform_poses(T_anchor_from[i], fused[i]) for i in T_anchor_from if i in fused}
+    gt_frames = _gt_frames(sim)
+    team_err = team_ate(team, _gt_trajs(sim), list(agents))
+    ferr = {}
+    for j, T in T_anchor_from.items():
+        if j == anchor:
+            continue
+        T_gt = compose(inverse(gt_frames[anchor]), gt_frames[j])
+        e_xy, e_yaw = frame_error(T, T_gt)
+        ferr[j] = {"xy_m": e_xy, "yaw_deg": float(np.rad2deg(e_yaw))}
+    stats = {
+        lt.name: {
+            "packets_sent": st.packets_sent,
+            "bytes_sent": st.bytes_sent,
+            "deliveries": st.deliveries,
+            "bytes_delivered": st.bytes_delivered,
+            "losses": st.losses,
+        }
+        for lt, st in net.stats.items()
+    }
+    metrics = {
+        "agents": _names(sim),
+        "ate_local_m": _local_ates(local, sim),
+        "ate_fused_m": _local_ates(fused, sim),
+        "ate_team_m": team_err.ate_m,
+        "ate_team_per_agent_m": team_err.per_agent_m,
+        "connected": list(team_err.connected),
+        "disconnected": list(team_err.disconnected),
+        "frame_error": ferr,
+        "alignments": {
+            i: {j: a.n_inliers for j, a in ag.alignments.items()} for i, ag in agents.items()
+        },
+        "comm": stats,
+        "decode_errors": sum(ag.decode_errors for ag in agents.values()),
+    }
+    # Express team trajectories in world frame for visualisation (anchor GT frame).
+    team_world = {i: transform_poses(gt_frames[anchor], tr) for i, tr in team.items()}
+    return RunResult(
+        scenario.name,
+        "decentralized",
+        seed,
+        sim.duration_s,
+        metrics,
+        team_world,
+        local,
+        net.events,
+    )
+
+
+def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
+    """Oracle: one graph, ground-truth association, unlimited communication."""
+    g = FactorGraph()
+    gt_frames = _gt_frames(sim)
+    anchor = scenario.anchor_id
+    parts = sim.world.parts
+    part_key = {i: ("l", p.object_id, int(p.medium)) for i, p in enumerate(parts)}
+    for i, ad in sim.agents.items():
+        est = None
+        for k, kf in enumerate(ad.keyframes):
+            key = ("x", i, k)
+            if k == 0:
+                init = gt_frames[i].copy()
+                init[2] = kf.abs_z if kf.abs_z is not None else ad.gt[0, 2]
+                g.add_variable(key, VarType.POSE4, init)
+                if i == anchor:
+                    g.add_pose_prior(key, init, [1e-3, 1e-3, params.initial_z_sigma_m, 1e-3])
+                else:  # initial frames known only for initialisation (weak prior)
+                    g.add_pose_prior(key, init, [1e3, 1e3, params.initial_z_sigma_m, 1e3])
+                est = init
+            else:
+                est = compose(est, kf.odom)
+                if kf.abs_z is not None:
+                    est[2] = kf.abs_z
+                g.add_variable(key, VarType.POSE4, est)
+                g.add_between(("x", i, k - 1), key, kf.odom, kf.odom_sigmas)
+            if kf.abs_z is not None:
+                g.add_z_prior(key, kf.abs_z, kf.abs_z_sigma)
+            for det in kf.detections:
+                lk = part_key[det.part_index]
+                if not g.has(lk):
+                    g.add_variable(lk, VarType.POINT3, compose(est, [*det.p_body, 0.0])[:3])
+                g.add_point_obs(key, lk, det.p_body, det.sigmas)
+    for s in sim.world.structures:
+        a, b = ("l", s.object_id, int(Medium.ABOVE)), ("l", s.object_id, int(Medium.BELOW))
+        if g.has(a) and g.has(b):
+            g.add_coaxial(a, b, params.coaxial_sigma_m)
+    g.optimize(max_iters=30)
+    trajs = {
+        i: np.array([g.value(("x", i, k)) for k in range(len(ad.keyframes))])
+        for i, ad in sim.agents.items()
+    }
+    team_err = team_ate(trajs, _gt_trajs(sim), list(sim.agents))
+    local = {i: transform_poses(inverse(gt_frames[i]), tr) for i, tr in trajs.items()}
+    metrics = {
+        "agents": _names(sim),
+        "ate_local_m": _local_ates(trajs, sim),
+        "ate_team_m": team_err.ate_m,
+        "ate_team_per_agent_m": team_err.per_agent_m,
+        "connected": list(team_err.connected),
+        "disconnected": [],
+    }
+    return RunResult(scenario.name, "centralized", seed, sim.duration_s, metrics, trajs, local)
+
+
+RUNNERS = {
+    "independent": run_independent,
+    "decentralized": run_decentralized,
+    "centralized": run_centralized,
+}
+
+
+def run(
+    scenario_name: str,
+    mode: str,
+    seed: int = 0,
+    duration_s: float = 300.0,
+    params: AvatarParams | None = None,
+    **scenario_kwargs,
+) -> RunResult:
+    """Build, simulate and estimate; returns metrics (and wall time in ``metrics``)."""
+    if mode not in RUNNERS:
+        raise ValueError(f"mode must be one of {MODES}")
+    params = params or AvatarParams()
+    scenario, sim = make_sim(scenario_name, seed, duration_s, params, **scenario_kwargs)
+    t0 = time.perf_counter()
+    res = RUNNERS[mode](scenario, sim, params, seed)
+    res.metrics["wall_time_s"] = time.perf_counter() - t0
+    return res

@@ -1,0 +1,31 @@
+\section{Decentralized Backbone}
+\label{sec:system}
+
+\subsection{Local graph}
+Agent $i$ maintains a 4-DoF factor graph~\cite{dellaert2017factor} over its poses and landmark
+parts with odometry, landmark, absolute-height, and intra-agent coaxial factors:
+\begin{align}
+  \mathbf{r}^{\mathrm{odo}}_{k} &= \begin{bmatrix} \Rz{\psi_{k-1}}^{\!\top}(\p_k - \p_{k-1}) - \Delta\p_k \\
+  \wrap{\psi_k - \psi_{k-1} - \Delta\psi_k} \end{bmatrix}, \\
+  \mathbf{r}^{\mathrm{lm}}_{k,m} &= \Rz{\psi_k}^{\!\top}(\lm_m - \p_k) - \mathbf{m}_{k,m}, \\
+  \mathbf{r}^{\mathrm{z}}_{k} &= p^z_k - z^{\mathrm{meas}}_k, \qquad
+  \mathbf{r}^{\mathrm{coax}}_{s} = \Pxy(\lm^{+}_s - \lm^{-}_s),
+\end{align}
+following the 4-DoF parameterization common in visual-inertial SLAM~\cite{qin2018vins}.
+
+\subsection{Condensed sharing without double counting}
+Each agent periodically broadcasts its landmark parts with marginal uncertainty computed from the
+\emph{local} graph only. Since shared information never contains received information, a
+receiver may fuse it without the bookkeeping that DDF-SAM requires to avoid
+double counting~\cite{cunningham2010ddfsam, cunningham2013ddfsam2}. \todo{formal statement +
+proof sketch; multi-hop limitation.}
+
+\subsection{Fused graph}
+Agent $i$ augments a copy of its local graph with a frame variable $\Tf{i}{j}$ per aligned
+neighbor and robust inter-agent factors
+\begin{equation}
+  \mathbf{r}^{\mathrm{link}} = \boldsymbol{\Pi}\,\big(\lm_a - (\mathbf{t}_{ij} + \Rz{\theta_{ij}}\,\mathbf{q}_b)\big),
+  \quad \boldsymbol{\Pi} = \begin{cases} \mathbf{I}_3 & \text{same medium}\\ \Pxy & \text{cross medium}\end{cases}
+\end{equation}
+where $\mathbf{q}_b$ is the neighbor's decoded landmark with covariance inflated by quantization
+noise, under a Huber loss. \todo{team frame via frame chaining; FRAME\_ALIGNMENT messages.}

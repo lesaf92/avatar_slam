@@ -1,0 +1,49 @@
+\section{Introduction}
+\label{sec:intro}
+
+\IEEEPARstart{I}{nspecting} a harbor, a dam, or an offshore platform requires information both
+above and below the water surface. Aerial robots survey the superstructure, ground robots
+cover the quay, surface vessels patrol the waterline, and underwater vehicles inspect piles,
+hulls, and foundations. The value of such a heterogeneous team lies in a \emph{single},
+consistent map. Yet collaborative SLAM (C-SLAM) research has progressed \emph{within} a medium:
+decentralized air/ground systems share maps over radio~\cite{tian2022kimeramulti,
+lajoie2024swarmslam, liu2025slideslam}, and underwater teams share compact sonar maps over
+acoustic modems~\cite{huang2025draco2}. The first cross-medium C-SLAM system links a surface
+vessel and underwater vehicles through structures visible above and below the water, using a
+centralized back-end~\cite{mcconnell2026aboveandbelow}.
+
+\draftnote{Paragraph: why the waterline is hard. (1) Perception split: the same pile is seen
+by LiDAR/cameras above and by imaging sonar below; the two observations share only the
+horizontal position (Fig.~\ref{fig:coaxial}). (2) Communication split: RF links carry
+megabits per second but do not propagate in water; acoustic links carry $10^2$--$10^4$~bit/s
+with seconds of latency and frequent loss; an AUV reaches RF only when surfaced. (3) No
+central server can be assumed reachable by all agents at all times.}
+
+\draftnote{Paragraph: consequences for design: decentralization, information that is cheap to
+send, double-counting-free sharing, cross-medium association that is robust to aliasing in
+regular structures (pile rows).}
+
+\noindent This paper makes the following contributions:
+\begin{enumerate}
+  \item \avatar{}, the first decentralized C-SLAM system for teams spanning aerial, ground,
+        surface, and underwater agents. Each agent keeps a 4-DoF factor graph on a shared
+        waterline datum and shares condensed landmarks computed from its own measurements
+        only, which rules out double counting by construction (Sec.~\ref{sec:system}).
+        \todo{confirm novelty ledger N1.}
+  \item A cross-medium association method: coaxial landmark parts, uncertainty-scaled
+        gating, and a pairwise-consistency graph with an explicit ambiguity test. The method
+        yields direct UAV--AUV constraints through waterline-crossing structures
+        (Sec.~\ref{sec:association}). \todo{ledger N3 after reading~\cite{mcconnell2026aboveandbelow} in full.}
+  \item A medium-aware communication layer: link models, a 16-byte-per-landmark wire format,
+        and \todo{VoI-per-byte scheduler} across RF and acoustic links (Sec.~\ref{sec:comm}).
+  \item An open benchmark: a fast multi-domain simulator and ROS~2/Gazebo scenarios with
+        ground truth and communication traces (Sec.~\ref{sec:experiments}).
+\end{enumerate}
+
+\begin{figure}[t]
+  \centering
+  \fbox{\parbox{0.92\columnwidth}{\centering\vspace{2em}\todo{Teaser: harbor with UAV, UGV,
+  USV, AUVs; above/below parts of a pile; RF vs.\ acoustic links.}\vspace{2em}}}
+  \caption{\avatar{} overview. \todo{caption}}
+  \label{fig:teaser}
+\end{figure}
