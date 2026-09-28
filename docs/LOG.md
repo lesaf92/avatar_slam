@@ -11,6 +11,28 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L26. Remote pairs were overfitting the heading bias: freeze it in the fused graph
+
+Hypothesis from L24: pairs from one end cluster also tune the drifting agent's
+heading-bias state (a global shape parameter) in its fused graph. Test: hold
+the bias at the agent's local estimate in the fused graph
+(`fused_freeze_heading_bias`). `fleet_transit_anchored`, M64, `uuv_1` ATE [m],
+fused vs. its own local graph in the same decentralized run (commit after
+`4b80ebb`):
+
+| Seed | Local | Fused, bias free | Fused, bias frozen | Team ATE, free → frozen |
+|---|---|---|---|---|
+| 0 | 0.286 | 0.268 (−6 %) | 0.269 (−6 %) | 0.300 → 0.295 |
+| 1 | 0.656 | 0.388 (−41 %) | 0.393 (−40 %) | 1.006 → 0.972 |
+| 3 | 0.399 | 0.464 (+16 %) | 0.439 (+10 %) | 0.354 → 0.331 |
+| 4 | 0.951 | 1.235 (+30 %) | 0.966 (+2 %) | 0.723 → 0.625 |
+
+- Confirmed for seed 4 (harm removed), partly for seed 3 (residual +10 %,
+  cause still open). Gains elsewhere are kept, and team ATE improves in all
+  four runs.
+- **Default changed:** `fused_freeze_heading_bias = True`. T-X1-04 stays open
+  for seed 3 and a 10-seed check.
+
 ### L24. Heading bias: model it (default), and a correction to every "alone" number
 
 **Heading model (decision D9).** Platforms declare a heading source. A compass

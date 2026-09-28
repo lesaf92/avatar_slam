@@ -76,6 +76,7 @@ class AvatarParams:
     # Estimate a per-agent heading bias [rad/m] when heading is dead-reckoned
     # (platform heading_source != "compass"); prior σ from the platform spec (D9, L24).
     model_heading_bias: bool = True
+    fused_freeze_heading_bias: bool = True  # hold the bias at its local estimate in fused (L26)
     # Drift-tolerant association: also align sliding windows of this many own
     # keyframes (0 = whole map only). Recent sub-maps stay nearly rigid when the
     # whole map is bent by drift (LOG L19).
@@ -639,6 +640,9 @@ class AvatarAgent:
         """Build and optimize the fused graph (local + inter-agent factors)."""
         fused = self.local.copy()
         p = self.params
+        if p.fused_freeze_heading_bias and self._bias_key is not None:
+            # remote pairs must not retune this agent's own heading bias (LOG L26)
+            fused.add_scalar_prior(self._bias_key, float(self.local.value(self._bias_key)[0]), 1e-7)
         frame_keys = []
         for sender, pairs in self.alignment_ids.items():
             if sender in self.vetoed:
