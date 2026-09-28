@@ -44,6 +44,14 @@ python experiments/trajectory_study.py --presets fleet_transit_anchored --seeds 
   linked points treats metre-level residuals as outliers; try a
   graduated/annealed kernel or a per-cluster frame initialisation); (3) keep
   a drifting agent out of the team frame until its map is consistent.
+- **Diagnostic (same commit, windows 120 kf):** `uuv_1`'s pairs with `uuv_0` all
+  come from keyframes 237–361 (pipeline leg and the end), plus one pair at
+  k = 0 in seed 1. Their whitened residuals are small (median 0.7, none in
+  the Huber tail). So **coverage, not fusion, is the bottleneck**: heading
+  east from (50, 4), the sonar (30 m, 90°) sees few surveyed piles, and the
+  start is never anchored. Item (2) above is ruled out for now. Next: a start
+  that faces surveyed structure, or a teammate that maps the start, then
+  re-test.
 
 ### L19. Feature-poor transit: the H1 test case exists, and Avatar does not exploit it yet
 
