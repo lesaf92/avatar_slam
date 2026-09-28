@@ -22,7 +22,7 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from avatar.agent import AvatarAgent, AvatarParams
+from avatar.agent import DEFAULT_LINK_RECEIVERS, AvatarAgent, AvatarParams
 from avatar.backend.graph import FactorGraph, VarType
 from avatar.comm.gateway import Gateway
 from avatar.comm.network import Network
@@ -30,7 +30,7 @@ from avatar.eval.metrics import ate_rmse, chain_frames, frame_error, team_ate
 from avatar.geometry import compose, inverse, transform_poses
 from avatar.sim.measurements import SimData, generate_measurements
 from avatar.sim.scenarios import SCENARIOS, Scenario
-from avatar.types import LinkType, Medium
+from avatar.types import Domain, LinkType, Medium
 
 FloatArray = NDArray[np.float64]
 MODES = ("independent", "decentralized", "centralized")
@@ -93,7 +93,27 @@ def _make_agents(scenario: Scenario, sim: SimData, params: AvatarParams, seed: i
         agents[cfg.agent_id] = AvatarAgent(
             cfg, params, obj_ids, z0, np.random.default_rng(seed * 1000 + cfg.agent_id)
         )
+        agents[cfg.agent_id].link_receivers = link_receivers(scenario, cfg.agent_id)
     return agents
+
+
+def link_receivers(scenario: Scenario, sender_id: int) -> dict[LinkType, tuple[Domain, ...]]:
+    """Domains of the SLAM agents a sender reaches on each of its links.
+
+    A packet reaches the other SLAM agents on the same link and, through a
+    gateway that carries this link, the SLAM agents on the gateway's other links.
+    The VoI scheduler (``avatar.comm.scheduler``) uses this to weight records by
+    whether any receiver can match them.
+    """
+    sender = next(a for a in scenario.agents if a.agent_id == sender_id)
+    slam = [a for a in scenario.agents if a.role == "slam" and a.agent_id != sender_id]
+    bridges = [set(g.comm) for g in scenario.agents if g.role == "gateway"]
+    out: dict[LinkType, tuple[Domain, ...]] = {}
+    for link in sender.comm:
+        reach = {link}.union(*[b for b in bridges if link in b])
+        doms = {a.domain for a in slam if reach & set(a.comm)}
+        out[link] = tuple(sorted(doms, key=lambda d: d.value)) or DEFAULT_LINK_RECEIVERS[link]
+    return out
 
 
 def run_independent(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:

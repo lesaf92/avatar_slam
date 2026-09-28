@@ -25,12 +25,18 @@ from numpy.typing import NDArray
 
 from avatar.backend.graph import FactorGraph, VarType
 from avatar.comm import codec
+from avatar.comm.scheduler import AlignmentInformation, match_probability, select_voi
 from avatar.frontend.association import Alignment, AssociationParams, LandmarkSet, align
 from avatar.geometry import compose, transform_points
 from avatar.semantics import normalize
 from avatar.sim.agents import AgentConfig
 from avatar.sim.measurements import KeyframeData
-from avatar.types import LandmarkFlags, LinkType, Medium, medium_flag
+from avatar.types import Domain, LandmarkFlags, LinkType, Medium, medium_flag
+
+DEFAULT_LINK_RECEIVERS: dict[LinkType, tuple[Domain, ...]] = {
+    LinkType.RF: (Domain.AERIAL, Domain.GROUND, Domain.SURFACE),
+    LinkType.ACOUSTIC: (Domain.UNDERWATER, Domain.SURFACE),
+}
 
 FloatArray = NDArray[np.float64]
 
@@ -42,6 +48,7 @@ class AvatarParams:
     exchange_period_s: float = 20.0
     descriptor_dim: int = 8
     acoustic_descriptor_dim: int = 0  # descriptors are not worth their bytes at 10²-10³ bps
+    scheduler: str = "voi"  # digest ordering: "voi" (T-C2-01) or "quality" (v0 heuristic)
     min_obs_to_share: int = 2
     max_share_sigma_m: float = 3.0
     coaxial_sigma_m: float = 0.1
@@ -136,6 +143,9 @@ class AvatarAgent:
         self.frames: dict[tuple[int, int], FrameEstimate] = {}
         self.seq = 0
         self.decode_errors = 0
+        # Domains whose agents (directly or through a gateway) receive each link.
+        self.link_receivers: dict[LinkType, tuple[Domain, ...]] = dict(DEFAULT_LINK_RECEIVERS)
+        self._info: dict[tuple[LinkType, Domain], AlignmentInformation] = {}
 
     # ------------------------------------------------------------------ front-end
     def _new_lid(self) -> int:
@@ -232,10 +242,14 @@ class AvatarAgent:
     def build_digests(self, t: float, link: LinkType, budget_B: int, mtu_B: int) -> list[bytes]:
         """Condensed-landmark packets for one link, prioritised and within ``budget_B``.
 
-        v0 priority: never-sent first, then landmarks that moved > 0.25 m or doubled
-        their observation count since last sent on this link; within a group, by
-        ``n_obs / (σ_xy + 0.05)``. (The VoI-per-byte scheduler is task T-C2-01.)
-        Acoustic packets use ``acoustic_descriptor_dim`` (default 0: no descriptors).
+        ``scheduler="voi"`` (default, T-C2-01): never-sent records are ordered by
+        expected D-optimal information gain for the receivers' frame alignment
+        (``avatar.comm.scheduler``), accounting for what was already sent on this
+        link and for whether the receivers' media can match each record.
+        ``scheduler="quality"`` (v0): never-sent first by ``n_obs / (σ_xy + 0.05)``.
+        In both, landmarks that moved > 0.25 m or doubled their observation count
+        since last sent follow, then the rest. Acoustic packets use
+        ``acoustic_descriptor_dim`` (default 0: no descriptors).
         """
         p = self.params
         dim = p.acoustic_descriptor_dim if link == LinkType.ACOUSTIC else p.descriptor_dim
@@ -253,8 +267,27 @@ class AvatarAgent:
                 old_pos, old_n = sent[lid]
                 if np.linalg.norm(pos - old_pos) > 0.25 or self.meta[lid].n_obs >= 2 * old_n:
                     changed.append((quality, lid))
-        order = [lid for _, lid in sorted(fresh, reverse=True)]
-        order += [lid for _, lid in sorted(changed, reverse=True)]
+        fresh_order = [lid for _, lid in sorted(fresh, reverse=True)]
+        receivers = self.link_receivers.get(link, DEFAULT_LINK_RECEIVERS[link])
+        infos = [self._info.setdefault((link, d), AlignmentInformation.empty()) for d in receivers]
+
+        def rho(lid: int) -> tuple[float, ...]:
+            m = self.meta[lid]
+            return tuple(match_probability(m.flags, m.class_id, m.n_obs, d) for d in receivers)
+
+        if p.scheduler == "voi":
+            cap = self._capacity(budget_B, per_pkt, dim)
+            cands = [(lid, self._lm_cache[lid][0][:2], self._lm_cache[lid][1], rho(lid))
+                     for lid in fresh_order]  # fmt: skip
+            picked = select_voi(cands, infos, cap)
+            rest = [lid for lid in fresh_order if lid not in set(picked)]
+            order = picked + [lid for _, lid in sorted(changed, reverse=True)] + rest
+            credited = set(picked)
+        elif p.scheduler == "quality":
+            order = fresh_order + [lid for _, lid in sorted(changed, reverse=True)]
+            credited = set()
+        else:
+            raise ValueError(f"unknown scheduler {p.scheduler!r}")
         packets: list[bytes] = []
         used = 0
         i = 0
@@ -276,9 +309,24 @@ class AvatarAgent:
             packets.append(pkt)
             used += len(pkt)
             for lid in order[i : i + n]:
+                if lid not in sent and lid not in credited:
+                    for info, r in zip(infos, rho(lid), strict=True):
+                        info.add(self._lm_cache[lid][0][:2], self._lm_cache[lid][1], r)
                 sent[lid] = (self._lm_cache[lid][0].copy(), self.meta[lid].n_obs)
             i += n
         return packets
+
+    @staticmethod
+    def _capacity(budget_B: int, per_pkt: int, dim: int) -> int:
+        """Number of records that fit in ``budget_B`` bytes with per-packet overhead."""
+        n = used = 0
+        while True:
+            room = budget_B - used - codec.digest_size(0, dim)
+            k = min(per_pkt, room // codec.record_size(dim))
+            if k <= 0:
+                return n
+            n += k
+            used += codec.digest_size(k, dim)
 
     def build_alignment_messages(self, t: float) -> list[bytes]:
         """``FRAME_ALIGNMENT`` packets for every neighbour this agent has aligned."""
