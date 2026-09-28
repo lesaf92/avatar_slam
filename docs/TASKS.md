@@ -20,7 +20,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-E1-01 | Metrics: ATE (4-DoF), team ATE, frame error, comm accounting | P0 | – | done | Claude · same | – |
 | T-V1-01 | Scenario viewer (`viz/scenario_viewer.html`) | P1 | T-E1-01 | done | Claude · same | Opens sample run |
 | T-P1-01 | Manuscript skeleton + bib with status lines | P0 | – | done | Claude · same | `make -C paper` |
-| T-I1-02 | Get CI green on GitHub (ROS 2 job never run before; fix if red) | P0 | T-I1-01 | todo | | All 4 jobs green |
+| T-I1-02 | Get CI green on GitHub (ROS 2 job never run before; fix if red) | P0 | T-I1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | All jobs green on `main` (CI run 5) |
 | T-I1-04 | pre-commit hooks (ruff, clang-format, citation check) | P2 | T-I1-01 | todo | | `pre-commit run -a` passes |
 
 ## Milestone M1: backbone v1 in the fast sim (target 2026-10-31)
@@ -102,3 +102,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
   branch `claude/relaxed-ramanujan-bzrqyd`. The ROS 2 packages have **not been
   built locally** (packages.ros.org is blocked in the dev container). CI's `ros2`
   job is their first build, which is why T-I1-02 is P0.
+- *2026-09-28 (Claude):* T-I1-02 done. The first CI run built `avatar_msgs` and
+  `avatar_core` with colcon on ROS 2 Jazzy without changes. The only failure was
+  Python formatting outside `avatar_py/`, fixed by a single root `ruff.toml`.
+  Merged to `main` via PR #1; all jobs green.
