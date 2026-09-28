@@ -11,6 +11,38 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L22. Both transit ends surveyed by teammates: still no drift correction (negative)
+
+`fleet_transit_3uuv.yaml` (commit `fb84e56`): the 275 m transit of L19, with
+`uuv_2` surveying the start (north piers) and `uuv_0` the end (south piers),
+both same-medium. Seeds 0–4, M64. `uuv_1` ATE [m]:
+
+| Seed | Alone | Avatar fused | Oracle |
+|---|---|---|---|
+| 0 | 1.096 | 1.105 | 0.493 |
+| 1 | 1.409 | 1.229 | 0.453 |
+| 2 | 4.357 | 4.400 | 0.309 |
+| 3 | 4.863 | 4.655 | 0.244 |
+| 4 | 6.816 | 6.393 | 0.502 |
+
+```
+python experiments/trajectory_study.py --presets fleet_transit_3uuv --seeds 0 1 2 3 4
+```
+
+- Fused vs. alone: −1 % to +13 %; **no meaningful drift correction** even
+  with same-medium coverage at both ends. The team does not merge within
+  600 s at 64 bit/s with five agents (four acoustic nodes share the modem).
+- **Lesson (method):** an ad-hoc check first suggested 2.9 → 1.0 m. It
+  compared the 2-UUV scenario's solo run with the 3-UUV scenario's fused
+  run, and the extra vehicle changes every random stream. Only compare runs
+  of the same scenario and seed, as the study scripts do.
+- **Hazard:** windowed association (`align_window_kf = 120`) produced a wrong
+  pairing (`uuv_1` fused 10.6 m, 1 kbit/s, seed 0). Small windows alias. It
+  stays off by default, and any use needs a stricter per-window gate.
+- T-X1-02 remains open. The next check is whether pairs from both ends reach
+  `uuv_1`'s fused graph at all (L20's diagnostic, applied to this preset),
+  then the fusion itself.
+
 ### L21. Paper data at `0c3cba2` (clean provenance)
 
 `make -C experiments paper-data` at `0c3cba2`; all three CSVs carry the clean
