@@ -125,11 +125,22 @@ def link_receivers(scenario: Scenario, sender_id: int) -> dict[LinkType, tuple[D
 
 
 def run_independent(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
-    """Single-agent SLAM for every agent (no communication)."""
+    """Single-agent SLAM for every agent (no communication).
+
+    Same estimator and schedule as each agent's local graph in
+    :func:`run_decentralized`: incremental solves every exchange period and a
+    final solve. (A single batch solve of ``local_iters`` iterations can stop
+    short of the optimum on long, drifting trajectories; LOG L24.)
+    """
     agents = _make_agents(scenario, sim, params, seed)
     for i, ag in agents.items():
-        for kf in sim.agents[i].keyframes:
+        times = sim.agents[i].times
+        next_solve = params.exchange_period_s
+        for kf, t in zip(sim.agents[i].keyframes, times, strict=True):
             ag.on_keyframe(kf)
+            if t + 1e-9 >= next_solve:
+                next_solve += params.exchange_period_s
+                ag.solve_local(with_marginals=False)
         ag.solve_local(with_marginals=False)
     trajs = {i: ag.trajectory("local") for i, ag in agents.items()}
     metrics = {"ate_local_m": _local_ates(trajs, sim), "agents": _names(sim)}
