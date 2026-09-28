@@ -28,4 +28,12 @@ neighbor and robust inter-agent factors
   \quad \boldsymbol{\Pi} = \begin{cases} \mathbf{I}_3 & \text{same medium}\\ \Pxy & \text{cross medium}\end{cases}
 \end{equation}
 where $\mathbf{q}_b$ is the neighbor's decoded landmark with covariance inflated by quantization
-noise, under a Huber loss. \todo{team frame via frame chaining; FRAME\_ALIGNMENT messages.}
+noise, under a Huber loss.
+
+\subsection{Team frame}
+Each agent broadcasts the frames it estimated, $\Tf{i}{j}$ with marginal uncertainty, in
+\texttt{FRAME\_ALIGNMENT} messages (42~bytes each, header and CRC included). Any agent can then express a
+neighbor $j$ in the frame of a designated anchor $a$ by composing the cycle-consistent estimates
+it knows along the path of least accumulated $\sigma$. Frames are 4-DoF, so the composition is
+exact and costs no additional solve. Agents that never exchange landmarks directly (e.g., the UAV and a
+BlueROV2) meet through this chain.

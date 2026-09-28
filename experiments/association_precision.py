@@ -23,13 +23,28 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
     os.environ.setdefault(_var, "1")
 
 import argparse
+import csv
 import json
+import subprocess
+from pathlib import Path
 
 import numpy as np
 
 from avatar.agent import AvatarAgent, AvatarParams
 from avatar.runner import make_sim
 from avatar.types import LinkType
+
+
+def commit() -> str:
+    try:
+        return subprocess.run(
+            ["git", "describe", "--always", "--dirty", "--abbrev=7"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except (OSError, subprocess.CalledProcessError):
+        return "unknown"
 
 
 def same_object(parts, pa: int, pb: int) -> bool:
@@ -106,9 +121,22 @@ def main() -> None:
     ap.add_argument("--duration", type=float, default=90.0)
     ap.add_argument("--scenario", default="harbor", help="harbor | harbor_fleet")
     ap.add_argument("--json", action="store_true", help="print full JSON per seed")
+    ap.add_argument("--out", default=None, help="CSV, one row per seed (e.g. paper/data/...)")
     args = ap.parse_args()
     params = AvatarParams()
+    rev = commit()  # before running: the tree may change meanwhile
     rows = [evaluate(s, args.duration, params, args.scenario) for s in args.seeds]
+    if args.out:
+        keys = ["seed", "accepted_alignments", "possible_alignments", "pair_precision",
+                "wrong_alignments", "wrong_after_cycle_check", "correct_vetoed"]  # fmt: skip
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=["scenario", "duration_s", *keys, "commit"])
+            w.writeheader()
+            for r in rows:
+                w.writerow({"scenario": args.scenario, "duration_s": args.duration,
+                            **{k: r[k] for k in keys}, "commit": rev})  # fmt: skip
     for r in rows:
         if args.json:
             print(json.dumps(r))
