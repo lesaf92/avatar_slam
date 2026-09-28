@@ -46,7 +46,7 @@ publisher page and recording it in the bib comment.
 
 | Key | Reference | Status | Relevance |
 |---|---|---|---|
-| `mcconnell2026aboveandbelow` | J. McConnell, A. Shariati, P. Szenher, Y. Li, "Above and Below: Heterogeneous Multi-robot SLAM Across Surface and Underwater Domains," *IEEE RA-L*, 2026 (Xplore 11248870; ICRA 2026; arXiv 2605.09811) | verified-web | **Closest prior work.** Centralized USV+AUV, structure-based cross-surface loop closures |
+| `mcconnell2026aboveandbelow` | J. McConnell, A. Shariati, P. Szenher, Y. Li, "Above and Below: Heterogeneous Multi-robot SLAM Across Surface and Underwater Domains," *IEEE RA-L*, 2026 (Xplore 11248870; ICRA 2026; arXiv 2605.09811) | verified-web | **Closest prior work.** Centralized USV+AUV; scan-level cross-surface loop closures (LiDAR waterline slice ↔ in-plane sonar, Go-ICP + PCM); AUV data recorded from the surface vessel; simulated comms at ~1–3 kbit/s. Deep reading: `above_and_below.md` |
 | `huang2025draco2` | Y. Huang, J. McConnell, X. Lin, B. Englot, "DRACo-SLAM2: Distributed Robust Acoustic Communication-efficient SLAM for Imaging Sonar Equipped Underwater Robot Teams with Object Graph Matching," *IROS* 2025 | verified-web | Decentralized underwater baseline (acoustic) |
 | `mcconnell2022draco` | J. McConnell, Y. Huang, P. Szenher, I. Collado-Gonzalez, B. Englot, "DRACo-SLAM: Distributed Robust Acoustic Communication-efficient SLAM for Imaging Sonar Equipped Underwater Robot Teams," *IROS* 2022 | verified-web (title, arXiv 2210.00867); authors from memory | Predecessor |
 | `bahr2009cl` | A. Bahr, J. J. Leonard, M. F. Fallon, "Cooperative Localization for Autonomous Underwater Vehicles," *IJRR* 28(6), 2009 | memory | Acoustic range-based cooperative localization |

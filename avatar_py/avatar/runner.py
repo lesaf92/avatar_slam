@@ -22,17 +22,19 @@ from dataclasses import dataclass, field
 import numpy as np
 from numpy.typing import NDArray
 
-from avatar.agent import AvatarAgent, AvatarParams
+from avatar.agent import DEFAULT_LINK_RECEIVERS, AvatarAgent, AvatarParams
 from avatar.backend.graph import FactorGraph, VarType
+from avatar.comm.gateway import Gateway
 from avatar.comm.network import Network
-from avatar.eval.metrics import ate_rmse, chain_frames, frame_error, team_ate
+from avatar.eval.metrics import ate_rmse, frame_error, team_ate
 from avatar.geometry import compose, inverse, transform_poses
+from avatar.sim.agents import heading_bias_modelled
 from avatar.sim.measurements import SimData, generate_measurements
 from avatar.sim.scenarios import SCENARIOS, Scenario
-from avatar.types import Medium
+from avatar.types import Domain, LinkType, Medium
 
 FloatArray = NDArray[np.float64]
-MODES = ("independent", "decentralized", "centralized")
+MODES = ("independent", "decentralized", "centralized", "server")
 
 
 @dataclass
@@ -56,7 +58,14 @@ def make_sim(
     rng = np.random.default_rng(seed)
     scenario = SCENARIOS[scenario_name](rng, **kwargs)
     sim = generate_measurements(
-        scenario.world, scenario.agents, duration_s, 1.0, params.descriptor_dim, rng
+        scenario.world,
+        scenario.agents,
+        duration_s,
+        1.0,
+        params.descriptor_dim,
+        rng,
+        frontend_errors=scenario.frontend_errors,
+        frontend_rng=np.random.default_rng(seed + 30_000),
     )
     return scenario, sim
 
@@ -74,7 +83,11 @@ def _local_ates(trajs: dict[int, FloatArray], sim: SimData) -> dict[int, float]:
 
 
 def _names(sim: SimData) -> dict[int, str]:
-    return {i: a.config.name for i, a in sim.agents.items()}
+    return {i: a.config.name for i, a in sim.agents.items() if a.config.role == "slam"}
+
+
+def _slam_ids(scenario: Scenario) -> list[int]:
+    return [a.agent_id for a in scenario.agents if a.role == "slam"]
 
 
 def _make_agents(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int):
@@ -82,19 +95,52 @@ def _make_agents(scenario: Scenario, sim: SimData, params: AvatarParams, seed: i
     zrng = np.random.default_rng(seed + 10_000)
     agents = {}
     for cfg in scenario.agents:
+        if cfg.role != "slam":
+            continue
         z0 = float(sim.agents[cfg.agent_id].gt[0, 2] + zrng.normal(0.0, params.initial_z_sigma_m))
         agents[cfg.agent_id] = AvatarAgent(
             cfg, params, obj_ids, z0, np.random.default_rng(seed * 1000 + cfg.agent_id)
         )
+        agents[cfg.agent_id].link_receivers = link_receivers(scenario, cfg.agent_id)
     return agents
 
 
+def link_receivers(scenario: Scenario, sender_id: int) -> dict[LinkType, tuple[Domain, ...]]:
+    """Domains of the SLAM agents a sender reaches on each of its links.
+
+    A packet reaches the other SLAM agents on the same link and, through a
+    gateway that carries this link, the SLAM agents on the gateway's other links.
+    The VoI scheduler (``avatar.comm.scheduler``) uses this to weight records by
+    whether any receiver can match them.
+    """
+    sender = next(a for a in scenario.agents if a.agent_id == sender_id)
+    slam = [a for a in scenario.agents if a.role == "slam" and a.agent_id != sender_id]
+    bridges = [set(g.comm) for g in scenario.agents if g.role == "gateway"]
+    out: dict[LinkType, tuple[Domain, ...]] = {}
+    for link in sender.comm:
+        reach = {link}.union(*[b for b in bridges if link in b])
+        doms = {a.domain for a in slam if reach & set(a.comm)}
+        out[link] = tuple(sorted(doms, key=lambda d: d.value)) or DEFAULT_LINK_RECEIVERS[link]
+    return out
+
+
 def run_independent(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
-    """Single-agent SLAM for every agent (no communication)."""
+    """Single-agent SLAM for every agent (no communication).
+
+    Same estimator and schedule as each agent's local graph in
+    :func:`run_decentralized`: incremental solves every exchange period and a
+    final solve. (A single batch solve of ``local_iters`` iterations can stop
+    short of the optimum on long, drifting trajectories; LOG L24.)
+    """
     agents = _make_agents(scenario, sim, params, seed)
     for i, ag in agents.items():
-        for kf in sim.agents[i].keyframes:
+        times = sim.agents[i].times
+        next_solve = params.exchange_period_s
+        for kf, t in zip(sim.agents[i].keyframes, times, strict=True):
             ag.on_keyframe(kf)
+            if t + 1e-9 >= next_solve:
+                next_solve += params.exchange_period_s
+                ag.solve_local(with_marginals=False)
         ag.solve_local(with_marginals=False)
     trajs = {i: ag.trajectory("local") for i, ag in agents.items()}
     metrics = {"ate_local_m": _local_ates(trajs, sim), "agents": _names(sim)}
@@ -106,6 +152,9 @@ def run_decentralized(
 ) -> RunResult:
     """Avatar SLAM v0 over the simulated heterogeneous network."""
     agents = _make_agents(scenario, sim, params, seed)
+    anchor_id = scenario.anchor_id
+    if anchor_id not in agents:
+        raise ValueError("the anchor must be a SLAM agent")
     times = sim.agents[scenario.agents[0].agent_id].times
 
     def position(agent_id: int, t: float) -> FloatArray:
@@ -118,13 +167,40 @@ def run_decentralized(
         position_fn=position,
         rng=np.random.default_rng(seed + 20_000),
     )
+    gateways = {a.agent_id: Gateway(a.agent_id) for a in scenario.agents if a.role == "gateway"}
     period = params.exchange_period_s
     next_exchange = period
+    carry: dict[tuple[int, LinkType], float] = {}
+    first_align: dict[int, dict[int, float]] = {i: {} for i in agents}
+    team_connected_s: float | None = None
+    slam_ids = set(agents)
+
+    def deliver(t_now: float) -> None:
+        for dlv in net.pop_until(t_now):
+            if dlv.receiver in gateways:
+                gateways[dlv.receiver].on_packet(dlv.link_type, dlv.payload)
+            else:
+                agents[dlv.receiver].on_packet(dlv.payload)
+
+    def budget(node: int, link: LinkType) -> tuple[float, float]:
+        """Token bucket: this tick's allowance plus capped carry-over [B]."""
+        ch = scenario.channels[link]
+        tick = ch.budget_B(period, net.share(link))
+        return tick + carry.get((node, link), 0.0), max(4.0 * tick, float(ch.mtu_B))
+
+    def send_all(t_now: float, node: int, link: LinkType, pkts: list[bytes], avail: float) -> float:
+        used = 0.0
+        for pkt in pkts:
+            if used + len(pkt) > avail:
+                break
+            net.send(t_now, node, link, pkt)
+            used += len(pkt)
+        return used
+
     for k, t in enumerate(times):
         for i, ag in agents.items():
             ag.on_keyframe(sim.agents[i].keyframes[k])
-        for dlv in net.pop_until(t):
-            agents[dlv.receiver].on_packet(dlv.payload)
+        deliver(t)
         if t + 1e-9 >= next_exchange:
             next_exchange += period
             for ag in agents.values():
@@ -132,24 +208,41 @@ def run_decentralized(
                 ag.update_alignments()
                 ag.solve_fused()
             for i, ag in agents.items():
+                for j in ag.alignments:
+                    first_align[i].setdefault(j, float(t))
+            if team_connected_s is None:
+                # chain over every consistent estimate, incl. neighbours' estimates of the anchor
+                if slam_ids <= set(agents[anchor_id].team_frames(fuse=False)):
+                    team_connected_s = float(t)
+            for i, ag in agents.items():
+                z_now = float(sim.agents[i].gt[k, 2])
                 for link in ag.cfg.comm:
                     ch = scenario.channels[link]
-                    budget = ch.budget_B(period, net.share(link))
-                    for pkt in ag.build_digests(t, link, budget, ch.mtu_B):
-                        net.send(t, i, link, pkt)
-                    for pkt in ag.build_alignment_messages(t):
-                        net.send(t, i, link, pkt)
-    for dlv in net.pop_until(float(times[-1])):
-        agents[dlv.receiver].on_packet(dlv.payload)
+                    avail, cap = budget(i, link)
+                    if not ch.medium_ok(z_now, z_now):
+                        # e.g. RF while submerged: the vehicle knows its depth and stays
+                        # silent; its budget keeps accruing for the next surfacing window.
+                        carry[(i, link)] = min(avail, cap)
+                        continue
+                    digests = ag.build_digests(t, link, int(avail), ch.mtu_B)
+                    used = send_all(t, i, link, digests, avail)
+                    used += send_all(t, i, link, ag.build_alignment_messages(t), avail - used)
+                    carry[(i, link)] = min(avail - used, cap)
+            for g, gw in gateways.items():
+                for link in scenario.agent(g).comm:
+                    ch = scenario.channels[link]
+                    avail, cap = budget(g, link)
+                    relayed = gw.build_packets(t, link, int(avail), ch.mtu_B)
+                    used = send_all(t, g, link, relayed, avail)
+                    carry[(g, link)] = min(avail - used, cap)
+    deliver(float(times[-1]))
     for ag in agents.values():
         ag.solve_local()
         ag.update_alignments()
         ag.solve_fused()
 
     anchor = scenario.anchor_id
-    known = agents[anchor].frames
-    edges = {k: (fe.T, fe.sigma_xy) for k, fe in known.items()}
-    T_anchor_from = chain_frames(anchor, edges)
+    T_anchor_from = agents[anchor].team_frames()
     fused = {i: ag.trajectory("fused") for i, ag in agents.items()}
     local = {i: ag.trajectory("local") for i, ag in agents.items()}
     team = {i: transform_poses(T_anchor_from[i], fused[i]) for i in T_anchor_from if i in fused}
@@ -186,6 +279,10 @@ def run_decentralized(
         },
         "comm": stats,
         "decode_errors": sum(ag.decode_errors for ag in agents.values()),
+        "first_alignment_s": first_align,
+        "vetoed_alignments": sum(len(ag.vetoed) for ag in agents.values()),
+        "team_connected_s": team_connected_s,
+        "gateways": {g: dict(gw.stats) for g, gw in gateways.items()},
     }
     # Express team trajectories in world frame for visualisation (anchor GT frame).
     team_world = {i: transform_poses(gt_frames[anchor], tr) for i, tr in team.items()}
@@ -209,6 +306,8 @@ def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed
     parts = sim.world.parts
     part_key = {i: ("l", p.object_id, int(p.medium)) for i, p in enumerate(parts)}
     for i, ad in sim.agents.items():
+        if ad.config.role != "slam":
+            continue
         est = None
         for k, kf in enumerate(ad.keyframes):
             key = ("x", i, k)
@@ -226,11 +325,23 @@ def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed
                 if kf.abs_z is not None:
                     est[2] = kf.abs_z
                 g.add_variable(key, VarType.POSE4, est)
-                g.add_between(("x", i, k - 1), key, kf.odom, kf.odom_sigmas)
+                bkey = ("b", i)
+                if params.model_heading_bias and heading_bias_modelled(ad.config):
+                    if not g.has(bkey):
+                        g.add_variable(bkey, VarType.SCALAR, [0.0])
+                        std = ad.config.odometry_noise.yaw_bias_std_rad_per_m
+                        g.add_scalar_prior(bkey, 0.0, std)
+                    dist = float(np.linalg.norm(kf.odom[:3]))
+                    g.add_between_bias(("x", i, k - 1), key, bkey, kf.odom, dist, kf.odom_sigmas)
+                else:
+                    g.add_between(("x", i, k - 1), key, kf.odom, kf.odom_sigmas)
             if kf.abs_z is not None:
                 g.add_z_prior(key, kf.abs_z, kf.abs_z_sigma)
             for det in kf.detections:
-                lk = part_key[det.part_index]
+                true_part = det.part_index if det.true_part_index is None else det.true_part_index
+                if true_part < 0:
+                    continue  # clutter: the oracle's association knows it is not a part
+                lk = part_key[true_part]
                 if not g.has(lk):
                     g.add_variable(lk, VarType.POINT3, compose(est, [*det.p_body, 0.0])[:3])
                 g.add_point_obs(key, lk, det.p_body, det.sigmas)
@@ -242,8 +353,9 @@ def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed
     trajs = {
         i: np.array([g.value(("x", i, k)) for k in range(len(ad.keyframes))])
         for i, ad in sim.agents.items()
+        if ad.config.role == "slam"
     }
-    team_err = team_ate(trajs, _gt_trajs(sim), list(sim.agents))
+    team_err = team_ate(trajs, _gt_trajs(sim), list(trajs))
     local = {i: transform_poses(inverse(gt_frames[i]), tr) for i, tr in trajs.items()}
     metrics = {
         "agents": _names(sim),
@@ -256,10 +368,18 @@ def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed
     return RunResult(scenario.name, "centralized", seed, sim.duration_s, metrics, trajs, local)
 
 
+def run_server(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
+    """*A&B*-style centralized server (``avatar.baselines.centralized_server``)."""
+    from avatar.baselines.centralized_server import run_server as _run
+
+    return _run(scenario, sim, params, seed)
+
+
 RUNNERS = {
     "independent": run_independent,
     "decentralized": run_decentralized,
     "centralized": run_centralized,
+    "server": run_server,
 }
 
 

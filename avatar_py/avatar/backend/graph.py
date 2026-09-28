@@ -28,7 +28,6 @@ the sparse normal equations, with multiplicative diagonal damping.
 
 from __future__ import annotations
 
-import copy
 from collections.abc import Hashable, Iterable
 from dataclasses import dataclass, field
 from enum import IntEnum
@@ -46,6 +45,7 @@ class VarType(IntEnum):
 
     POSE4 = 4
     POINT3 = 3
+    SCALAR = 1  # e.g. a per-agent heading bias [rad/m]
 
 
 def _wrap(a: FloatArray) -> FloatArray:
@@ -60,7 +60,10 @@ class _FactorBlock:
     meas: list[FloatArray] = field(default_factory=list)
     sigmas: list[FloatArray] = field(default_factory=list)
     flags: list[bool] = field(default_factory=list)  # per-factor boolean option
-    robust_k: float | None = None
+    robust_k: float | None = None  # Huber threshold, or the TLS inlier bound for GNC
+    kernel: str = "huber"  # "huber" (IRLS) or "gnc" (graduated non-convexity, TLS)
+    gnc_w: FloatArray | None = field(default=None, repr=False)  # fixed GNC weights
+    _arrays: tuple | None = field(default=None, repr=False)  # cache, reset by add()
 
     def add(self, var_idx: tuple[int, ...], meas, sigmas, flag: bool = False) -> None:
         sig = np.asarray(sigmas, dtype=float)
@@ -70,6 +73,29 @@ class _FactorBlock:
         self.meas.append(np.atleast_1d(np.asarray(meas, dtype=float)))
         self.sigmas.append(sig)
         self.flags.append(flag)
+        self._arrays = None
+
+    def arrays(self) -> tuple[NDArray[np.int64], FloatArray, FloatArray, NDArray[np.bool_]]:
+        """(variable indices, measurements, sigmas, flags) stacked; cached, read-only."""
+        if self._arrays is None:
+            out = (
+                np.asarray(self.vars, dtype=np.int64),
+                np.vstack(self.meas),
+                np.vstack(self.sigmas),
+                np.asarray(self.flags, dtype=bool),
+            )
+            for a in out:
+                a.setflags(write=False)
+            self._arrays = out
+        return self._arrays
+
+    def copy(self) -> _FactorBlock:
+        """Copy with its own lists; the (never mutated) arrays and cache are shared."""
+        return _FactorBlock(
+            list(self.vars), list(self.meas), list(self.sigmas), list(self.flags),
+            self.robust_k, self.kernel,
+            None if self.gnc_w is None else self.gnc_w.copy(), self._arrays,
+        )  # fmt: skip
 
     def __len__(self) -> int:
         return len(self.vars)
@@ -85,12 +111,24 @@ class OptimizeResult:
     converged: bool
 
 
+def _factor(A: sp.csc_matrix):
+    """Sparse LU of a symmetric positive (semi)definite matrix.
+
+    A symmetric minimum-degree ordering (on AᵀA + A) gives ~4x less fill-in and
+    ~2x faster solves than SuperLU's default COLAMD on SLAM normal equations
+    (docs/LOG.md L10).
+    """
+    return spla.splu(A, permc_spec="MMD_AT_PLUS_A")
+
+
 class FactorGraph:
     """A 4-DoF factor graph. Keys are arbitrary hashables, e.g. ``("x", agent, k)``."""
 
     FACTOR_TYPES = (
         "pose_prior",
         "between",
+        "between_bias",
+        "scalar_prior",
         "point_obs",
         "z_prior",
         "point_prior",
@@ -99,7 +137,10 @@ class FactorGraph:
         "range",
     )
 
-    def __init__(self, robust_k: float = 2.0) -> None:
+    def __init__(self, robust_k: float = 2.0, point_obs_robust_k: float | None = None) -> None:
+        """``robust_k``: Huber threshold (whitened) of inter-agent factors
+        (``linked_point``, ``range``). ``point_obs_robust_k``: optional Huber on
+        landmark observations, for front-ends that make association errors."""
         self._index: dict[Hashable, int] = {}
         self._keys: list[Hashable] = []
         self._types: list[VarType] = []
@@ -109,6 +150,7 @@ class FactorGraph:
         self._blocks: dict[str, _FactorBlock] = {t: _FactorBlock() for t in self.FACTOR_TYPES}
         for name in ("linked_point", "range"):
             self._blocks[name].robust_k = robust_k
+        self._blocks["point_obs"].robust_k = point_obs_robust_k
 
     # ------------------------------------------------------------------ variables
     def add_variable(self, key: Hashable, vtype: VarType, initial) -> int:
@@ -168,6 +210,18 @@ class FactorGraph:
         j = self._idx(key_j, VarType.POSE4)
         self._blocks["between"].add((i, j), meas, sigmas)
 
+    def add_between_bias(self, key_i, key_j, bias_key, meas, dist_m: float, sigmas) -> None:
+        """Odometry ``meas = [Δx, Δy, Δz, Δψ]`` whose heading carries a bias ``b``
+        [rad/m] times the distance travelled: ``Δψ_meas = Δψ + b·dist_m``."""
+        i = self._idx(key_i, VarType.POSE4)
+        j = self._idx(key_j, VarType.POSE4)
+        b = self._idx(bias_key, VarType.SCALAR)
+        m = np.concatenate([np.asarray(meas, dtype=float), [float(dist_m)]])
+        self._blocks["between_bias"].add((i, j, b), m, sigmas)
+
+    def add_scalar_prior(self, key, mean: float, sigma: float) -> None:
+        self._blocks["scalar_prior"].add((self._idx(key, VarType.SCALAR),), [mean], [sigma])
+
     def add_point_obs(self, pose_key, point_key, meas, sigmas) -> None:
         i = self._idx(pose_key, VarType.POSE4)
         l_ = self._idx(point_key, VarType.POINT3)
@@ -198,8 +252,19 @@ class FactorGraph:
         self._blocks["range"].add((a, b), [range_m], [sigma])
 
     def copy(self) -> FactorGraph:
-        """Independent copy (values and factor lists)."""
-        return copy.deepcopy(self)
+        """Independent copy (values and factor lists).
+
+        Measurement arrays are shared: the graph never mutates them in place.
+        """
+        g = FactorGraph.__new__(FactorGraph)
+        g._index = dict(self._index)
+        g._keys = list(self._keys)
+        g._types = list(self._types)
+        g._offsets = list(self._offsets)
+        g._dim = self._dim
+        g._values = [v.copy() for v in self._values]
+        g._blocks = {name: blk.copy() for name, blk in self._blocks.items()}
+        return g
 
     # ------------------------------------------------------------------ linearization
     def _state(self) -> FloatArray:
@@ -237,7 +302,11 @@ class FactorGraph:
             valid = np.isfinite(r).all(axis=1)
             r = np.where(np.isfinite(r), r, 0.0)
             e = np.linalg.norm(r, axis=1)
-            if blk.robust_k is not None:
+            if blk.kernel == "gnc" and blk.gnc_w is not None:
+                w = np.ones(n)
+                w[: min(n, len(blk.gnc_w))] = blk.gnc_w[:n]
+                cost += float(0.5 * np.sum((w * e**2)[valid]))
+            elif blk.robust_k is not None:
                 k = blk.robust_k
                 w = np.where(e <= k, 1.0, k / np.maximum(e, 1e-12))
                 cost += float(np.sum(np.where(e <= k, 0.5 * e**2, k * (e - 0.5 * k))[valid]))
@@ -264,9 +333,7 @@ class FactorGraph:
 
     @staticmethod
     def _arr(blk: _FactorBlock):
-        idx = np.asarray(blk.vars, dtype=np.int64)
-        meas = np.vstack(blk.meas)
-        sig = np.vstack(blk.sigmas)
+        idx, meas, sig, _ = blk.arrays()
         return idx, meas, sig
 
     def _lin_pose_prior(self, x, off, blk, jac):
@@ -311,6 +378,26 @@ class FactorGraph:
             J.append((3, oj + 3, 1.0 / sig[:, 3]))
         return r, J
 
+    def _lin_between_bias(self, x, off, blk, jac):
+        idx, meas, sig = self._arr(blk)
+        ob = off[idx[:, 2]]
+        dist = meas[:, 4]
+        corrected = meas[:, :4].copy()
+        corrected[:, 3] = meas[:, 3] - x[ob] * dist  # remove the heading bias
+        tmp = _FactorBlock(robust_k=None)
+        tmp._arrays = (idx[:, :2], corrected, sig, np.zeros(len(idx), dtype=bool))
+        r, J = self._lin_between(x, off, tmp, jac)
+        if jac:  # ∂r_yaw/∂b = +dist/σ_yaw
+            J.append((3, ob, dist / sig[:, 3]))
+        return r, J
+
+    def _lin_scalar_prior(self, x, off, blk, jac):
+        idx, meas, sig = self._arr(blk)
+        o = off[idx[:, 0]]
+        r = (x[o][:, None] - meas) / sig
+        J = [(0, o, 1.0 / sig[:, 0])] if jac else []
+        return r, J
+
     def _lin_point_obs(self, x, off, blk, jac):
         idx, meas, sig = self._arr(blk)
         oi, ol = off[idx[:, 0]], off[idx[:, 1]]
@@ -350,7 +437,7 @@ class FactorGraph:
 
     def _lin_linked_point(self, x, off, blk, jac):
         idx, meas, sig = self._arr(blk)
-        horiz = np.asarray(blk.flags, dtype=bool)
+        horiz = blk.arrays()[3]
         ol, ot = off[idx[:, 0]], off[idx[:, 1]]
         lm = x[ol[:, None] + np.arange(3)]
         t = x[ot[:, None] + np.arange(3)]
@@ -405,7 +492,110 @@ class FactorGraph:
         c, _, _ = self._linearize(self._state(), jacobian=False)
         return c
 
+    def set_kernel(self, factor_type: str, kernel: str, threshold: float | None) -> None:
+        """Robust kernel of one factor type: ``"huber"`` (IRLS), ``"gnc"`` (GNC-TLS)
+        or ``"none"``. ``threshold`` is the whitened Huber threshold or TLS inlier
+        bound c̄ (a factor with whitened residual > c̄ is an outlier)."""
+        blk = self._blocks[factor_type]
+        if kernel == "none":
+            blk.kernel, blk.robust_k, blk.gnc_w = "huber", None, None
+        elif kernel in ("huber", "gnc"):
+            if threshold is None or threshold <= 0:
+                raise ValueError("robust kernels need a positive threshold")
+            blk.kernel, blk.robust_k, blk.gnc_w = kernel, float(threshold), None
+        else:
+            raise ValueError(f"unknown kernel {kernel!r}")
+
+    def _block_norms(self, x: FloatArray, name: str) -> FloatArray:
+        """Whitened residual norm of every factor of one type (non-finite → 0)."""
+        blk = self._blocks[name]
+        off = np.asarray(self._offsets, dtype=np.int64)
+        r, _ = getattr(self, f"_lin_{name}")(x, off, blk, False)
+        r = np.where(np.isfinite(r), r, 0.0)
+        return np.linalg.norm(r, axis=1)
+
     def optimize(
+        self,
+        max_iters: int = 30,
+        rel_tol: float = 1e-8,
+        step_tol: float = 1e-8,
+        lambda0: float = 1e-4,
+        gnc_mu_step: float = 1.4,
+        gnc_max_outer: int = 30,
+        gnc_inner_iters: int = 3,
+        gnc_warm_mu: float = 10.0,
+    ) -> OptimizeResult:
+        """Levenberg–Marquardt; robust factors use IRLS-Huber or GNC-TLS.
+
+        GNC (graduated non-convexity with a truncated least-squares cost; Yang,
+        Antonante, Tzoumas and Carlone, RA-L 2020) runs when a factor type has
+        ``kernel="gnc"``: start from the convex surrogate (μ small, all weights
+        1), then alternate a few LM iterations with fixed weights and the TLS
+        weight update, increasing μ by ``gnc_mu_step`` until the weights are
+        binary. The final LM pass uses those weights (``max_iters`` iterations).
+
+        **Warm start** (incremental use, e.g. a local graph re-solved every
+        exchange): if weights from a previous solve exist, they are kept, new
+        factors start at weight 1 and first pull the estimate (a few LM
+        iterations), then μ starts at ``gnc_warm_mu`` (close to TLS), so only
+        a few outer steps run.
+        """
+        gnc = [n for n, b in self._blocks.items() if b.kernel == "gnc" and b.vars]
+        if not gnc or self._dim == 0:
+            return self._lm(max_iters, rel_tol, step_tol, lambda0)
+        initial = self.cost()
+        c2 = {n: self._blocks[n].robust_k ** 2 for n in gnc}
+        warm = all(
+            self._blocks[n].gnc_w is not None and len(self._blocks[n].gnc_w) > 0 for n in gnc
+        )
+        if warm:
+            for n in gnc:
+                blk = self._blocks[n]
+                w = np.ones(len(blk))
+                k = min(len(blk), len(blk.gnc_w))
+                w[:k] = blk.gnc_w[:k]
+                blk.gnc_w = w
+            # let new factors pull the estimate before any of them can be cut
+            self._lm(gnc_inner_iters, rel_tol, step_tol, lambda0)
+            norms = {n: self._block_norms(self._state(), n) for n in gnc}
+            mu = gnc_warm_mu
+        else:
+            for n in gnc:
+                self._blocks[n].gnc_w = np.ones(len(self._blocks[n]))
+            self._lm(gnc_inner_iters, rel_tol, step_tol, lambda0)
+            norms = {n: self._block_norms(self._state(), n) for n in gnc}
+            r2max = max(float(np.max(norms[n] ** 2)) for n in gnc)
+            mu = min(c2.values()) / max(2.0 * r2max - min(c2.values()), 1e-9)
+        it = 0
+        for it in range(1, gnc_max_outer + 1):  # noqa: B007 - reported below
+            binary = True
+            for n in gnc:
+                r2 = norms[n] ** 2
+                lo, hi = mu / (mu + 1.0) * c2[n], (mu + 1.0) / mu * c2[n]
+                mid = np.sqrt(c2[n] * mu * (mu + 1.0)) / np.maximum(np.sqrt(r2), 1e-12) - mu
+                w = np.where(r2 <= lo, 1.0, np.where(r2 >= hi, 0.0, np.clip(mid, 0.0, 1.0)))
+                binary &= bool(np.all((w < 1e-3) | (w > 1 - 1e-3)))
+                self._blocks[n].gnc_w = w
+            self._lm(gnc_inner_iters, rel_tol, step_tol, lambda0)
+            norms = {n: self._block_norms(self._state(), n) for n in gnc}
+            if binary:
+                break
+            mu *= gnc_mu_step
+        for n in gnc:  # final binary weights
+            self._blocks[n].gnc_w = (norms[n] <= np.sqrt(c2[n])).astype(float)
+        res = self._lm(max_iters, rel_tol, step_tol, lambda0)
+        return OptimizeResult(initial, res.final_cost, res.iterations + it, res.converged)
+
+    def outlier_mask(self, factor_type: str) -> NDArray[np.bool_]:
+        """Factors of one type that GNC rejected (weight 0); all False otherwise."""
+        blk = self._blocks[factor_type]
+        if blk.kernel != "gnc" or blk.gnc_w is None:
+            return np.zeros(len(blk), dtype=bool)
+        w = np.ones(len(blk))
+        w[: len(blk.gnc_w)] = blk.gnc_w[: len(blk)]
+        return w < 0.5
+
+    def _lm(
         self,
         max_iters: int = 30,
         rel_tol: float = 1e-8,
@@ -430,7 +620,7 @@ class FactorGraph:
             while lam < 1e12:
                 A = H + sp.diags(lam * np.maximum(diag, 1e-9), format="csc")
                 try:
-                    delta = -spla.spsolve(A, g)
+                    delta = -_factor(A).solve(g)
                 except RuntimeError:
                     lam *= 10.0
                     continue
@@ -458,28 +648,60 @@ class FactorGraph:
         self._set_state(x)
         return OptimizeResult(initial, cost, it, converged)
 
-    def marginal_covariances(self, keys: Iterable[Hashable]) -> dict[Hashable, FloatArray]:
-        """Marginal covariance blocks at the current estimate (Laplace approximation)."""
+    SCHUR_MAX_DIM = 3000  # dense Schur complement limit (requested dimensions)
+
+    def marginal_covariances(
+        self, keys: Iterable[Hashable], method: str = "auto"
+    ) -> dict[Hashable, FloatArray]:
+        """Marginal covariance blocks at the current estimate (Laplace approximation).
+
+        ``method="schur"`` factors only the block of the *other* variables
+        (``H_aa``, typically the pose chain, which factorises with little
+        fill-in) and inverts the dense Schur complement of the requested
+        block, ``Σ_bb = (H_bb − H_ba H_aa⁻¹ H_ab)⁻¹``. This is much cheaper than
+        ``method="direct"`` (one sparse LU of the full H, solved for every
+        requested column) when many landmarks are requested, because the
+        landmarks cause the fill-in. ``"auto"`` uses Schur when the requested
+        block has at most :attr:`SCHUR_MAX_DIM` dimensions.
+        """
         keys = list(keys)
         if not keys:
             return {}
         _, _, J = self._linearize(self._state())
         H = (J.T @ J).tocsc()
         H = H + sp.identity(self._dim, format="csc") * 1e-12
-        lu = spla.splu(H)
-        cols = []
+        cols: list[int] = []
         spans = []
         for k in keys:
             idx = self._index[k]
             o, d = self._offsets[idx], int(self._types[idx])
             spans.append((len(cols), d))
             cols.extend(range(o, o + d))
-        E = np.zeros((self._dim, len(cols)))
-        E[cols, np.arange(len(cols))] = 1.0
-        X = lu.solve(E)
+        if method == "auto":
+            method = "schur" if len(cols) <= self.SCHUR_MAX_DIM else "direct"
+        if method == "schur":
+            b = np.asarray(cols, dtype=np.int64)
+            mask = np.ones(self._dim, dtype=bool)
+            mask[b] = False
+            a = np.flatnonzero(mask)
+            H_bb = H[b][:, b].toarray()
+            if len(a):
+                H_ab = H[a][:, b]
+                X = _factor(H[a][:, a].tocsc()).solve(H_ab.toarray())
+                S = H_bb - H_ab.T @ X
+            else:
+                S = H_bb
+            Sigma = np.linalg.inv(0.5 * (S + S.T))
+            X = Sigma  # columns/rows in request order
+        elif method == "direct":
+            lu = _factor(H)
+            E = np.zeros((self._dim, len(cols)))
+            E[cols, np.arange(len(cols))] = 1.0
+            X = lu.solve(E)[cols]
+        else:
+            raise ValueError(f"unknown method {method!r}")
         out = {}
         for k, (start, d) in zip(keys, spans, strict=True):
-            rows = cols[start : start + d]
-            block = X[rows, start : start + d]
+            block = X[start : start + d, start : start + d]
             out[k] = 0.5 * (block + block.T)
         return out

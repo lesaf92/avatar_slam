@@ -12,3 +12,9 @@ ignore = [
 
 [lint.isort]
 known-first-party = ["avatar"]
+
+[lint.per-file-ignores]
+# Entry points pin BLAS threads before importing NumPy (see the comment there).
+"experiments/*.py" = ["E402"]
+"avatar_py/avatar/cli.py" = ["E402"]
+"avatar_py/tests/conftest.py" = ["E402"]

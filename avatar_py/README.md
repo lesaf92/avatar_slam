@@ -14,12 +14,14 @@ pytest avatar_py/tests -q
 | `avatar.geometry` | 4-DoF pose algebra, 4-DoF Umeyama alignment, NED/ENU and FRD/FLU conversions |
 | `avatar.semantics` | Class vocabulary (wire contract) and simulated open-vocabulary descriptors |
 | `avatar.sim` | Tier-1 simulator: world and landmark parts, agents and trajectories, sensors, measurement generation, scenarios |
-| `avatar.comm` | Channel models (RF, acoustic), broadcast network, wire codec v0 |
-| `avatar.backend.graph` | Sparse 4-DoF factor graph: LM, Huber, marginal covariances |
+| `avatar.comm` | Channel models (RF, acoustic), broadcast network, wire codec v0, gateway relay, VoI digest scheduler |
+| `avatar.backend.graph` | Sparse 4-DoF factor graph: LM, Huber, marginal covariances (Schur complement) |
 | `avatar.frontend.association` | Cross-medium association and robust 4-DoF alignment |
+| `avatar.frontend.frame_consistency` | Team frame-graph cycle check (vetoes alignments that break a cycle) |
+| `avatar.baselines` | *A&B*-style centralized server with every uplink byte counted |
 | `avatar.agent` | `AvatarAgent`: local and fused graphs, digests, inbox, alignments |
 | `avatar.eval.metrics` | ATE, team ATE, frame chaining, frame error |
-| `avatar.runner` | `independent` / `decentralized` / `centralized` modes on shared measurements |
+| `avatar.runner` | `independent` / `decentralized` / `centralized` / `server` modes on shared measurements |
 | `avatar.cli` | `avatar run`, `avatar compare`, `avatar export-viz` |
 
 Every run is deterministic given `--seed`. The measurements are generated once

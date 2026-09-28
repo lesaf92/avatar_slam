@@ -13,6 +13,25 @@ parts with odometry, landmark, absolute-height, and intra-agent coaxial factors:
 \end{align}
 following the 4-DoF parameterization common in visual-inertial SLAM~\cite{qin2018vins}.
 
+\subsection{Robustness to front-end errors}
+Real front-ends confuse similar structures (a pile for its neighbor) and report
+clutter. A few such associations inside the local graph are enough to break single-agent
+SLAM and, through the shared records, the team. We therefore solve the local and fused graphs
+with graduated non-convexity (GNC) on a truncated least-squares cost for the landmark
+observations~\cite{yang2020gnc}. The optimization starts from the convex surrogate and
+alternates a few Levenberg--Marquardt iterations with fixed weights and the closed-form
+weight update, until every weight is 0 or 1. The inlier bound is the 0.999 quantile of the
+$\chi^2_3$ distribution. Because the local graph is re-solved at every exchange, weights are
+warm-started: previous weights are kept, new observations first pull the estimate, and the
+surrogate then starts close to the truncated cost. Table~\ref{tab:realism} shows the effect.
+
+\subsection{Heading bias}
+Near steel structures the magnetometer of an underwater vehicle is unreliable, so its
+heading is effectively gyro-integrated and carries a slowly varying bias. Where a platform's
+heading is dead-reckoned, each agent estimates a heading bias $b$ [rad/m] with a prior from
+the platform specification, and its odometry factors subtract $b$ times the distance
+travelled. A reliable compass heading needs no such state.
+
 \subsection{Condensed sharing without double counting}
 Each agent periodically broadcasts its landmark parts with marginal uncertainty computed from the
 \emph{local} graph only. Since shared information never contains received information, a
@@ -28,4 +47,12 @@ neighbor and robust inter-agent factors
   \quad \boldsymbol{\Pi} = \begin{cases} \mathbf{I}_3 & \text{same medium}\\ \Pxy & \text{cross medium}\end{cases}
 \end{equation}
 where $\mathbf{q}_b$ is the neighbor's decoded landmark with covariance inflated by quantization
-noise, under a Huber loss. \todo{team frame via frame chaining; FRAME\_ALIGNMENT messages.}
+noise, under a Huber loss.
+
+\subsection{Team frame}
+Each agent broadcasts the frames it estimated, $\Tf{i}{j}$ with marginal uncertainty, in
+\texttt{FRAME\_ALIGNMENT} messages (42~bytes each, header and CRC included). Any agent can then express a
+neighbor $j$ in the frame of a designated anchor $a$ by composing the cycle-consistent estimates
+it knows along the path of least accumulated $\sigma$. Frames are 4-DoF, so the composition is
+exact and costs no additional solve. Agents that never exchange landmarks directly (e.g., the UAV and a
+BlueROV2) meet through this chain.

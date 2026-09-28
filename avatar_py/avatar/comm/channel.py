@@ -9,6 +9,13 @@ The numbers are order-of-magnitude defaults for a harbour scenario:
   half-duplex medium (modelled as a TDMA share among the nodes in water).
 
 Sweeping these parameters is part of the experiment protocol (PLAN §6).
+
+``CHANNEL_PROFILES`` also holds the **reference-fleet stack** (ADR-0006,
+``docs/hardware.md``): a 5 GHz Wi-Fi mesh above water, and a Water Linked
+Modem-M64 (64 bps, 200 m, 1.5–2.5 s latency, half duplex) or a Blueprint Subsea
+SeaTrac X150 (100 bps class, 1000 m) under water. Wire packets on those modems
+are capped at 64 B; fragmentation into modem frames is the modem driver's job
+(task T-C6-01) and is modelled here only through the airtime.
 """
 
 from __future__ import annotations
@@ -89,3 +96,47 @@ ACOUSTIC_DEFAULT = ChannelModel(
     mtu_B=256,
     utilization=0.5,
 )
+
+WIFI_MESH = ChannelModel(
+    link_type=LinkType.RF,
+    bandwidth_bps=10e6,  # conservative effective throughput of a 5 GHz mesh hop
+    base_latency_s=0.005,
+    propagation_speed_mps=3e8,
+    max_range_m=250.0,
+    loss_near=0.01,
+    loss_far=0.3,
+    mtu_B=1400,
+    utilization=0.1,
+)
+
+ACOUSTIC_M64 = ChannelModel(
+    link_type=LinkType.ACOUSTIC,
+    bandwidth_bps=64.0,  # Water Linked Modem-M64 datasheet
+    base_latency_s=2.0,  # datasheet: 1.5-2.5 s
+    propagation_speed_mps=1500.0,
+    max_range_m=200.0,
+    loss_near=0.05,
+    loss_far=0.4,
+    mtu_B=64,
+    utilization=0.5,
+)
+
+ACOUSTIC_X150 = ChannelModel(
+    link_type=LinkType.ACOUSTIC,
+    bandwidth_bps=100.0,  # SeaTrac: "100 baud" data rate (verify effective payload rate)
+    base_latency_s=1.0,  # UNVERIFIED
+    propagation_speed_mps=1500.0,
+    max_range_m=1000.0,
+    loss_near=0.05,
+    loss_far=0.4,
+    mtu_B=64,
+    utilization=0.5,
+)
+
+CHANNEL_PROFILES: dict[str, ChannelModel] = {
+    "rf_generic": RF_DEFAULT,
+    "acoustic_generic": ACOUSTIC_DEFAULT,
+    "wifi_mesh": WIFI_MESH,
+    "m64": ACOUSTIC_M64,
+    "x150": ACOUSTIC_X150,
+}

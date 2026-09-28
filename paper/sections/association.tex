@@ -18,5 +18,29 @@ scored with a one-to-one MSAC score in which cross-medium inliers weigh $2/3$.
 \subsection{Ambiguity and support tests}
 Regular pile rows induce shifted hypotheses. We reject an alignment if a distinct competitor
 reaches a fraction $\rho$ of the best score, and require more support when all inliers are
-cross-medium. \todo{cycle consistency over the team frame graph (T-X2-02).}
+cross-medium.
+
+\subsection{Cycle consistency over the team frame graph}
+A pair with no true overlap can still produce an alignment that passes every local test
+(for example, eight coaxial matches on a regular pile row). Each agent therefore checks the frame graph it knows:
+its own alignments, the \texttt{FRAME\_ALIGNMENT} estimates it received, and its neighbors'
+estimates of its own frame. Edges are visited in order of decreasing support (inliers, then
+$\sigma$), in the manner of Kruskal's algorithm. An edge that joins two components of the accepted forest is accepted.
+An edge that closes a cycle is accepted only if the composed cycle
+$\Tf{a}{b}^{-1}\circ\Tf{a}{c_1}\circ\cdots\circ\Tf{c_n}{b}$ lies within a $3\sigma$ gate on
+horizontal translation and yaw, where the $\sigma$ includes yaw uncertainty times the largest lever arm, with floors of
+1\,m and 0.1\,rad. Stronger edges are visited first, so a rejected edge is always the weakest edge of the
+inconsistent cycle it closes. A vetoed alignment is left out of the fused graph and not advertised. The check is
+recomputed from scratch at every exchange, so the veto is lifted when new evidence agrees with
+the edge. Edges that close no cycle cannot be checked. Table~\ref{tab:cycle} reports the
+generic harbor team, where every wrong alignment links two agents with no true overlap.
+
+\begin{table}[t]
+  \centering
+  \caption{One-shot all-to-all association after 90\,s of solo mapping (harbor, five agents,
+  unlimited links, Tier-1 simulation), before and after the cycle check.}
+  \label{tab:cycle}
+  \footnotesize
+  \IfFileExists{data/tab_cycle_check.tex}{\input{data/tab_cycle_check.tex}}{\todo{run make -C experiments paper-data}}
+\end{table}
 \todo{Table: association precision / acceptance over seeds from paper/data.}

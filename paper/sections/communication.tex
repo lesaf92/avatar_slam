@@ -7,6 +7,49 @@ vertical uncertainty, footprint and part height, class, medium/modality flags, o
 and an optional $D$-dimensional int8 descriptor; packets carry a 10-byte header and a CRC-16
 (docs/spec/wire\_format\_v0.md). \todo{justify resolutions vs.\ sensor noise.}
 
-\subsection{Scheduling}
-\todo{VoI-per-byte scheduler (T-C2-01): maximize expected information gain of receivers per byte
-subject to per-link budgets; USV gateway relay (T-C3-01); surfacing windows (T-C4-01).}
+\subsection{Link budgets}
+Each node $n$ holds a token bucket per link $L$ that earns $b_L\,u_L\,s_L\,\Delta t/8$ bytes per
+exchange period $\Delta t$, where $b_L$ is the raw bit rate, $u_L$ the fraction of channel time
+granted to map sharing, and $s_L$ the node's time-division share (on the acoustic channel,
+$1/N_L$ for $N_L$ modems). Unused tokens carry over up to $\max(4\times\text{tick}, \mathrm{MTU})$, so a node
+on a 64\,bit/s modem can still send one full packet. A vehicle whose depth rules a link
+out stays silent and keeps accruing tokens; a BlueROV2 that surfaces therefore spends its RF
+allowance in a burst.
+
+\subsection{Value of information per byte}
+Receivers use shared landmarks to estimate the planar alignment $(x, y, \theta)$ between local
+frames; the vertical offset is fixed by the waterline datum. A record at horizontal position
+$\mathbf{q} = (q_x, q_y)$ with horizontal standard deviation $\sigma$ adds the Fisher information
+\begin{equation}
+  \mathbf{J}_{\mathbf{q}} = \tfrac{1}{\sigma^2}\,\mathbf{H}_{\mathbf{q}}^{\!\top}\mathbf{H}_{\mathbf{q}},
+  \qquad
+  \mathbf{H}_{\mathbf{q}} = \begin{bmatrix} 1 & 0 & -q_y \\ 0 & 1 & q_x \end{bmatrix}.
+\end{equation}
+For every link, the sender tracks the information $\mathbf{J}_d$ it has already delivered to each
+receiver domain $d$ (the domains reached directly or through the gateway). Records not yet sent
+are ranked greedily by their expected D-optimal gain
+\begin{equation}
+  g(\mathbf{q}) = \sum_{d} \rho_d(\mathbf{q})\,
+  \log\det\!\Big(\mathbf{I}_2 + \tfrac{1}{\sigma^2}\mathbf{H}_{\mathbf{q}}\mathbf{J}_d^{-1}\mathbf{H}_{\mathbf{q}}^{\!\top}\Big),
+\end{equation}
+which follows from the matrix determinant lemma. Here $\rho_d$ is the probability that a receiver in domain $d$ can match
+the record. It is zero for a land-only part seen from below the surface, reduced for a
+waterline-crossing part seen from the other medium (a horizontal-only coaxial match), and it
+grows with the observation count. After each pick, $\mathbf{J}_d \leftarrow \mathbf{J}_d + \rho_d\mathbf{J}_{\mathbf{q}}$.
+All records cost the same number of bytes on a given link, so this greedy order is also the order of value per
+byte. The criterion prefers well-observed parts that are spread out, which constrain yaw
+at long lever arms.
+
+We compare this criterion with two simpler orders: first observed, first sent (FIFO), and a
+quality order that sends parts with the most observations per unit of uncertainty first
+(Sec.~\ref{sec:experiments}, Table~\ref{tab:bandwidth}). The order matters only at the lowest
+rates, and there the quality order does best. At these rates the binding constraint is to
+deliver enough \emph{matchable} parts to pass the association tests, not their geometric
+information. \avatar{} therefore uses the quality order. A value of information that models the
+probability of an accepted alignment is future work.
+
+\subsection{Gateway and surfacing}
+A sensorless quay-side gateway stores and forwards: acoustic packets are relayed to RF verbatim,
+and RF records are re-encoded for the acoustic link without descriptors, keeping the originator
+as sender. Records of waterline-crossing classes go first, round-robin across originators.
+\todo{Gateway VoI policy (T-C7-01).}

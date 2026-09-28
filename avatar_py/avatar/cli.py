@@ -9,6 +9,13 @@ Examples
 
 from __future__ import annotations
 
+import os
+
+# Small sparse solves run 5-10x slower with multi-threaded BLAS, and much worse
+# when several runs share the CPU (docs/LOG.md L10). Must precede the NumPy import.
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 import argparse
 import csv
 import json
@@ -23,18 +30,24 @@ from avatar.agent import AvatarParams
 from avatar.runner import MODES, RunResult, make_sim, run
 from avatar.semantics import CLASS_NAMES
 
+OUTPUT_DIRS = ("paper/data", "viz/data")  # outputs do not make the code "dirty"
+
 
 def _git_commit() -> str:
+    """Short HEAD hash, plus ``-dirty`` if tracked files outside output dirs changed."""
     try:
-        out = subprocess.run(
-            ["git", "describe", "--always", "--dirty", "--abbrev=7"],
-            capture_output=True,
-            text=True,
-            check=True,
-        )
-        return out.stdout.strip()
+        rev = subprocess.run(
+            ["git", "rev-parse", "--short=7", "HEAD"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()  # fmt: skip
+        exclude = [f":(top,exclude){d}" for d in OUTPUT_DIRS]
+        status = subprocess.run(
+            ["git", "status", "--porcelain", "--untracked-files=no", "--", ":/", *exclude],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()  # fmt: skip
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+    return rev + ("-dirty" if status else "")
 
 
 def _jsonable(obj):
@@ -66,8 +79,54 @@ def _summary_row(res: RunResult) -> dict:
     return row
 
 
+def _parse_value(raw: str) -> object:
+    """``true``/``false`` → bool, ``a,b`` → list of numbers, else int/float/str."""
+    if raw.lower() in ("true", "false"):
+        return raw.lower() == "true"
+    if "," in raw:
+        return [_parse_value(v) for v in raw.split(",")]
+    for cast in (int, float):
+        try:
+            return cast(raw)
+        except ValueError:
+            continue
+    return raw
+
+
+def _scenario_kwargs(args) -> dict:
+    """Scenario options: YAML ``--scenario-file`` ``args``, then ``--scenario-arg``.
+
+    Dotted keys nest: ``paths.uuv_0.kind=figure8`` →
+    ``{"paths": {"uuv_0": {"kind": "figure8"}}}``.
+    """
+    out: dict = dict(getattr(args, "_file_args", {}) or {})
+    for item in args.scenario_arg or []:
+        key, sep, raw = item.partition("=")
+        if not sep:
+            raise SystemExit(f"--scenario-arg expects KEY=VALUE, got {item!r}")
+        node = out
+        *parents, leaf = key.split(".")
+        for p in parents:
+            node = node.setdefault(p, {})
+        node[leaf] = _parse_value(raw)
+    return out
+
+
+def _load_scenario_file(args) -> None:
+    """Apply ``--scenario-file``: sets scenario name and default options/duration."""
+    if not getattr(args, "scenario_file", None):
+        return
+    import yaml
+
+    doc = yaml.safe_load(Path(args.scenario_file).read_text()) or {}
+    args.scenario = doc.get("scenario", args.scenario)
+    if "duration_s" in doc and not args.duration_given:
+        args.duration = float(doc["duration_s"])
+    args._file_args = doc.get("args", {})
+
+
 def cmd_run(args) -> int:
-    res = run(args.scenario, args.mode, args.seed, args.duration)
+    res = run(args.scenario, args.mode, args.seed, args.duration, **_scenario_kwargs(args))
     out = {
         "provenance": _provenance(args),
         "mode": res.mode,
@@ -86,7 +145,7 @@ def cmd_compare(args) -> int:
     rows = []
     for seed in args.seeds:
         for mode in args.modes:
-            res = run(args.scenario, mode, seed, args.duration)
+            res = run(args.scenario, mode, seed, args.duration, **_scenario_kwargs(args))
             rows.append(_summary_row(res))
             print(
                 f"seed {seed} {mode:>13}: team ATE {rows[-1]['ate_team_m']:.3f} m "
@@ -112,8 +171,9 @@ def cmd_compare(args) -> int:
 
 def cmd_export_viz(args) -> int:
     params = AvatarParams()
-    scenario, sim = make_sim(args.scenario, args.seed, args.duration, params)
-    dec = run(args.scenario, "decentralized", args.seed, args.duration, params)
+    kwargs = _scenario_kwargs(args)
+    scenario, sim = make_sim(args.scenario, args.seed, args.duration, params, **kwargs)
+    dec = run(args.scenario, "decentralized", args.seed, args.duration, params, **kwargs)
     step = max(1, int(args.subsample))
     world = [
         {
@@ -169,8 +229,20 @@ def main(argv: list[str] | None = None) -> int:
     sub = ap.add_subparsers(dest="cmd", required=True)
 
     def common(p):
-        p.add_argument("--scenario", default="harbor")
-        p.add_argument("--duration", type=float, default=300.0, help="mission length [s]")
+        p.add_argument("--scenario", default="harbor", help="harbor | harbor_fleet")
+        p.add_argument(
+            "--scenario-file",
+            metavar="YAML",
+            help="scenario name, duration and options from a YAML file "
+            "(see experiments/scenarios/); --scenario-arg overrides it",
+        )
+        p.add_argument(
+            "--scenario-arg",
+            action="append",
+            metavar="KEY=VALUE",
+            help="scenario option, e.g. acoustic=x150, n_uuv=3, with_usv=true (repeatable)",
+        )
+        p.add_argument("--duration", type=float, default=None, help="mission length [s] (300)")
 
     p = sub.add_parser("run", help="one mode, one seed")
     common(p)
@@ -193,8 +265,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="viz/data/harbor.json")
     p.set_defaults(func=cmd_export_viz)
 
+    p = sub.add_parser("trajectories", help="list the trajectory library and its parameters")
+    p.set_defaults(func=cmd_trajectories)
+
     args = ap.parse_args(argv)
+    if hasattr(args, "duration"):
+        args.duration_given = args.duration is not None
+        if args.duration is None:
+            args.duration = 300.0
+        _load_scenario_file(args)
     return int(args.func(args))
+
+
+def cmd_trajectories(args) -> int:
+    from avatar.sim.trajectories import describe_library
+
+    print(describe_library())
+    return 0
 
 
 if __name__ == "__main__":

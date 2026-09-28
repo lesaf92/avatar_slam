@@ -83,6 +83,7 @@ coordinates expressed in `B` into `A`: `p_A = T_A_from_B * p_B`.
 | `Medium` (of an observed landmark part) | `ABOVE` (z > 0 part), `BELOW` (z < 0 part) |
 | `Modality` | `CAMERA`, `LIDAR`, `SONAR` (bit flags on the wire) |
 | `LinkType` | `RF = 0`, `ACOUSTIC = 1` |
+| Node role | `slam` (runs Avatar SLAM), `gateway` (sensorless RF ↔ acoustic relay, ADR-0006) |
 
 **Landmark parts.** A physical object that crosses the waterline, such as a
 pier pile, a hull, or a buoy, is represented as up to **two landmarks**: its
@@ -96,7 +97,7 @@ so the two parts differ in `z` by construction.
 | ID | Type | Rule |
 |---|---|---|
 | Agent id | `uint8` (0–254; 255 reserved = broadcast) | Unique per mission, fixed in config |
-| Agent name | string | `<domain>_<index>`: `uav_0`, `ugv_0`, `usv_0`, `auv_1` |
+| Agent name | string | `<class>_<index>` with class ∈ {`uav`, `ugv`, `usv`, `uuv`, `auv`, `gw`}: `uav_0`, `ugv_0`, `uuv_1`, `gw_0` (ADR-0006) |
 | Landmark id | `uint16` | **Private to the owning agent**, never derived from ground truth |
 | Keyframe index | `uint32` | Per agent, monotonically increasing |
 | Semantic class id | `uint8` | Index into `avatar.semantics.CLASS_NAMES` (0 = unknown) |

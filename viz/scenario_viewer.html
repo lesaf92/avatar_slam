@@ -114,6 +114,14 @@
   </header>
 
   <div class="bar" role="group" aria-label="Playback">
+    <label for="dataset" class="sub">Run</label>
+    <select id="dataset">
+      <option value="harbor_fleet_seed0.json" selected>Reference fleet · default paths</option>
+      <option value="fleet_complex_turns_seed0.json">Reference fleet · complex turns</option>
+      <option value="fleet_heights_seed0.json">Reference fleet · heights (helix, yo-yo)</option>
+      <option value="fleet_surfacing_seed0.json">Reference fleet · surfacing windows</option>
+      <option value="harbor_seed0.json">Generic team (v0) · 300 s</option>
+    </select>
     <button id="play" type="button" aria-pressed="false">Play</button>
     <input id="scrub" type="range" min="0" max="300" step="1" value="300" aria-label="Mission time">
     <span class="clock" id="clock">t = 0 s</span>
@@ -190,10 +198,10 @@
   const agentColor = (a) => colors[DOMAIN_VAR[a.domain]] || colors["--ink"];
 
   // ---------- data ----------
-  async function loadDefault() {
+  async function loadRun(name) {
     const embedded = document.getElementById("run-data");
     if (embedded) return JSON.parse(embedded.textContent);
-    const res = await fetch("data/harbor_seed0.json");
+    const res = await fetch("data/" + name);
     if (!res.ok) throw new Error("HTTP " + res.status);
     return res.json();
   }
@@ -389,7 +397,7 @@
       `<div>${box("none", "var(--ink-soft)", "2 2")}Submerged only (dotted, as on charts)</div>` +
       `<div>${line("var(--ink-soft)")}Thick: estimate in team frame; faint: ground truth</div>` +
       `<div>${line("var(--rf)", "6 4")}RF packet (Mbps, air)</div>` +
-      `<div>${line("var(--magenta)", "1.5 3")}Acoustic packet (kbps, water)</div>`;
+      `<div>${line("var(--magenta)", "1.5 3")}Acoustic packet (bps to kbps, water)</div>`;
   }
 
   // ---------- interaction ----------
@@ -417,10 +425,16 @@
   new MutationObserver(refreshTheme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
   new ResizeObserver(() => draw()).observe($("plan"));
   readColors();
-  loadDefault().then(setData).catch(() => {
+  const noRun = () => {
     $("meta").textContent = "No run loaded.";
     $("status").textContent = "Serve this folder (python -m http.server) or load a JSON from `avatar export-viz`.";
+  };
+  $("dataset").addEventListener("change", (e) => {
+    setPlaying(false);
+    $("status").textContent = "";
+    loadRun(e.target.value).then(setData).catch(noRun);
   });
+  loadRun($("dataset").value).then(setData).catch(noRun);
   if (document.fonts) document.fonts.ready.then(draw);
 })();
 </script>

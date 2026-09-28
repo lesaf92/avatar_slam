@@ -30,12 +30,15 @@ regular structures (pile rows).}
         waterline datum and shares condensed landmarks computed from its own measurements
         only, which rules out double counting by construction (Sec.~\ref{sec:system}).
         \todo{confirm novelty ledger N1.}
-  \item A cross-medium association method: coaxial landmark parts, uncertainty-scaled
-        gating, and a pairwise-consistency graph with an explicit ambiguity test. The method
-        yields direct UAV--AUV constraints through waterline-crossing structures
-        (Sec.~\ref{sec:association}). \todo{ledger N3 after reading~\cite{mcconnell2026aboveandbelow} in full.}
-  \item A medium-aware communication layer: link models, a 16-byte-per-landmark wire format,
-        and \todo{VoI-per-byte scheduler} across RF and acoustic links (Sec.~\ref{sec:comm}).
+  \item A \emph{landmark-level} cross-medium association that runs on every agent: coaxial
+        landmark parts, uncertainty-scaled gating, a pairwise-consistency graph with an
+        explicit ambiguity test, and a team-level cycle check. Unlike scan registration on a
+        central vessel~\cite{mcconnell2026aboveandbelow}, it works on condensed records that
+        fit an acoustic modem and also yields direct UAV--AUV constraints through
+        waterline-crossing structures (Sec.~\ref{sec:association}).
+  \item A medium-aware communication layer: per-link budgets, a store-and-forward surface
+        gateway, and a 16-byte-per-landmark wire format across RF and acoustic links, with
+        which the whole team merges over a 64\,bit/s modem (Sec.~\ref{sec:comm}).
   \item An open benchmark: a fast multi-domain simulator and ROS~2/Gazebo scenarios with
         ground truth and communication traces (Sec.~\ref{sec:experiments}).
 \end{enumerate}

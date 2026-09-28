@@ -26,7 +26,7 @@ loses only its own records.
 |---:|---:|---|---|---|
 | 0 | 1 | u8 | `magic` | `0xA7` |
 | 1 | 1 | u8 | `version_type` | high nibble = version (`0`), low nibble = message type |
-| 2 | 1 | u8 | `sender_id` | agent id (0–254) |
+| 2 | 1 | u8 | `sender_id` | **originating** agent id (0–254); relays keep it (ADR-0006) |
 | 3 | 1 | u8 | `flags` | reserved, must be `0` in v0 |
 | 4 | 2 | u16 | `seq` | per-sender sequence number, wraps |
 | 6 | 4 | u32 | `stamp_ms` | milliseconds since mission epoch |
@@ -109,7 +109,15 @@ agent's local frame into the sender's local frame).
 
 Body = 30 bytes; packet = 42 bytes.
 
-## 5. Versioning
+## 5. Relays (ADR-0006)
+
+A relay (e.g. the surface gateway) may re-encode an originator's
+`LANDMARK_DIGEST` records into new packets. It must keep the originator's
+`sender_id`, it may set `descriptor_dim = 0`, and it must not change any other
+record field. Receivers must keep a record's earlier descriptor when a copy
+without one arrives. This clarifies §2. The bytes of v0 are unchanged.
+
+## 6. Versioning
 
 A future v1 must use version nibble `1`. Receivers must ignore packets with an
 unknown version rather than guess. The golden-vector file holds one section

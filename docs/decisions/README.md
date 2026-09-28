@@ -11,5 +11,6 @@ accepted ADRs, except to add a "Superseded by" line.
 | [0003](ADR-0003-simulation-stack.md) | Two-tier simulation: fast Python sim + Gazebo/DAVE | Accepted |
 | [0004](ADR-0004-backbone-estimator.md) | 4-DoF backbone on a waterline datum with condensed landmark sharing | Accepted |
 | [0005](ADR-0005-contracts.md) | Wire format and ROS messages are versioned contracts | Accepted |
+| [0006](ADR-0006-reference-fleet-and-comm-stack.md) | Reference fleet, communication stack, transparent relay | Accepted |
 
 Template: copy `ADR-template.md`.

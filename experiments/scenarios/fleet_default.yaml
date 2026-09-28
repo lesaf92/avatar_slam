@@ -1,0 +1,7 @@
+# Reference fleet with its default paths (docs/hardware.md, ADR-0006).
+# Run: avatar compare --scenario-file experiments/scenarios/fleet_default.yaml --seeds 0
+scenario: harbor_fleet
+duration_s: 600
+args:
+  acoustic: m64
+  n_uuv: 2

@@ -1,0 +1,11 @@
+# Height changes: the UAV climbs and descends on a helix (D435i visibility changes),
+# one BlueROV2 yo-yos between 8 m and 1 m depth, the other flies deeper.
+scenario: harbor_fleet
+duration_s: 600
+args:
+  acoustic: m64
+  n_uuv: 2
+  paths:
+    uav_0: {kind: helix, start: [30, -10], z: 2.0, z_top: 7.0, radius: 10, turns: 2, speed_mps: 1.0}
+    uuv_0: {kind: yoyo, start: [2, 0], z: -8.0, z_top: -1.0, length: 58, period: 20, speed_mps: 0.5}
+    uuv_1: {z: -9.0}

@@ -5,28 +5,49 @@ Every agent maps for ``--duration`` seconds alone, then receives every other
 agent's full digest (unlimited links, *including* pairs that could not talk
 physically, e.g. UAV↔AUV) and aligns. We report, per seed, how many
 alignments were accepted, how many pairs they contain, and the fraction of
-pairs that link the same ground-truth structure.
+pairs that link the same ground-truth structure. A second round exchanges the
+resulting frame estimates and runs the team frame-graph cycle check (T-X2-02):
+we count wrong alignments before and after it, and correct ones it vetoed.
 
     python experiments/association_precision.py --seeds 0 1 2 3 4 --duration 90
+    python experiments/association_precision.py --scenario harbor_fleet --duration 300
 """
 
 from __future__ import annotations
 
+import os
+
+# Small sparse solves run 5-10x slower with multi-threaded BLAS, and much worse
+# when several runs share the CPU (docs/LOG.md L10). Must precede the NumPy import.
+for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
+    os.environ.setdefault(_var, "1")
+
 import argparse
+import csv
 import json
+from pathlib import Path
 
 import numpy as np
+from _provenance import commit
 
 from avatar.agent import AvatarAgent, AvatarParams
 from avatar.runner import make_sim
 from avatar.types import LinkType
 
 
-def evaluate(seed: int, duration_s: float, params: AvatarParams) -> dict:
-    scenario, data = make_sim("harbor", seed, duration_s, params)
+def same_object(parts, pa: int, pb: int) -> bool:
+    """Both indices are real parts (not clutter) of the same structure."""
+    n = len(parts)
+    return 0 <= pa < n and 0 <= pb < n and parts[pa].object_id == parts[pb].object_id
+
+
+def evaluate(seed: int, duration_s: float, params: AvatarParams, scenario_name: str) -> dict:
+    scenario, data = make_sim(scenario_name, seed, duration_s, params)
     obj_ids = np.array([p.object_id for p in data.world.parts])
     agents: dict[int, AvatarAgent] = {}
     for cfg in scenario.agents:
+        if cfg.role != "slam":
+            continue
         ag = AvatarAgent(
             cfg,
             params,
@@ -46,22 +67,39 @@ def evaluate(seed: int, duration_s: float, params: AvatarParams) -> dict:
                 for pkt in pkts:
                     rx.on_packet(pkt)
         rx.update_alignments()
+    # Round 2: every agent advertises its frame estimates; the team frame-graph
+    # cycle check (T-X2-02) then vetoes alignments that break a cycle.
+    for ag in agents.values():
+        ag.solve_fused()
+    frames = {i: ag.build_alignment_messages(0.0) for i, ag in agents.items()}
+    for rx in agents.values():
+        for tx, pkts in frames.items():
+            if tx != rx.id:
+                for pkt in pkts:
+                    rx.on_packet(pkt)
+        rx.check_cycles()
     inv = {a: {lid: p for p, lid in ag._lid_of_part.items()} for a, ag in agents.items()}
     parts = data.world.parts
     out = {"seed": seed, "links": {}}
     n_all = n_ok = 0
     for rx, ag in agents.items():
         for tx, pairs in ag.alignment_ids.items():
-            ok = sum(
-                parts[inv[rx][a]].object_id == parts[inv[tx][b]].object_id for a, b, _ in pairs
-            )
+            ok = sum(same_object(parts, inv[rx][a], inv[tx][b]) for a, b, _ in pairs)
             n_all += len(pairs)
             n_ok += ok
-            out["links"][f"{rx}<-{tx}"] = {"pairs": len(pairs), "correct": ok}
+            out["links"][f"{rx}<-{tx}"] = {
+                "pairs": len(pairs),
+                "correct": ok,
+                "vetoed": tx in ag.vetoed,
+            }
+    links = out["links"].values()
     out["accepted_alignments"] = sum(len(ag.alignment_ids) for ag in agents.values())
     out["possible_alignments"] = len(agents) * (len(agents) - 1)
     out["pair_precision"] = n_ok / n_all if n_all else float("nan")
-    out["wrong_alignments"] = sum(1 for v in out["links"].values() if v["correct"] < v["pairs"] / 2)
+    wrong = [v for v in links if v["correct"] < v["pairs"] / 2]
+    out["wrong_alignments"] = len(wrong)
+    out["wrong_after_cycle_check"] = sum(1 for v in wrong if not v["vetoed"])
+    out["correct_vetoed"] = sum(1 for v in links if v["vetoed"] and v["correct"] >= v["pairs"] / 2)
     return out
 
 
@@ -69,21 +107,42 @@ def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--seeds", type=int, nargs="+", default=[0, 1, 2, 3, 4])
     ap.add_argument("--duration", type=float, default=90.0)
+    ap.add_argument("--scenario", default="harbor", help="harbor | harbor_fleet")
     ap.add_argument("--json", action="store_true", help="print full JSON per seed")
+    ap.add_argument("--out", default=None, help="CSV, one row per seed (e.g. paper/data/...)")
     args = ap.parse_args()
     params = AvatarParams()
-    rows = [evaluate(s, args.duration, params) for s in args.seeds]
+    rev = commit()  # before running: the tree may change meanwhile
+    rows = [evaluate(s, args.duration, params, args.scenario) for s in args.seeds]
+    if args.out:
+        keys = ["seed", "accepted_alignments", "possible_alignments", "pair_precision",
+                "wrong_alignments", "wrong_after_cycle_check", "correct_vetoed"]  # fmt: skip
+        out = Path(args.out)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        with out.open("w", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=["scenario", "duration_s", *keys, "commit"])
+            w.writeheader()
+            for r in rows:
+                w.writerow({"scenario": args.scenario, "duration_s": args.duration,
+                            **{k: r[k] for k in keys}, "commit": rev})  # fmt: skip
     for r in rows:
         if args.json:
             print(json.dumps(r))
         print(
             f"seed {r['seed']}: accepted {r['accepted_alignments']}/{r['possible_alignments']}"
-            f"  wrong {r['wrong_alignments']}  pair precision {r['pair_precision']:.3f}"
+            f"  wrong {r['wrong_alignments']} (after cycle check "
+            f"{r['wrong_after_cycle_check']}, correct vetoed {r['correct_vetoed']})"
+            f"  pair precision {r['pair_precision']:.3f}"
         )
     prec = [r["pair_precision"] for r in rows]
+
+    def total(key: str) -> int:
+        return sum(r[key] for r in rows)
+
     print(
-        f"mean pair precision {np.nanmean(prec):.3f}; "
-        f"total wrong alignments {sum(r['wrong_alignments'] for r in rows)}"
+        f"mean pair precision {np.nanmean(prec):.3f}; total wrong alignments "
+        f"{total('wrong_alignments')}, after cycle check {total('wrong_after_cycle_check')}; "
+        f"correct alignments vetoed {total('correct_vetoed')}"
     )
 
 

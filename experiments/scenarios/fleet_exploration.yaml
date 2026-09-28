@@ -1,0 +1,8 @@
+# Exploration without revisits: an expanding spiral gives the BlueROV2 no loop closures.
+scenario: harbor_fleet
+duration_s: 600
+args:
+  acoustic: m64
+  n_uuv: 2
+  paths:
+    uuv_0: {kind: spiral, start: [30, 0], z: -4.0, turns: 3, spacing: 7, speed_mps: 0.5, loop: false}
