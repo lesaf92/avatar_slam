@@ -74,6 +74,10 @@ class AvatarParams:
     # keyframes (0 = whole map only). Recent sub-maps stay nearly rigid when the
     # whole map is bent by drift (LOG L19).
     align_window_kf: int = 0
+    # Couple neighbour frame variables in the fused graph with received
+    # estimates between neighbours (σ inflated against double counting; L23).
+    frame_links_in_fused: bool = False
+    frame_link_inflation: float = 2.0
     align_window_min_landmarks: int = 6
     cycle_gate: CycleGate = field(default_factory=CycleGate)
 
@@ -634,6 +638,8 @@ class AvatarAgent:
                     ("l", my_lid), fkey, rec.position, [sxy, sxy, sz], horizontal_only=cross
                 )
             frame_keys.append(fkey)
+        if p.frame_links_in_fused:
+            self._add_frame_links(fused, {k[1] for k in frame_keys})
         if self.fused is not None:  # warm start own variables
             for key in fused.keys():
                 if key[0] in ("x", "l") and self.fused.has(key):
@@ -653,6 +659,33 @@ class AvatarAgent:
                     self.alignments[s].n_inliers,
                     source=self.id,
                 )
+
+    def _add_frame_links(self, fused: FactorGraph, neighbours: set[int]) -> None:
+        """Between factors among neighbour frame variables from received estimates.
+
+        Without them, each neighbour's frame ``T_self_from_j`` is free, so a
+        drifting agent whose map start matches neighbour ``j`` and whose map end
+        matches neighbour ``k`` fits each cluster rigidly and never bends its
+        trajectory (docs/LOG.md L22). A received, cycle-consistent estimate of
+        ``T_j_from_k`` couples the two frames. It reuses information from
+        landmarks this graph may also hold, so its σ is inflated by
+        ``frame_link_inflation`` (conservative, not exact).
+        """
+        infl = self.params.frame_link_inflation
+        done: set[frozenset[int]] = set()
+        for (a, b), fe in self.consistent_frames().items():
+            if fe.source == self.id or a not in neighbours or b not in neighbours:
+                continue
+            if frozenset((a, b)) in done:
+                continue
+            done.add(frozenset((a, b)))
+            sxy = infl * max(fe.sigma_xy, 0.05)
+            fused.add_between(
+                ("T", a),
+                ("T", b),
+                fe.T,
+                [sxy, sxy, infl * max(fe.sigma_z, 0.05), infl * max(fe.sigma_yaw, 0.005)],
+            )
 
     # ------------------------------------------------------------------ outputs
     def trajectory(self, which: str = "fused") -> FloatArray:

@@ -11,6 +11,36 @@ All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)*
 The commit is recorded in every CSV under `results/` (git-ignored; re-run the
 command to regenerate).
 
+### L23. Why drift is not corrected: frames are free, and the cycle check blames the wrong edge
+
+Diagnostic on `fleet_transit_3uuv`, seed 2, 1 kbit/s (commit after `d8ff828`).
+Pairs from **both** ends reach `uuv_1`'s fused graph: 5–6 pairs with `uuv_2`
+at keyframes 0–55 (start) and 13 with `uuv_0`/UGV/UAV at keyframes 436–514
+(end). All whitened residuals are small (median 0.3–0.4, none > 2). The
+trajectory still does not bend, for two reasons:
+
+1. **Each neighbour's frame is a free variable** in the fused graph. The start
+   cluster pins T(`uuv_2`), the end cluster pins T(`uuv_0`), and nothing in the
+   graph ties the two frames together, so each absorbs its cluster rigidly.
+   Fix, implemented but **off by default**: `frame_links_in_fused` adds between
+   factors among neighbour frame variables from received, cycle-consistent
+   estimates (σ × 2 against double counting). Here it changes nothing,
+   because of reason 2.
+2. **The cycle check rejects the one link that would help.** `uuv_0`'s
+   alignment of `uuv_2` (4 inliers, correct) closes the cycle `uuv_2 → uuv_1
+   (start) … uuv_1 (end) → uuv_0`. That cycle is inconsistent *because of
+   `uuv_1`'s drift*, and the Kruskal pass blames its weakest edge. Both
+   `uuv_0` (veto) and `uuv_1` (rejected received estimate) drop it.
+   **Cycle consistency assumes rigid maps.** A cycle that passes through two
+   distant regions of a drifting agent's map needs a gate that grows with that
+   agent's odometry uncertainty between the two regions. Without it, the check
+   will veto correct edges exactly where collaboration matters most.
+
+Next (T-X1-02): add the drift term to the cycle gate (σ from the agent's own
+marginal between the keyframes that anchor each alignment), keep
+`frame_links_in_fused` on, and re-run `fleet_transit_3uuv` and the 50-seed
+cycle-check benchmark (which must stay at 0 wrong alignments).
+
 ### L22. Both transit ends surveyed by teammates: still no drift correction (negative)
 
 `fleet_transit_3uuv.yaml` (commit `fb84e56`): the 275 m transit of L19, with

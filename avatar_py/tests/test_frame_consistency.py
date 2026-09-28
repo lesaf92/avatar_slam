@@ -124,3 +124,13 @@ def test_windowed_association_never_loses_pairs():
             assert len(set(mine)) == len(mine) and len(set(rem)) == len(rem)
         n_base = sum(len(v) for v in got["base"][i].alignment_ids.values())
         assert sum(len(v) for v in ag.alignment_ids.values()) >= n_base
+
+
+def test_frame_links_couple_neighbour_frames_without_changing_rigid_runs():
+    # On a run without drift problems the links must not hurt (tolerance 5 %).
+    base = AvatarParams()
+    links = AvatarParams(frame_links_in_fused=True)
+    sc, sim = make_sim("harbor_fleet", 0, 300.0, base)
+    a = run_decentralized(sc, sim, base, 0).metrics["ate_team_m"]
+    b = run_decentralized(sc, sim, links, 0).metrics["ate_team_m"]
+    assert b <= 1.05 * a + 1e-3
