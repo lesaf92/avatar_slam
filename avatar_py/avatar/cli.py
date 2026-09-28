@@ -66,25 +66,50 @@ def _summary_row(res: RunResult) -> dict:
     return row
 
 
+def _parse_value(raw: str) -> object:
+    """``true``/``false`` → bool, ``a,b`` → list of numbers, else int/float/str."""
+    if raw.lower() in ("true", "false"):
+        return raw.lower() == "true"
+    if "," in raw:
+        return [_parse_value(v) for v in raw.split(",")]
+    for cast in (int, float):
+        try:
+            return cast(raw)
+        except ValueError:
+            continue
+    return raw
+
+
 def _scenario_kwargs(args) -> dict:
-    """Parse repeated ``--scenario-arg KEY=VALUE`` (int, float, bool or string)."""
-    out: dict = {}
+    """Scenario options: YAML ``--scenario-file`` ``args``, then ``--scenario-arg``.
+
+    Dotted keys nest: ``paths.uuv_0.kind=figure8`` →
+    ``{"paths": {"uuv_0": {"kind": "figure8"}}}``.
+    """
+    out: dict = dict(getattr(args, "_file_args", {}) or {})
     for item in args.scenario_arg or []:
         key, sep, raw = item.partition("=")
         if not sep:
             raise SystemExit(f"--scenario-arg expects KEY=VALUE, got {item!r}")
-        value: object = raw
-        if raw.lower() in ("true", "false"):
-            value = raw.lower() == "true"
-        else:
-            for cast in (int, float):
-                try:
-                    value = cast(raw)
-                    break
-                except ValueError:
-                    continue
-        out[key] = value
+        node = out
+        *parents, leaf = key.split(".")
+        for p in parents:
+            node = node.setdefault(p, {})
+        node[leaf] = _parse_value(raw)
     return out
+
+
+def _load_scenario_file(args) -> None:
+    """Apply ``--scenario-file``: sets scenario name and default options/duration."""
+    if not getattr(args, "scenario_file", None):
+        return
+    import yaml
+
+    doc = yaml.safe_load(Path(args.scenario_file).read_text()) or {}
+    args.scenario = doc.get("scenario", args.scenario)
+    if "duration_s" in doc and not args.duration_given:
+        args.duration = float(doc["duration_s"])
+    args._file_args = doc.get("args", {})
 
 
 def cmd_run(args) -> int:
@@ -193,12 +218,18 @@ def main(argv: list[str] | None = None) -> int:
     def common(p):
         p.add_argument("--scenario", default="harbor", help="harbor | harbor_fleet")
         p.add_argument(
+            "--scenario-file",
+            metavar="YAML",
+            help="scenario name, duration and options from a YAML file "
+            "(see experiments/scenarios/); --scenario-arg overrides it",
+        )
+        p.add_argument(
             "--scenario-arg",
             action="append",
             metavar="KEY=VALUE",
             help="scenario option, e.g. acoustic=x150, n_uuv=3, with_usv=true (repeatable)",
         )
-        p.add_argument("--duration", type=float, default=300.0, help="mission length [s]")
+        p.add_argument("--duration", type=float, default=None, help="mission length [s] (300)")
 
     p = sub.add_parser("run", help="one mode, one seed")
     common(p)
@@ -221,8 +252,23 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--out", default="viz/data/harbor.json")
     p.set_defaults(func=cmd_export_viz)
 
+    p = sub.add_parser("trajectories", help="list the trajectory library and its parameters")
+    p.set_defaults(func=cmd_trajectories)
+
     args = ap.parse_args(argv)
+    if hasattr(args, "duration"):
+        args.duration_given = args.duration is not None
+        if args.duration is None:
+            args.duration = 300.0
+        _load_scenario_file(args)
     return int(args.func(args))
+
+
+def cmd_trajectories(args) -> int:
+    from avatar.sim.trajectories import describe_library
+
+    print(describe_library())
+    return 0
 
 
 if __name__ == "__main__":

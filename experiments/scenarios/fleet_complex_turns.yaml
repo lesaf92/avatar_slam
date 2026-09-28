@@ -1,0 +1,10 @@
+# Complex turns: figure-8 and zig-zag paths stress gyro scale error and heading drift.
+scenario: harbor_fleet
+duration_s: 600
+args:
+  acoustic: m64
+  n_uuv: 2
+  paths:
+    uav_0: {kind: zigzag, start: [2, -6.5], z: 5.0, length: 58, width: 13, legs: 8, speed_mps: 1.0}
+    uuv_0: {kind: figure8, start: [30, 0], z: -4.0, length: 40, width: 16, speed_mps: 0.5}
+    uuv_1: {kind: zigzag, start: [6, -20], z: -5.0, length: 50, width: 14, legs: 10, speed_mps: 0.5}

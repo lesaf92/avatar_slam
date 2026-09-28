@@ -1,0 +1,10 @@
+# Surfacing windows (T-C4-01): uuv_0 yo-yos to the surface and carries a Wi-Fi radio,
+# so it can burst over RF while surfaced; underwater it uses the M64 modem.
+scenario: harbor_fleet
+duration_s: 600
+args:
+  acoustic: m64
+  n_uuv: 2
+  paths:
+    uuv_0: {kind: yoyo, start: [2, 0], z: -8.0, z_top: 0.0, length: 58, period: 40,
+            speed_mps: 0.5, comm: [acoustic, rf]}

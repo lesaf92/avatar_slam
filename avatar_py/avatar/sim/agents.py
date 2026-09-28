@@ -19,8 +19,12 @@ class OdometryNoise:
     ``σ = sqrt(σ0² + k² d)`` (random-walk drift). ``yaw_bias_std_rad_per_m`` draws
     a constant per-agent heading bias (rad per metre), and ``scale_bias_std`` a
     constant per-agent scale error on translation (e.g. the ±1 % long-term
-    accuracy of a DVL). The estimator does **not** know about either bias, which
-    models unmodelled systematic drift.
+    accuracy of a DVL). Turning costs heading accuracy: ``sigma_yaw_per_rad``
+    adds random yaw noise proportional to the angle turned, and
+    ``yaw_scale_bias_std`` draws a per-agent gyro scale-factor error
+    (``Δψ_meas = (1 + s)·Δψ``). The estimator knows the random terms but **not**
+    the biases, which model unmodelled systematic drift. Complex turns
+    therefore hurt, and more so with poorer gyros.
     """
 
     sigma_xy_per_sqrt_m: float = 0.03
@@ -31,13 +35,19 @@ class OdometryNoise:
     sigma_yaw_floor_rad: float = 0.001
     yaw_bias_std_rad_per_m: float = 5e-4
     scale_bias_std: float = 0.0
+    sigma_yaw_per_rad: float = 0.0
+    yaw_scale_bias_std: float = 0.0
 
-    def sigmas(self, distance_m: float) -> NDArray[np.float64]:
-        """Nominal 1-σ of an increment ``[x, y, z, yaw]`` after ``distance_m``."""
+    def sigmas(self, distance_m: float, turn_rad: float = 0.0) -> NDArray[np.float64]:
+        """Nominal 1-σ of an increment ``[x, y, z, yaw]`` after ``distance_m`` and a turn."""
         d = max(distance_m, 0.0)
         sxy = np.hypot(self.sigma_xy_floor_m, self.sigma_xy_per_sqrt_m * np.sqrt(d))
         sz = np.hypot(self.sigma_z_floor_m, self.sigma_z_per_sqrt_m * np.sqrt(d))
-        syaw = np.hypot(self.sigma_yaw_floor_rad, self.sigma_yaw_per_sqrt_m * np.sqrt(d))
+        syaw = np.sqrt(
+            self.sigma_yaw_floor_rad**2
+            + (self.sigma_yaw_per_sqrt_m**2) * d
+            + (self.sigma_yaw_per_rad * abs(turn_rad)) ** 2
+        )
         return np.array([sxy, sxy, sz, syaw])
 
 
@@ -52,18 +62,29 @@ ODOMETRY_DEFAULTS: dict[Domain, OdometryNoise] = {
 # Reference-fleet odometry (docs/hardware.md). Order-of-magnitude values for the
 # estimators these platforms would run; tune after the first field logs (T-H1-01).
 PLATFORM_ODOMETRY: dict[str, OdometryNoise] = {
-    # Husky + VLP-16 LiDAR-inertial odometry (wheel odometry as fallback).
-    "husky_lio": OdometryNoise(0.02, 0.01, 0.0015, yaw_bias_std_rad_per_m=3e-4),
+    # Husky + VLP-16 LiDAR-inertial odometry (wheel odometry as fallback); skid-steer
+    # pivots are where wheel odometry is worst, LIO keeps the gyro scale error small.
+    "husky_lio": OdometryNoise(
+        0.02, 0.01, 0.0015, yaw_bias_std_rad_per_m=3e-4,
+        sigma_yaw_per_rad=0.005, yaw_scale_bias_std=0.002,
+    ),
     # Tarot 680 + D435i visual-inertial odometry fused with the Cube IMU.
-    "tarot_vio": OdometryNoise(0.04, 0.02, 0.003, yaw_bias_std_rad_per_m=5e-4),
+    "tarot_vio": OdometryNoise(
+        0.04, 0.02, 0.003, yaw_bias_std_rad_per_m=5e-4,
+        sigma_yaw_per_rad=0.01, yaw_scale_bias_std=0.005,
+    ),
     # BlueROV2 + DVL A50 dead reckoning (±1.01 % long-term accuracy, standard model);
     # heading from the vehicle IMU/compass, degraded near steel structures.
     "bluerov2_dvl": OdometryNoise(
-        0.01, 0.005, 0.002, yaw_bias_std_rad_per_m=1.5e-3, scale_bias_std=0.01
+        0.01, 0.005, 0.002, yaw_bias_std_rad_per_m=1.5e-3, scale_bias_std=0.01,
+        sigma_yaw_per_rad=0.02, yaw_scale_bias_std=0.01,
     ),
     # BlueBoat (optional) with D435i VIO and GNSS-denied operation near the quay.
-    "blueboat_vio": OdometryNoise(0.04, 0.005, 0.003, yaw_bias_std_rad_per_m=1e-3),
-}
+    "blueboat_vio": OdometryNoise(
+        0.04, 0.005, 0.003, yaw_bias_std_rad_per_m=1e-3,
+        sigma_yaw_per_rad=0.01, yaw_scale_bias_std=0.005,
+    ),
+}  # fmt: skip
 
 ROLES = ("slam", "gateway")
 

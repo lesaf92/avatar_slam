@@ -59,6 +59,8 @@ pip install -e "avatar_py[dev]"
 pytest avatar_py/tests -q
 avatar compare --scenario harbor --duration 300 --seeds 0      # independent vs. decentralized vs. oracle
 avatar compare --scenario harbor_fleet --duration 600 --scenario-arg acoustic=m64   # reference fleet
+avatar compare --scenario-file experiments/scenarios/fleet_complex_turns.yaml       # choose paths/heights
+avatar trajectories                                                                  # list path types
 avatar export-viz --duration 300 --out viz/data/harbor_seed0.json
 python -m http.server -d viz 8000                              # open http://localhost:8000/scenario_viewer.html
 

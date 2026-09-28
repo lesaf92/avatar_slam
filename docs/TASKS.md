@@ -40,7 +40,8 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-C3-01 | Surface gateway: store-and-forward relay RF ↔ acoustic with dedup (v0 policy, ADR-0006) | P0 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | UAV↔UUV alignment through the relay in `harbor_fleet` (test_fleet.py) |
 | T-S4-03 | `harbor_fleet` scenario: the PI's reference fleet (Husky, Tarot 680, BlueROV2, gateway, optional BlueBoat) with device-specific sensor, odometry, and channel profiles | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Team connects over M64 (LOG L6) |
 | T-C1-02 | Token-bucket budgets per (node, link); frame alignments inside the budget; no descriptors on acoustic | P0 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Acoustic bytes ≤ modem capacity (test) |
-| T-C4-01 | Surfacing windows (AUV RF bursts when z > −0.5 m) | P1 | T-C1-01 | todo | | Scenario + test |
+| T-C4-01 | Surfacing windows (AUV RF bursts when z > −0.3 m) | P1 | T-C1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | `fleet_surfacing.yaml` + test (RF only while surfaced) |
+| T-S4-04 | Trajectory library (10 kinds + CSV replay), per-agent start/height/heading/speed overrides, YAML presets, turn-dependent odometry error (PI request) | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | `test_trajectories.py`; LOG L9 |
 | T-C6-01 | Modem-M64 driver + link adapter: fragment ≤ 64 B wire packets into modem frames, reassemble, drop incomplete (verify the M64 frame size) | P0 | – | todo | | Loopback test with the recorded frame format |
 | T-C7-01 | Gateway policy v1: VoI-based RF→acoustic selection (shares code with T-C2-01) | P1 | T-C2-01 | todo | | Beats the class-priority v0 on time-to-team-connection |
 | T-C5-01 | Bandwidth (100 bps–10 kbps) and loss sweep experiment → `paper/data/` | P1 | T-C2-01 | todo | | CSV + figure script |

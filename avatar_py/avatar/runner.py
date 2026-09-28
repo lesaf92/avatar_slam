@@ -176,9 +176,15 @@ def run_decentralized(
                 if slam_ids <= set(chain_frames(anchor_id, edges)):
                     team_connected_s = float(t)
             for i, ag in agents.items():
+                z_now = float(sim.agents[i].gt[k, 2])
                 for link in ag.cfg.comm:
                     ch = scenario.channels[link]
                     avail, cap = budget(i, link)
+                    if not ch.medium_ok(z_now, z_now):
+                        # e.g. RF while submerged: the vehicle knows its depth and stays
+                        # silent; its budget keeps accruing for the next surfacing window.
+                        carry[(i, link)] = min(avail, cap)
+                        continue
                     digests = ag.build_digests(t, link, int(avail), ch.mtu_B)
                     used = send_all(t, i, link, digests, avail)
                     used += send_all(t, i, link, ag.build_alignment_messages(t), avail - used)

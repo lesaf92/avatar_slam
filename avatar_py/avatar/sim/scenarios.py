@@ -23,6 +23,7 @@ import numpy as np
 
 from avatar.comm.channel import ACOUSTIC_DEFAULT, CHANNEL_PROFILES, RF_DEFAULT, ChannelModel
 from avatar.sim.agents import PLATFORM_ODOMETRY, AgentConfig, lawnmower, rectangle
+from avatar.sim.trajectories import TrajectorySpec
 from avatar.sim.world import Structure, World
 from avatar.types import Domain, LinkType
 
@@ -200,12 +201,31 @@ def harbor(rng: np.random.Generator, n_auv: int = 2, include_air_ground: bool = 
     return Scenario("harbor", world, agents, anchor_id=0)
 
 
+def fleet_default_paths(land_z: float = 1.5) -> dict[str, TrajectorySpec]:
+    """Default trajectories of the reference fleet (``harbor_fleet``)."""
+    T = TrajectorySpec
+    return {
+        "ugv_0": T("rectangle", (-14.0, -50.0), land_z + 0.7, 0.0, 1.0,
+                   {"length": 11.0, "width": 105.0}),
+        # 2.5 m stand-off around pier A's pile rows, 3 m up (D435i range ≈ 6 m).
+        "uav_0": T("rectangle", (2.0, -6.5), 3.0, 0.0, 1.0, {"length": 58.0, "width": 13.0}),
+        "uuv_0": T("lawnmower", (2.0, -8.0), -4.0, 0.0, 0.5,
+                   {"length": 58.0, "width": 16.0, "spacing": 8.0}),
+        "uuv_1": T("rectangle", (8.0, -18.0), -5.0, 0.0, 0.5, {"length": 42.0, "width": 56.0}),
+        "uuv_2": T("lawnmower", (10.0, 38.0), -3.0, 0.0, 0.5,
+                   {"length": 35.0, "width": 14.0, "spacing": 7.0}),
+        "gw_0": T("hold", (0.5, 0.0), 0.0),
+        "usv_0": T("rectangle", (6.0, -20.0), 0.0, 0.0, 1.0, {"length": 60.0, "width": 40.0}),
+    }  # fmt: skip
+
+
 def harbor_fleet(
     rng: np.random.Generator,
     n_uuv: int = 2,
     acoustic: str = "m64",
     rf: str = "wifi_mesh",
     with_usv: bool = False,
+    paths: dict[str, dict] | None = None,
 ) -> Scenario:
     """Harbour world with the PI's **reference fleet** (ADR-0006, docs/hardware.md).
 
@@ -221,81 +241,55 @@ def harbor_fleet(
     * optional ``usv_0``: BlueBoat with D435i above and a Gemini below (bridge).
 
     ``acoustic``/``rf`` select entries of ``avatar.comm.channel.CHANNEL_PROFILES``.
+    ``paths`` overrides trajectories per agent name with any
+    :class:`~avatar.sim.trajectories.TrajectorySpec` field or shape parameter,
+    e.g. ``{"uuv_0": {"kind": "figure8", "start": [20, 0], "z": -6, "length": 30}}``
+    (defaults: :func:`fleet_default_paths`). An AUV path that reaches
+    ``z > -0.3 m`` gives the vehicle an RF window only if it also has ``"rf"`` in
+    ``paths[name]["comm"]``.
     """
     world = harbor_world(rng)
     RF, AC = LinkType.RF, LinkType.ACOUSTIC
     odo = PLATFORM_ODOMETRY
-    land = world.land_z
+    paths = paths or {}
+    unknown = set(paths) - {"ugv_0", "uav_0", "gw_0", "usv_0"} - {f"uuv_{k}" for k in range(n_uuv)}
+    if unknown:
+        raise ValueError(f"paths given for unknown agents: {sorted(unknown)}")
+    defaults = fleet_default_paths(world.land_z)
+
+    def spec(name: str) -> tuple[TrajectorySpec, tuple[LinkType, ...] | None]:
+        over = dict(paths.get(name, {}))
+        comm = over.pop("comm", None)
+        base = defaults.get(name) or defaults[f"uuv_{int(name.split('_')[1]) % 3}"]
+        links = None
+        if comm is not None:
+            links = tuple({"rf": RF, "acoustic": AC}[c.lower()] for c in comm)
+        return base.with_overrides(over), links
+
+    def agent(aid, name, domain, sensors, comm, **kw) -> AgentConfig:
+        sp, links = spec(name)
+        return AgentConfig(
+            aid, name, domain, sp.waypoints(), sp.speed_mps, sensors=sensors,
+            comm=links or comm, loop=sp.loop, extra={"trajectory": sp}, **kw,
+        )  # fmt: skip
+
     agents = [
-        AgentConfig(
-            0,
-            "ugv_0",
-            Domain.GROUND,
-            rectangle((-14, -3), (-50, 55), land + 0.7),
-            1.0,
-            sensors=("vlp16", "d435i"),
-            comm=(RF,),
-            odometry=odo["husky_lio"],
-        ),
-        AgentConfig(
-            1,
-            "uav_0",
-            Domain.AERIAL,
-            rectangle((2, 60), (-6.5, 6.5), 3.0),  # 2.5 m stand-off around pier A's pile rows
-            1.0,
-            sensors=("d435i_down30",),
-            comm=(RF,),
-            absolute_z="baro",
-            odometry=odo["tarot_vio"],
-        ),
-    ]
-    uuv_paths = [
-        (lawnmower((2, 60), (-8, 8), 8.0, -4.0), 0.5),
-        (rectangle((8, 50), (-18, 38), -5.0), 0.5),
-        (lawnmower((10, 45), (38, 52), 7.0, -3.0), 0.5),
-    ]
+        agent(0, "ugv_0", Domain.GROUND, ("vlp16", "d435i"), (RF,), odometry=odo["husky_lio"]),
+        agent(1, "uav_0", Domain.AERIAL, ("d435i_down30",), (RF,), absolute_z="baro",
+              odometry=odo["tarot_vio"]),
+    ]  # fmt: skip
     for k in range(n_uuv):
-        wp, v = uuv_paths[k % len(uuv_paths)]
         agents.append(
-            AgentConfig(
-                2 + k,
-                f"uuv_{k}",
-                Domain.UNDERWATER,
-                wp,
-                v,
-                sensors=("gemini_720s", "bluerov2_camera"),
-                comm=(AC,),
-                absolute_z="bar30",
-                odometry=odo["bluerov2_dvl"],
-            )
-        )
+            agent(2 + k, f"uuv_{k}", Domain.UNDERWATER, ("gemini_720s", "bluerov2_camera"),
+                  (AC,), absolute_z="bar30", odometry=odo["bluerov2_dvl"])
+        )  # fmt: skip
     gw_id = 2 + n_uuv
-    agents.append(
-        AgentConfig(
-            gw_id,
-            "gw_0",
-            Domain.SURFACE,
-            np.array([(0.5, 0.0, 0.0)] * 2),
-            1.0,
-            sensors=(),
-            comm=(RF, AC),
-            role="gateway",
-        )
-    )
+    agents.append(agent(gw_id, "gw_0", Domain.SURFACE, (), (RF, AC), role="gateway"))
     if with_usv:
         agents.append(
-            AgentConfig(
-                gw_id + 1,
-                "usv_0",
-                Domain.SURFACE,
-                rectangle((6, 66), (-20, 20), 0.0),
-                1.0,
-                sensors=("d435i", "gemini_720s"),
-                comm=(RF, AC),
-                absolute_z="surface",
-                odometry=odo["blueboat_vio"],
-            )
-        )
+            agent(gw_id + 1, "usv_0", Domain.SURFACE, ("d435i", "gemini_720s"), (RF, AC),
+                  absolute_z="surface", odometry=odo["blueboat_vio"])
+        )  # fmt: skip
     channels = {RF: CHANNEL_PROFILES[rf], AC: CHANNEL_PROFILES[acoustic]}
     return Scenario("harbor_fleet", world, agents, channels=channels, anchor_id=0)
 

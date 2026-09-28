@@ -47,6 +47,7 @@ flowchart TB
 | Frames, 4-DoF algebra | `geometry.py` ✅ | `frames.hpp/.cpp` ✅ | TF conventions (`conventions.md` §7) |
 | Semantics | `semantics.py` ✅ | – | – |
 | World / agents / sensors | `sim/world.py`, `sim/agents.py`, `sim/sensors.py`, `sim/measurements.py`, `sim/scenarios.py` ✅ | – | Gazebo worlds 🔜 |
+| Trajectory library | `sim/trajectories.py` ✅: 10 kinds + CSV replay, `TrajectorySpec`, YAML presets in `experiments/scenarios/` | – | – |
 | Channel + network | `comm/channel.py` (incl. Wi-Fi mesh, M64, X150 profiles), `comm/network.py` ✅ | – | comm emulator node 🔜 |
 | Surface gateway relay | `comm/gateway.py` ✅ (ADR-0006) | – | gateway node 🔜 |
 | Wire codec | `comm/codec.py` ✅ | `comm/codec.hpp/.cpp` ✅ | `EncodedPacket.msg` ✅ |
@@ -135,6 +136,14 @@ Reference fleet (`harbor_fleet`, ADR-0006, [`hardware.md`](hardware.md)):
 | `wifi_mesh` | 10 Mbps | 5 ms | 250 m | 1400 B |
 | `m64` | 64 bps | 2.0 s + d/1500 | 200 m | 64 B |
 | `x150` | 100 bps | 1.0 s (UNVERIFIED) | 1000 m | 64 B |
+
+**Trajectories.** Every fleet agent follows a `TrajectorySpec` (kind, start,
+z, heading, speed, shape parameters). Override it per agent with
+`--scenario-arg paths.<agent>.<field>=<value>` or a YAML preset
+(`--scenario-file`). Odometry includes turn-dependent yaw noise and a gyro
+scale-factor bias, so sharp and frequent turns cost heading accuracy. A vehicle
+stays silent on a link its medium cannot carry: RF while submerged, which gives
+surfacing windows.
 
 Known simplifications (all are tracked tasks): oracle intra-agent data
 association (T-S1-04), no occlusion (T-S1-03), static water level, 4-DoF only

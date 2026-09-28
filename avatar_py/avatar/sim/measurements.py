@@ -98,6 +98,11 @@ def generate_measurements(
         noise = cfg.odometry_noise
         bias = float(rng.normal(0.0, noise.yaw_bias_std_rad_per_m))
         scale = 1.0 + float(rng.normal(0.0, noise.scale_bias_std)) if noise.scale_bias_std else 1.0
+        yaw_scale = (
+            1.0 + float(rng.normal(0.0, noise.yaw_scale_bias_std))
+            if noise.yaw_scale_bias_std
+            else 1.0
+        )
         sensors = [SENSOR_LIBRARY[name] for name in cfg.sensors]
         kfs: list[KeyframeData] = []
         for k, t in enumerate(times):
@@ -105,10 +110,10 @@ def generate_measurements(
             if k > 0:
                 true_inc = between(gt[k - 1], gt[k])
                 dist = float(np.linalg.norm(true_inc[:3]))
-                odom_sig = noise.sigmas(dist)
+                odom_sig = noise.sigmas(dist, float(true_inc[3]))
                 odom = true_inc + rng.normal(0.0, odom_sig)
                 odom[:3] = scale * odom[:3]
-                odom[3] += bias * dist
+                odom[3] += bias * dist + (yaw_scale - 1.0) * true_inc[3]
             dets: list[Detection] = []
             for sensor in sensors:
                 dets.extend(
