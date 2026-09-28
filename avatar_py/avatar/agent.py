@@ -27,6 +27,7 @@ from avatar.backend.graph import FactorGraph, VarType
 from avatar.comm import codec
 from avatar.comm.scheduler import AlignmentInformation, match_probability, select_voi
 from avatar.frontend.association import Alignment, AssociationParams, LandmarkSet, align
+from avatar.frontend.frame_consistency import CycleGate, FrameEdge, consistent_subset
 from avatar.geometry import compose, transform_points
 from avatar.semantics import normalize
 from avatar.sim.agents import AgentConfig
@@ -58,6 +59,8 @@ class AvatarParams:
     local_iters: int = 10
     fused_iters: int = 15
     association: AssociationParams = field(default_factory=AssociationParams)
+    cycle_check: bool = True  # team frame-graph cycle consistency (T-X2-02)
+    cycle_gate: CycleGate = field(default_factory=CycleGate)
 
 
 @dataclass
@@ -141,6 +144,10 @@ class AvatarAgent:
         self.alignments: dict[int, Alignment] = {}
         self.alignment_ids: dict[int, list[tuple[int, int, bool]]] = {}
         self.frames: dict[tuple[int, int], FrameEstimate] = {}
+        # Neighbours' estimates of T_j_from_self: evidence for the cycle check only.
+        self.frames_about_me: dict[int, FrameEstimate] = {}
+        self.vetoed: set[int] = set()  # own alignments rejected by the cycle check
+        self.rejected_frames: set[tuple[int, int]] = set()  # received ones rejected
         self.seq = 0
         self.decode_errors = 0
         # Domains whose agents (directly or through a gateway) receive each link.
@@ -376,9 +383,7 @@ class AvatarAgent:
             self.inbox_domain[msg.sender_id] = msg.domain
             self._dirty.add(msg.sender_id)
         elif isinstance(msg, codec.FrameAlignment):
-            if msg.other_id == self.id:
-                return  # our own frame relative to the sender: we estimate it ourselves
-            self.frames[(msg.sender_id, msg.other_id)] = FrameEstimate(
+            fe = FrameEstimate(
                 np.array([msg.x, msg.y, msg.z, msg.yaw]),
                 msg.sigma_xy,
                 msg.sigma_z,
@@ -386,6 +391,12 @@ class AvatarAgent:
                 msg.n_inliers,
                 source=msg.sender_id,
             )
+            if msg.other_id == self.id:
+                # our frame relative to the sender: we estimate it ourselves, but it
+                # closes a 2-cycle with our own alignment of the sender
+                self.frames_about_me[msg.sender_id] = fe
+                return
+            self.frames[(msg.sender_id, msg.other_id)] = fe
 
     def _my_landmarks(self) -> tuple[LandmarkSet, list[int]]:
         lids = list(self._lm_cache)
@@ -451,6 +462,47 @@ class AvatarAgent:
                 (my_ids[i], remote_ids[j], cross) for i, j, cross in res.pairs
             ]
         self._dirty.clear()
+        self.check_cycles()
+
+    def check_cycles(self) -> None:
+        """Veto frame estimates that break a cycle of the team frame graph (T-X2-02).
+
+        Uses this agent's own alignments, the ``FRAME_ALIGNMENT`` estimates it
+        received, and the neighbours' estimates of its own frame. Own vetoed
+        alignments are left out of the fused graph and are not advertised;
+        vetoed received estimates are ignored by :meth:`consistent_frames`.
+        The check is re-run from scratch every time, so a veto is lifted when
+        new evidence makes the estimate consistent again.
+        """
+        self.vetoed, self.rejected_frames = set(), set()
+        if not self.params.cycle_check:
+            return
+        own = {
+            s: FrameEdge(self.id, s, a.T_mine_from_remote, a.sigma_xy_m, a.sigma_yaw_rad,
+                         a.n_inliers)
+            for s, a in self.alignments.items()
+        }  # fmt: skip
+        received = {
+            k: FrameEdge(k[0], k[1], fe.T, fe.sigma_xy, fe.sigma_yaw, fe.n_inliers)
+            for k, fe in self.frames.items()
+            if fe.source != self.id
+        }
+        about_me = [
+            FrameEdge(j, self.id, fe.T, fe.sigma_xy, fe.sigma_yaw, fe.n_inliers)
+            for j, fe in self.frames_about_me.items()
+        ]
+        _, rejected = consistent_subset(
+            [*own.values(), *received.values(), *about_me], self.params.cycle_gate
+        )
+        bad = {id(e) for e in rejected}
+        self.vetoed = {s for s, e in own.items() if id(e) in bad}
+        self.rejected_frames = {k for k, e in received.items() if id(e) in bad}
+        for s in self.vetoed:
+            self.frames.pop((self.id, s), None)
+
+    def consistent_frames(self) -> dict[tuple[int, int], FrameEstimate]:
+        """Known ``T_a_from_b`` estimates that passed the cycle check."""
+        return {k: fe for k, fe in self.frames.items() if k not in self.rejected_frames}
 
     # ------------------------------------------------------------------ fused solve
     def solve_fused(self) -> None:
@@ -459,6 +511,8 @@ class AvatarAgent:
         p = self.params
         frame_keys = []
         for sender, pairs in self.alignment_ids.items():
+            if sender in self.vetoed:
+                continue
             fkey = ("T", sender)
             init = self.alignments[sender].T_mine_from_remote
             if self.fused is not None and self.fused.has(fkey):

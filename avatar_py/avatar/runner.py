@@ -192,7 +192,8 @@ def run_decentralized(
                 for j in ag.alignments:
                     first_align[i].setdefault(j, float(t))
             if team_connected_s is None:
-                edges = {kk: (fe.T, fe.sigma_xy) for kk, fe in agents[anchor_id].frames.items()}
+                known = agents[anchor_id].consistent_frames()
+                edges = {kk: (fe.T, fe.sigma_xy) for kk, fe in known.items()}
                 if slam_ids <= set(chain_frames(anchor_id, edges)):
                     team_connected_s = float(t)
             for i, ag in agents.items():
@@ -223,7 +224,7 @@ def run_decentralized(
         ag.solve_fused()
 
     anchor = scenario.anchor_id
-    known = agents[anchor].frames
+    known = agents[anchor].consistent_frames()
     edges = {k: (fe.T, fe.sigma_xy) for k, fe in known.items()}
     T_anchor_from = chain_frames(anchor, edges)
     fused = {i: ag.trajectory("fused") for i, ag in agents.items()}
@@ -263,6 +264,7 @@ def run_decentralized(
         "comm": stats,
         "decode_errors": sum(ag.decode_errors for ag in agents.values()),
         "first_alignment_s": first_align,
+        "vetoed_alignments": sum(len(ag.vetoed) for ag in agents.values()),
         "team_connected_s": team_connected_s,
         "gateways": {g: dict(gw.stats) for g, gw in gateways.items()},
     }

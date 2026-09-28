@@ -1,0 +1,79 @@
+"""Team frame-graph cycle consistency (T-X2-02)."""
+
+import numpy as np
+import pytest
+
+from avatar.agent import AvatarParams
+from avatar.frontend.frame_consistency import (
+    CycleGate,
+    FrameEdge,
+    consistent_subset,
+    cycle_error,
+    is_consistent,
+)
+from avatar.geometry import compose, inverse
+from avatar.runner import make_sim, run_decentralized
+
+# Ground-truth world_from_agent frames of four agents [x, y, z, yaw].
+WORLD = {
+    0: np.array([0.0, 0.0, 0.0, 0.0]),
+    1: np.array([30.0, -5.0, 3.0, 0.7]),
+    2: np.array([10.0, 20.0, -4.0, -1.2]),
+    3: np.array([-15.0, 8.0, -2.0, 2.5]),
+}
+
+
+def true_edge(a: int, b: int, n: int = 20, s: float = 0.1, sy: float = 0.005) -> FrameEdge:
+    T = compose(inverse(WORLD[a]), WORLD[b])
+    return FrameEdge(a, b, T, s, sy, n)
+
+
+def test_true_cycles_close_exactly():
+    path = [(true_edge(0, 1), True), (true_edge(2, 1), False)]  # 0 → 1 → 2
+    dxy, dyaw = cycle_error(true_edge(0, 2), path)
+    assert dxy == pytest.approx(0.0, abs=1e-9) and dyaw == pytest.approx(0.0, abs=1e-9)
+    assert is_consistent(true_edge(0, 2), path)
+
+
+def test_weak_wrong_edge_is_rejected_and_strong_ones_kept():
+    bad_T = compose(true_edge(0, 2).T, np.array([6.0, -3.0, 0.0, 0.2]))  # aliasing offset
+    bad = FrameEdge(0, 2, bad_T, 0.1, 0.005, 8)
+    edges = [true_edge(0, 1, 30), true_edge(1, 2, 25), bad, true_edge(3, 0, 12)]
+    accepted, rejected = consistent_subset(edges)
+    assert rejected == [bad]
+    assert len(accepted) == 3  # the dangling 3–0 edge has no cycle: kept
+
+
+def test_parallel_estimates_form_a_two_cycle():
+    good = true_edge(0, 1, 20)
+    rev = true_edge(1, 0, 15)  # the other agent's own estimate, other direction
+    wrong = FrameEdge(1, 0, compose(rev.T, np.array([0.0, 4.0, 0.0, 0.0])), 0.1, 0.005, 10)
+    accepted, rejected = consistent_subset([good, rev, wrong])
+    assert rejected == [wrong] and set(map(id, accepted)) == {id(good), id(rev)}
+
+
+def test_gate_scales_with_uncertainty():
+    # A 2 m discrepancy is rejected for precise edges, accepted for loose ones.
+    off = compose(true_edge(0, 2).T, np.array([2.0, 0.0, 0.0, 0.0]))
+    path = [(true_edge(0, 1), True), (true_edge(1, 2), True)]
+    assert not is_consistent(FrameEdge(0, 2, off, 0.1, 0.001, 8), path)
+    assert is_consistent(FrameEdge(0, 2, off, 1.0, 0.001, 8), path)
+    assert is_consistent(FrameEdge(0, 2, off, 0.1, 0.001, 8), path, CycleGate(min_xy_m=2.5))
+
+
+def test_ties_and_order_do_not_change_the_result():
+    bad = FrameEdge(0, 2, compose(true_edge(0, 2).T, np.array([5.0, 5.0, 0, 0])), 0.1, 0.005, 8)
+    edges = [true_edge(0, 1, 30), true_edge(1, 2, 25), bad]
+    rng = np.random.default_rng(0)
+    for _ in range(5):
+        perm = [edges[i] for i in rng.permutation(3)]
+        assert consistent_subset(perm)[1] == [bad]
+
+
+def test_cycle_check_keeps_the_fleet_run_intact():
+    # No wrong alignments in this run: the check must not veto correct ones.
+    params = AvatarParams()
+    sc, sim = make_sim("harbor_fleet", 0, 300.0, params)
+    res = run_decentralized(sc, sim, params, 0)
+    assert res.metrics["team_connected_s"] is not None
+    assert res.metrics["vetoed_alignments"] == 0

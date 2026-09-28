@@ -5,7 +5,9 @@ Every agent maps for ``--duration`` seconds alone, then receives every other
 agent's full digest (unlimited links, *including* pairs that could not talk
 physically, e.g. UAV↔AUV) and aligns. We report, per seed, how many
 alignments were accepted, how many pairs they contain, and the fraction of
-pairs that link the same ground-truth structure.
+pairs that link the same ground-truth structure. A second round exchanges the
+resulting frame estimates and runs the team frame-graph cycle check (T-X2-02):
+we count wrong alignments before and after it, and correct ones it vetoed.
 
     python experiments/association_precision.py --seeds 0 1 2 3 4 --duration 90
     python experiments/association_precision.py --scenario harbor_fleet --duration 300
@@ -49,6 +51,17 @@ def evaluate(seed: int, duration_s: float, params: AvatarParams, scenario_name: 
                 for pkt in pkts:
                     rx.on_packet(pkt)
         rx.update_alignments()
+    # Round 2: every agent advertises its frame estimates; the team frame-graph
+    # cycle check (T-X2-02) then vetoes alignments that break a cycle.
+    for ag in agents.values():
+        ag.solve_fused()
+    frames = {i: ag.build_alignment_messages(0.0) for i, ag in agents.items()}
+    for rx in agents.values():
+        for tx, pkts in frames.items():
+            if tx != rx.id:
+                for pkt in pkts:
+                    rx.on_packet(pkt)
+        rx.check_cycles()
     inv = {a: {lid: p for p, lid in ag._lid_of_part.items()} for a, ag in agents.items()}
     parts = data.world.parts
     out = {"seed": seed, "links": {}}
@@ -60,11 +73,19 @@ def evaluate(seed: int, duration_s: float, params: AvatarParams, scenario_name: 
             )
             n_all += len(pairs)
             n_ok += ok
-            out["links"][f"{rx}<-{tx}"] = {"pairs": len(pairs), "correct": ok}
+            out["links"][f"{rx}<-{tx}"] = {
+                "pairs": len(pairs),
+                "correct": ok,
+                "vetoed": tx in ag.vetoed,
+            }
+    links = out["links"].values()
     out["accepted_alignments"] = sum(len(ag.alignment_ids) for ag in agents.values())
     out["possible_alignments"] = len(agents) * (len(agents) - 1)
     out["pair_precision"] = n_ok / n_all if n_all else float("nan")
-    out["wrong_alignments"] = sum(1 for v in out["links"].values() if v["correct"] < v["pairs"] / 2)
+    wrong = [v for v in links if v["correct"] < v["pairs"] / 2]
+    out["wrong_alignments"] = len(wrong)
+    out["wrong_after_cycle_check"] = sum(1 for v in wrong if not v["vetoed"])
+    out["correct_vetoed"] = sum(1 for v in links if v["vetoed"] and v["correct"] >= v["pairs"] / 2)
     return out
 
 
@@ -82,12 +103,19 @@ def main() -> None:
             print(json.dumps(r))
         print(
             f"seed {r['seed']}: accepted {r['accepted_alignments']}/{r['possible_alignments']}"
-            f"  wrong {r['wrong_alignments']}  pair precision {r['pair_precision']:.3f}"
+            f"  wrong {r['wrong_alignments']} (after cycle check "
+            f"{r['wrong_after_cycle_check']}, correct vetoed {r['correct_vetoed']})"
+            f"  pair precision {r['pair_precision']:.3f}"
         )
     prec = [r["pair_precision"] for r in rows]
+
+    def total(key: str) -> int:
+        return sum(r[key] for r in rows)
+
     print(
-        f"mean pair precision {np.nanmean(prec):.3f}; "
-        f"total wrong alignments {sum(r['wrong_alignments'] for r in rows)}"
+        f"mean pair precision {np.nanmean(prec):.3f}; total wrong alignments "
+        f"{total('wrong_alignments')}, after cycle check {total('wrong_after_cycle_check')}; "
+        f"correct alignments vetoed {total('correct_vetoed')}"
     )
 
 

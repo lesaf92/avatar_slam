@@ -89,9 +89,9 @@ def main() -> None:
         for s in args.seeds
         for sch in SCHEDULERS
     ]
+    rev = commit()  # before running: the tree may change while the pool works
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         rows = list(pool.map(run_one, jobs))
-    rev = commit()
     for r in rows:
         r["commit"] = rev
         print(
