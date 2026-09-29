@@ -1,8 +1,10 @@
 # Architecture
 
-Status: **v0 (2026-09-28)**. The Python reference and C++ core exist. ROS 2 nodes and
-Gazebo worlds are planned (see `TASKS.md`). This document describes both what
-exists (✅) and what is planned (🔜), so parallel work fits together.
+Status: **v0.1 (2026-09-29)**. The Python reference and C++ core exist, and Tier 2
+(Gazebo Harmonic with kinematic sensor rigs, ADR-0007) records ray-cast data that a
+geometric front-end turns into detections. ROS 2 nodes, DAVE, and PX4 are planned
+(see `TASKS.md`). This document describes both what exists (✅) and what is planned
+(🔜), so parallel work fits together.
 
 ## 1. Layers
 
@@ -10,11 +12,11 @@ exists (✅) and what is planned (🔜), so parallel work fits together.
 flowchart TB
   subgraph L0["L0 Platform / simulation"]
     T1["Tier 1: avatar.sim ✅<br/>kinematic, landmark-part sensors"]
-    T2["Tier 2: Gazebo Harmonic + DAVE + PX4 🔜"]
+    T2["Tier 2: Gazebo Harmonic ✅ v0 (kinematic rigs, sonar proxy)<br/>DAVE + PX4 + Clearpath 🔜"]
   end
   subgraph L1["L1 Front-end (per agent)"]
     ODO["Odometry adapters 🔜<br/>(sim: avatar.sim.measurements ✅)"]
-    DET["Object detection → landmark parts 🔜<br/>(sim: avatar.sim.sensors ✅)"]
+    DET["Object detection → landmark parts 🔜 (image detector)<br/>Tier 1: avatar.sim.sensors ✅<br/>Tier 2: avatar.tier2.frontend ✅ (LiDAR / depth / sonar clustering)"]
   end
   subgraph L2["L2 Local graph ✅"]
     LG["avatar.agent.AvatarAgent.local<br/>avatar.backend.graph.FactorGraph"]
@@ -47,6 +49,10 @@ flowchart TB
 | Frames, 4-DoF algebra | `geometry.py` ✅ | `frames.hpp/.cpp` ✅ | TF conventions (`conventions.md` §7) |
 | Semantics | `semantics.py` ✅ | – | – |
 | World / agents / sensors | `sim/world.py`, `sim/agents.py`, `sim/sensors.py`, `sim/measurements.py`, `sim/scenarios.py` ✅ | – | Gazebo worlds 🔜 |
+| Tier-2 world and rigs | `tier2/sdf.py` ✅: scenario → SDF world, sensor specs, `ros_gz_bridge` YAML (ADR-0007) | – | – |
+| Tier-2 recorder | `experiments/gazebo/record.py` + `gz_recorder.cc` ✅ (C++ over gz-transport, no ROS) | `experiments/gazebo/` | – |
+| Tier-2 front-end | `tier2/frontend.py`, `tier2/rays.py` ✅: medium gating, ground removal, clustering, circle fits, sonar without elevation, per-agent tracker | – | detector nodes 🔜 (T-F2-*) |
+| Tier-2 dataset | `tier2/dataset.py` ✅: Tier-1 odometry, depth and ground truth (same seed) with Tier-2 detections | – | – |
 | Trajectory library | `sim/trajectories.py` ✅: 10 kinds + CSV replay, `TrajectorySpec`, YAML presets in `experiments/scenarios/` | – | – |
 | Channel + network | `comm/channel.py` (incl. Wi-Fi mesh, M64, X150 profiles), `comm/network.py` ✅ | – | comm emulator node 🔜 |
 | Surface gateway relay | `comm/gateway.py` ✅ (ADR-0006) | – | gateway node 🔜 |
@@ -149,8 +155,36 @@ stays silent on a link its medium cannot carry: RF while submerged, which gives
 surfacing windows.
 
 Known simplifications (all are tracked tasks): oracle intra-agent data
-association (T-S1-04), no occlusion (T-S1-03), static water level, 4-DoF only
-(T-B1-05), a class-priority relay policy only (T-C7-01).
+association in Tier 1 (T-S1-04), no occlusion (T-S1-03), static water level,
+4-DoF only (T-B1-05), a class-priority relay policy only (T-C7-01).
+
+## 5b. Tier 2 (Gazebo) data flow and limits
+
+```mermaid
+flowchart LR
+  SC[Scenario + seed] --> SDF[tier2/sdf.py<br/>world.sdf + rig plan]
+  SDF --> GZ[gz sim, paused<br/>kinematic rigs set to GT pose per keyframe]
+  GZ --> RAW[raw.npz<br/>VLP-16, D435i, Gemini proxy ranges]
+  RAW --> FE[tier2/frontend.py<br/>detections + tracker ids]
+  SC --> T1[Tier-1 odometry, depth, GT<br/>same seed]
+  FE --> DS[tier2/dataset.py<br/>SimData]
+  T1 --> DS
+  DS --> RUN[runner.py<br/>same modes as Tier 1]
+```
+
+Only perception differs between a Tier-1 and a Tier-2 run of the same seed
+(paired comparison). Details, setup without root, and what is not simulated:
+[`experiments/gazebo/README.md`](../experiments/gazebo/README.md), ADR-0007.
+
+**Intra-agent association.** The Tier-2 front-end assigns track ids in one of
+three modes (`FrontEndParams.tracking`): `oracle` (ground-truth part identity, as in
+Tier 1), `nn` (gated nearest neighbour), and `registration` (keyframe-to-map
+offset first). `nn` and `registration` gate in the agent's **dead-reckoning frame**,
+so they work only while drift stays well below the spacing of similar landmarks
+(harbour piles: about 6 m along a row, 8 m between the two rows; a BlueROV2's raw
+dead-reckoning error reached 8-10 m in 600 s in the two seeds checked, docs/LOG.md
+L28). The proper place for association is the agent, against its own SLAM estimate
+(task T-F3-02, extension points below).
 
 ## 6. Extension points (where parallel work plugs in)
 
@@ -163,6 +197,8 @@ association (T-S1-04), no occlusion (T-S1-03), static water level, 4-DoF only
 | GTSAM port (T-B2-01) | Mirror `FactorGraph` API. Shared graph vectors in `testdata/` |
 | ROS 2 node (T-F*, T-S3-01) | Wrap `AvatarAgent`: feed `KeyframeData`; publish `EncodedPacket` |
 | New scenario (T-S4-*) | Add a builder in `sim/scenarios.py` + `SCENARIOS` registry |
+| Agent-side association (T-F3-02) | `AvatarAgent.on_keyframe` keys landmarks by `Detection.part_index`; add a gated association step against `self.local` estimates (pose + landmark marginals) for detections without an id |
+| DAVE / PX4 / Clearpath rigs (T-S2-02/03) | Replace the sensor specs in `tier2/sdf.py` (`GZ_SENSORS`) and the recorder's pose driver; the front-end and dataset code do not change |
 
 ## 7. Performance (v0, 4-core container)
 

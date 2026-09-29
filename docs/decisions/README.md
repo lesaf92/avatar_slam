@@ -12,5 +12,6 @@ accepted ADRs, except to add a "Superseded by" line.
 | [0004](ADR-0004-backbone-estimator.md) | 4-DoF backbone on a waterline datum with condensed landmark sharing | Accepted |
 | [0005](ADR-0005-contracts.md) | Wire format and ROS messages are versioned contracts | Accepted |
 | [0006](ADR-0006-reference-fleet-and-comm-stack.md) | Reference fleet, communication stack, transparent relay | Accepted |
+| [0007](ADR-0007-tier2-kinematic-rigs.md) | Tier 2 v0: kinematic sensor rigs and a ray-cast sonar proxy (amends 0003) | Accepted (v0) |
 
 Template: copy `ADR-template.md`.

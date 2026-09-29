@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v1.1 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v1.2 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -36,7 +36,8 @@ underwater robot teams.*
    LiDAR, and sonar rasterizers) sits on the backbone and is exchanged
    opportunistically over RF.
 4. **Evidence.** First a fast Python simulator (`avatar_py`, v0 done), then
-   ROS 2 Jazzy + Gazebo Harmonic worlds (DAVE for underwater, PX4 for aerial),
+   ROS 2 Jazzy + Gazebo Harmonic worlds (DAVE for underwater, PX4 for aerial;
+   **Tier 2 v0 exists with kinematic rigs and a ray-cast sonar proxy**, ADR-0007),
    comparison with Kimera-Multi, Swarm-SLAM, SlideSLAM, DRACo-SLAM2, and an
    *Above and Below*-style centralized baseline, then real-data validation.
 5. **Venue (decided: RA-L or T-RO).** Paper A (backbone +
@@ -119,7 +120,7 @@ separated by `‖` can run **in parallel** by different agents.
 ### WP-S: Simulation
 - **S1 (done v0).** Fast Python multi-domain simulator: harbour world, 4 domains,
   LiDAR, camera, imaging-sonar, and odometry models, and a comm network.
-- **S2.** Gazebo Harmonic multi-domain world with the reference fleet: Husky
+- **S2 (v0 done as ADR-0007 rigs; DAVE/PX4/Clearpath open, T-S2-05).** Gazebo Harmonic multi-domain world with the reference fleet: Husky
   (`clearpath_simulator`, VLP-16 + D435i), PX4 SITL hexacopter (D435i), BlueROV2
   (DAVE, Gemini-configured multibeam, DVL), a static surface gateway, and an
   optional BlueBoat. A single `unified.launch.py` spawns all of them.
@@ -135,9 +136,13 @@ separated by `‖` can run **in parallel** by different agents.
   depth sensor. Output 4-DoF increments with covariance.
 - **F2.** Object detection: open-vocabulary 2D (a YOLO-World / Grounded-SAM class
   detector with CLIP-family embeddings) on camera; Euclidean clustering on
-  LiDAR; blob/segment extraction on imaging sonar (DRACo2-style).
+  LiDAR; blob/segment extraction on imaging sonar (DRACo2-style). *Geometric
+  clustering on LiDAR, depth and the sonar proxy: v0 in `avatar.tier2` (T-F2-02/03);
+  the image detector is open (T-F2-01).*
 - **F3.** Local object tracking into **landmark parts** (medium-tagged), and
-  intra-agent coaxial linking (the USV sees both parts).
+  intra-agent coaxial linking (the USV sees both parts). *A tracker in the
+  dead-reckoning frame exists but fails when drift approaches the landmark
+  spacing (LOG L28); association against the agent's SLAM estimate is T-F3-02.*
 - **F4.** Modality-invariant geometric descriptors (footprint, vertical profile)
   plus compressed semantic descriptors (PQ / int8 of CLIP embeddings).
 - **Accept:** object F1 ≥ 0.8 on Gazebo scenes, and descriptor size ≤ 32 B per landmark.
@@ -216,7 +221,7 @@ separated by `‖` can run **in parallel** by different agents.
 |---|---|---|---|
 | **M0** | 2026-10-05 | Foundation: rules, plan, v0 sim + backbone + codec, CI | CI green; `avatar.cli compare` runs |
 | **M1** | 2026-10-31 | Backbone v1 in the fast sim: robust association (X2), VoI scheduler (C2), gateway (C3); first ablations. Gazebo world spawns all 4 domains (S2) | H1/H2 trends visible in the fast sim |
-| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only |
+| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-29, LOG L28):** passes 10/10 seeds on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy); 6/10 with the dead-reckoning NN tracker, whose failures are intra-agent (T-F3-02). Repeat on DAVE sonar images (T-S2-05) before calling it |
 | **M2** | 2026-12-20 | ROS 2 end-to-end (front-ends → backbone → comm emulator); baselines on air/ground and underwater subsets | Full experiment matrix runs unattended |
 | **M3** | 2027-02-10 | Paper A: experiments + real-data validation + draft | Internal review passed |
 | **M4** | ≈ 2027-03-01 | **Paper A submission** (RA-L + IROS 2027 option; verify the deadline) + arXiv | Submitted |
@@ -254,12 +259,14 @@ and M6 moves to ≈ 2027-06, with the neural layer scoped down.
 | ID | Risk | L | I | Mitigation | Owner WP |
 |---|---|---|---|---|---|
 | R1 | *Above and Below*'s authors extend to decentralized / air agents first | M | H | Move fast (Paper A by 2027-03). Put the weight on C3 (medium-aware comm) + the UAV↔AUV link. Post an arXiv preprint at submission | R |
-| R2 | Simulated sonar too idealized for cross-medium association | M | H | Use DAVE's physics-based multibeam; validate on real sonar data (E4); report the sim-to-real gap honestly | S, X |
+| R2 | Simulated sonar too idealized for cross-medium association | M | H | Use DAVE's physics-based multibeam; validate on real sonar data (E4); report the sim-to-real gap honestly. **Now concrete:** Tier 2 v0 uses a ray-cast proxy (no speckle, multipath, shadows; ADR-0007), so G1 on Tier 2 is necessary, not sufficient | S, X |
 | R3 | No real multi-domain field experiment | M | M | Reference fleet exists (ADR-0006). Still needed: modems, UGPS, RTK and a site (T-H1-*). Fall back to real single-medium datasets; label sim vs. real | E |
 | R8 | 64 bps acoustic too slow to connect the team within one BlueROV2 battery | M | H | Token buckets + descriptor stripping (done), VoI scheduler (T-C2-01), SeaTrac X150 upgrade path, longer exchange periods under water | C |
 | R9 | UUV heading drift near steel piles (compass) | H | M | Model it in sim (yaw bias); cross-medium constraints; report it as a motivating result | X |
 | R10 | D435i-only UAV contributes few landmarks (≤ 6 m depth) | H | L | Stand-off inspection paths; optional light LiDAR (D6) | S |
 | R4 | Perceptual aliasing in regular pile grids yields wrong alignments | M | H | PCM/GNC + object-graph matching (X2); the Aliasing scenario as a gate | X |
+| R11 | **Intra-agent** association fails when dead-reckoning drift approaches the spacing of similar landmarks (Tier 2: BlueROV2 drift 8-10 m vs. 8 m between pier rows), and the errors are bursty, unlike the random switches GNC absorbs in Tier 1 | H | H | Associate against the agent's SLAM estimate (T-F3-02); structured errors in Tier 1 (T-S1-09); do not report Tier-2 numbers with the DR-frame tracker as the method | F, X |
+| R12 | Tier-2 host lacks DAVE, PX4 and Clearpath (no root, no Docker), so Tier-2 results rest on proxies | H | M | Docker image on a machine with root (T-I1-03, T-S2-05); label Tier-2 results as kinematic rigs and sonar proxy everywhere | I, S |
 | R5 | Neural layer scope creep delays Paper A | H | M | Neural layer is Paper B only; gate G2 | N |
 | R6 | Multi-agent development drifts (contracts break) | M | M | ADRs, golden vectors, CI on every PR, TASKS.md ownership | I |
 | R7 | GPU compute limits (Gazebo GPU sonar + 3DGS) | M | M | Fast sim for CI and sweeps; Gazebo on the lab GPU; Docker images | I |
@@ -309,6 +316,10 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 
 ## 10. Changelog
 
+- **v1.2 (2026-09-29).** Tier 2 v0 recorded in the plan (ADR-0007: kinematic rigs,
+  ray-cast sonar proxy). Preliminary G1 result and its limits (LOG L28). New risks
+  R11 (intra-agent association in the dead-reckoning frame) and R12 (no DAVE/PX4
+  host). New tasks T-F3-02, T-S1-09, T-S2-05, T-I1-05.
 - **v1.1 (2026-09-28).** PI decisions D1–D3 recorded. Reference fleet and comm
   stack added (ADR-0006, `hardware.md`). The USV becomes optional and the
   surface gateway relays. New risks R8–R10. New decisions D6–D7.

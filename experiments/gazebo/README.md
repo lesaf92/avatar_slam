@@ -79,3 +79,25 @@ RTX 3050 laptop GPU. `check_geometry.py` projects every return with the
 ground-truth pose and measures its distance to the scene primitives; it caught
 a pose/scan off-by-one in the first recorder (docs/LOG.md L28) and must be run
 on every new recording.
+
+## Intra-agent tracking modes and their limits
+
+`FrontEndParams.tracking` selects how detections get landmark ids:
+
+| Mode | Association | Status (10 seeds, docs/LOG.md L28) |
+|---|---|---|
+| `oracle` | ground-truth part identity, as in Tier 1 | the Tier-2 headline: G1 10/10, 0/95 wrong alignments |
+| `nn` | gated nearest neighbour in the **dead-reckoning frame**; ambiguous detections are dropped (`track_on_ambiguity`) | fails: G1 6/10, 21/83 wrong alignments |
+| `registration` | keyframe-to-map offset, then the same gating | worse: G1 2/10, 37/77 wrong |
+
+`nn` and `registration` fail once a BlueROV2's raw drift (peaks of 8-10 m here)
+approaches the spacing of similar piles (8 m between the pier rows). Association
+against the agent's own SLAM estimate is task T-F3-02. Report Tier-2 results with
+`oracle` tracks, labelled as such.
+
+```bash
+python experiments/tier2_study.py --runs results/tier2 --out results/tier2_study.csv
+#   tiers: T1, T2 (oracle), T2nn, T2reg, and the ablations T2nn-uuv / T2nn-land
+python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0 --sweep
+#   dead-reckoning drift, tracks per part, wrong-track events, gate sweep
+```

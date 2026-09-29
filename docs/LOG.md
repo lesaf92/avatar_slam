@@ -5,6 +5,120 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-09-29: Tier 2 (Gazebo) v0 and the limits of a dead-reckoning tracker (Claude)
+
+All runs: `harbor_fleet`, 600 s, seeds 0-9, M64, **simulation**. Tier 2 means
+Gazebo Harmonic with kinematic sensor rigs and a ray-cast sonar proxy (ADR-0007),
+not DAVE, PX4 or Clearpath. The CSV records `4bfff60-dirty` (the branch was
+not yet committed); re-run after committing to get a clean label.
+
+### L28. Tier 2 v0: geometry is enough for G1 with ground-truth tracks; realistic tracking is not there yet
+
+**Pipeline** (`experiments/gazebo/README.md`, ADR-0007): the Tier-1 scenario
+becomes an SDF world; kinematic rigs carrying VLP-16, D435i (depth) and a
+Gemini-720s proxy (128 x 16 rays, 90° x 20°, 50 m) are set to the Tier-1
+ground-truth pose at every keyframe and their ranges are recorded; a geometric
+front-end turns them into detections; Tier-1 odometry, depth and ground truth
+(same seed) complete the `SimData`. Tier 1 and Tier 2 of one seed therefore
+differ only in perception.
+
+**Recording check** (`check_geometry.py`, seed 0; the other nine agree within
+about 10 %): returns projected with the ground-truth pose lie a median of 8 mm
+(VLP-16, p95 6 cm), 0.1 mm (D435i), 20 / 40 mm (Gemini proxy, BlueROV2 0 / 1)
+from a scene primitive. The proxy has the largest residuals (p95 14 / 22 cm;
+2 % / 7 % of returns farther than 0.2 m from any primitive); I have not
+explained them. The recorder's README credits this check with catching a
+pose/scan off-by-one in an early recorder; that recorder no longer exists, so
+I did not re-verify it.
+
+**Parity and gate G1** (10 seeds; mean ± 95 % t-interval; "wrong" = accepted
+alignment with frame error > 2 m or 5°; G1 = frame error of every robot in the
+anchor's frame < 1 m; "oracle" = centralized, ground-truth association, GNC):
+
+| Perception | Team merged | At [s] | Wrong | G1 | Avatar team ATE [m] | Oracle [m] |
+|---|---|---|---|---|---|---|
+| Tier 1 (abstract) | 10/10 | 280 | 1/100 | 10/10 | 0.119 ± 0.016 | 0.084 ± 0.006 |
+| Tier 2, ground-truth tracks (`oracle`) | 10/10 | 400 | 0/95 | 10/10 | 0.249 ± 0.032 | 0.184 ± 0.015 |
+| Tier 2, NN tracker (`nn`) | 10/10 | 430 | 21/83 | 6/10 | 2.375 ± 0.883 | 0.187 ± 0.011 |
+| Tier 2, registration (`registration`) | 10/10 | 520 | 37/77 | 2/10 | 7.437 ± 8.394 | 0.184 ± 0.015 |
+| Tier 2, NN on BlueROV2s only | 10/10 | 390 | 14/84 | 6/10 | 1.934 ± 0.848 | 0.185 ± 0.015 |
+| Tier 2, NN on Husky + Tarot only | 10/10 | 310 | 7/92 | 9/10 | 0.913 ± 0.639 | 0.187 ± 0.011 |
+
+```
+source ~/opt/gz_env.sh
+make -C experiments tier2-record                           # 10 recordings, needs Gazebo + GPU
+make -C experiments tier2 tables PY=python JOBS=10         # -> paper/data/tier2.csv, tab_tier2*.tex
+```
+
+**Findings.**
+1. **With ground-truth intra-agent tracks, Tier 2 reproduces the Tier-1
+   picture.** Every run merges the team, no alignment is wrong, and G1 holds
+   10/10 (largest frame error 0.22-0.87 m per run). Avatar stays within 1.36x
+   of the oracle (paired mean; Tier 1: 1.41x), a reference value only (D11).
+   Team ATE doubles (0.25 vs 0.12 m) because perception noise now enters: the
+   Husky alone goes from 0.02 m (Tier 1) to 0.17 m, so Tier 1's UGV was
+   unrealistically good. Merging is slower (median 400 vs 280 s) because Tier 2
+   yields about half the detections per run (8 994 vs 17 963, mean).
+2. **Extended objects have no viewpoint-invariant centre.** Seed 0, detections
+   matched to the nearest part (no radius): hull detections lie a median 3.7 m
+   (max 7.8 m) from the part centre, containers 2.4 m (max 3.2 m), against
+   0.06-0.14 m for piles, bollards, light poles and buoys. `keep_extended=False`
+   (the default) keeps 285 hull and 125 container detections instead of 2 809 and
+   2 645. (The pipeline (13 m) and rock (4.2 m) medians are probably clutter matched
+   to a far part; I did not check. Read only the hull, container and round classes.)
+3. **The NN tracker fails, and the first cause was a bug.** An ambiguous
+   detection started a new track, which made the next detection near it
+   ambiguous too: on seed 0 the Husky made 2 161 tracks for the 48 parts it
+   saw, and one crane leg collected 251. Dropping ambiguous detections
+   (`track_on_ambiguity="drop"`, regression test) cuts this to 107 tracks, but
+   **the end-to-end result barely moves**: team ATE 2.443 → 2.375 m, wrong
+   alignments 22/87 → 21/83, G1 5/10 → 6/10.
+4. **The remaining cause is structural.** Per-robot error alone under `nn`
+   (mean over 10 seeds; ground-truth tracks in parentheses): Husky 0.66 (0.17),
+   Tarot 0.90 (0.16), BlueROV2 0 2.22 (0.11), BlueROV2 1 1.42 (0.14) m; BlueROV2 0
+   is above 0.5 m in 9/10 runs. Wrong-track detections are 4.6 % of BlueROV2 0's
+   matches (1.0-2.2 % for the others). On seeds 0 and 1, the real confusions of
+   BlueROV2 0 (28 / 44 events) are between piles a median 8.0 / 8.3 m apart (range
+   4.6-8.0 / 7.7-8.3 m), which is the width of the pier, i.e. mostly opposite piles;
+   a further 54 / 41 events are real detections joining a track a spurious cluster
+   had started. The tracker gates in the **raw
+   dead-reckoning frame**, and BlueROV2 0's raw drift there (start-aligned, xy)
+   peaks at 10.3 / 8.0 m on seeds 0 / 1 (7.0 / 8.0 m at the end; Husky 2.0 / 3.4 and
+   Tarot 1.6 / 3.1 m at the end), as large as the 8 m between the pier rows (piles are
+   about 6 m apart along a row). Sweeping the base gate (0.7, 1.0 m) and the gate
+   growth (0, 0.005, 0.01, 0.02 m per metre travelled) on seeds 0 and 1 left BlueROV2 0's
+   error at 1.3-2.3 m in 15 of 16 settings. The exception, gate 0.7 m with growth 0.01,
+   gave 0.18 m on seed 0 and 1.89 m on seed 1. Not a tuning problem.
+   Items 3 and 4 (per seed, plus the gate sweep): `python
+   experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0 --sweep`.
+5. **Controlled ablation** (table): NN tracking on the BlueROV2s alone
+   reproduces the failure (G1 6/10, team ATE 1.93 m); on the Husky and Tarot
+   alone it mostly passes (G1 9/10, 0.91 m). The underwater tracking accounts
+   for most, not all, of it.
+6. **Registration is worse** (negative result). Registering each keyframe to the
+   track map before gating gives 37/77 wrong alignments, G1 2/10, and a wrong-track
+   rate of 11.5 % on BlueROV2 0. Its CI is dominated by one seed (40.8 m team
+   ATE on seed 1). My hypothesis, not tested: in a regular row a shifted
+   hypothesis explains the detections as well as the true one, and the tie test
+   only refuses exact ties.
+7. **Lesson for Tier 1.** `realism_study` injects random identity switches
+   (up to 15 %, L14, L25) and GNC keeps the team at its error-free accuracy.
+   Here 1-5 % *structured* errors (piles 8 m apart merged into one track)
+   break a BlueROV2's local SLAM. The two are not the same experiment, but Tier 1's
+   random-switch injection probably understates the danger.
+
+**Consequences.**
+- The Tier-2 headline uses ground-truth intra-agent tracks, labelled as such;
+  `nn` and `registration` are reported as negative results, not as the method.
+  G1 is **necessary, not sufficient**: the sonar is a ray-cast proxy (R2, R12).
+- Association must move into the agent and use its own SLAM estimate (T-F3-02).
+  Structured errors go into Tier 1 (T-S1-09). DAVE sonar images: T-S2-05.
+- Caveats: 10 seeds, one scenario; the diagnostics in items 2 and 4 use seeds 0
+  and 1 only; Tier 2 keeps Tier-1 odometry, so drift is not affected by the
+  perception change.
+
+---
+
 ## 2026-09-28: trajectories, VoI scheduler, cycle check, speed, server baseline (Claude)
 
 All runs below: `harbor_fleet`, 600 s, M64 unless stated, **simulation (Tier 1)**.

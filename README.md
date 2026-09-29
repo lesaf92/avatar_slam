@@ -7,9 +7,11 @@ In *Avatar* only the Avatar masters every element. Avatar SLAM lets robots in th
 **air**, on **earth**, and in the **water** build one consistent map, without a
 central server and over links that range from Mbps radio to kbps acoustic modems.
 
-> Status: **M0 foundation** (2026-09-28). The rules, plan, and contracts are in
-> place. The Python reference, C++ core, and ROS 2 interfaces are v0. All results
-> so far come from the Tier-1 simulator. See [`docs/LOG.md`](docs/LOG.md).
+> Status: **M1 in progress** (2026-09-29). The rules, plan, and contracts are in
+> place. The Python reference, C++ core, and ROS 2 interfaces are v0. Results come
+> from the Tier-1 simulator and, since 2026-09-29, from a Tier-2 Gazebo Harmonic
+> pipeline with kinematic sensor rigs and a ray-cast sonar proxy (ADR-0007; both
+> are simulation). No field data yet. See [`docs/LOG.md`](docs/LOG.md).
 
 ## Why
 
@@ -47,7 +49,7 @@ Details: [`docs/PLAN.md`](docs/PLAN.md) (research plan) ·
 | [`avatar_py/`](avatar_py/) | Python reference: simulator, comm, codec, back-end, association, evaluation | Python |
 | [`avatar_core/`](avatar_core/) | Real-time core (ROS-agnostic): frames, wire codec | C++17 |
 | [`ros2/avatar_msgs/`](ros2/avatar_msgs/) | ROS 2 Jazzy interfaces | ROS IDL |
-| [`experiments/`](experiments/) | Reproducible experiment scripts | Python |
+| [`experiments/`](experiments/) | Reproducible experiment scripts; Tier-2 Gazebo recorder in `experiments/gazebo/` | Python, C++ |
 | [`viz/`](viz/) | Harbour chart viewer (plan + elevation, playback) | HTML/JS |
 | [`testdata/`](testdata/) | Cross-language golden vectors | JSON |
 

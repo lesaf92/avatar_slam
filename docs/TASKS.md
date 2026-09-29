@@ -61,20 +61,24 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
 |---|---|---|---|---|---|---|
 | T-I1-03 | Docker image: `ros:jazzy` + Gazebo Harmonic + DAVE (ros2 branch) + PX4 SITL | P0 | – | todo | | `docker compose up` spawns the empty world |
-| T-S2-01 | Gazebo Harmonic harbour world (piles, hulls, quay, buoys) from scenario YAML | P0 | T-S4-01, T-I1-03 | todo | | World loads; GT exported |
-| T-S2-02 | Spawn the reference fleet in `unified.launch.py`: Husky (`clearpath_simulator`), PX4 SITL hexacopter (Tarot-like), BlueROV2 (DAVE), static gateway, optional BlueBoat | P0 | T-S2-01 | todo | | All move on scripted paths |
-| T-S2-03 | Sensor bridges: VLP-16 (`gpu_lidar`), D435i (`rgbd_camera`), Micron Gemini (DAVE multibeam: 90°, 128 beams, 50 m), DVL A50, Bar30, IMU (`ros_gz_bridge`), NED→ENU at the boundary | P0 | T-S2-02 | todo | | Topics per `conventions.md` §7 |
+| T-S2-01 | Gazebo Harmonic harbour world (piles, hulls, quay, buoys) from scenario YAML | P0 | T-S4-01, T-I1-03 | review | Claude · `wp/T-S2-01-gazebo-tier2` | World loads; GT exported. **v0 (ADR-0007):** built from the Python scenario (`avatar.tier2.sdf`), not YAML, and without the Docker image; both deps stay open |
+| T-S2-02 | Spawn the reference fleet in `unified.launch.py`: Husky (`clearpath_simulator`), PX4 SITL hexacopter (Tarot-like), BlueROV2 (DAVE), static gateway, optional BlueBoat | P0 | T-S2-01 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | All move on scripted paths. **v0 done as kinematic sensor rigs** at the Tier-1 ground-truth pose (ADR-0007). Clearpath, PX4 and DAVE vehicles are **blocked** by T-I1-03 (no root / Docker on the lab machine); tracked as T-S2-05 |
+| T-S2-03 | Sensor bridges: VLP-16 (`gpu_lidar`), D435i (`rgbd_camera`), Micron Gemini (DAVE multibeam: 90°, 128 beams, 50 m), DVL A50, Bar30, IMU (`ros_gz_bridge`), NED→ENU at the boundary | P0 | T-S2-02 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | Topics per `conventions.md` §7. **v0:** VLP-16, D435i depth and a ray-cast Gemini proxy are recorded over gz-transport (`experiments/gazebo/`, geometry check per recording); no ROS bridge yet, DVL/Bar30/IMU come from the Tier-1 odometry models |
 | T-S2-04 | Evaluate LOTUSim as the Tier-2 host (vs. DAVE) | P2 | – | todo | | ADR if adopted |
 | T-S3-01 | ROS 2 comm emulator (`EncodedPacket` gateway enforcing `avatar.comm` models) | P0 | T-C1-01 | todo | | Same stats as Tier 1 on a replay |
 | T-F1-01 | Odometry adapters → 4-DoF increments with covariance | P0 | T-S2-03 | todo | | – |
 | T-F2-01 | Open-vocabulary camera detector + CLIP-family embeddings node | P1 | T-S2-03 | todo | | – |
-| T-F2-02 | LiDAR object clustering → landmark parts | P0 | T-S2-03 | todo | | – |
-| T-F2-03 | Imaging-sonar object extraction (DRACo2-style) | P0 | T-S2-03 | todo | | – |
-| T-F3-01 | Landmark-part tracker (medium tagging, intra-agent coaxial links) | P0 | T-F2-* | todo | | – |
+| T-F2-02 | LiDAR object clustering → landmark parts | P0 | T-S2-03 | review | Claude · `wp/T-S2-01-gazebo-tier2` | Geometric front-end (`avatar.tier2.frontend`): medium gating, ground removal, Euclidean clustering, circle fits. Extended objects are dropped by default (hull/container centres are biased 2-4 m from one side, LOG L28) |
+| T-F2-03 | Imaging-sonar object extraction (DRACo2-style) | P0 | T-S2-03 | review | Claude · `wp/T-S2-01-gazebo-tier2` | v0 on the **ray-cast proxy** (range-bearing clusters, elevation discarded); no speckle, multipath or shadows, so not yet a substitute for real or DAVE sonar images (T-S2-05) |
+| T-F3-01 | Landmark-part tracker (medium tagging, intra-agent coaxial links) | P0 | T-F2-* | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | `nn` and `registration` trackers exist. An ambiguity runaway (2 161 tracks for 48 parts) is fixed. Both still gate in the dead-reckoning frame and fail once drift nears the pile spacing (LOG L28): G1 6/10 (`nn`), 2/10 (`registration`). Use ground-truth tracks (`oracle`) until T-F3-02 |
+| T-F3-02 | **Agent-side data association** against the agent's own SLAM estimate (pose and landmark marginals, Mahalanobis gating, ambiguity → defer), replacing the dead-reckoning-frame tracker (root cause of the Tier-2 NN failures, LOG L28) | P0 | T-F3-01 | todo | | Tier-2 `T2nn` on 10 seeds: G1 ≥ 9/10, 0 wrong alignments, BlueROV2 solo ATE ≤ 2× the ground-truth-track value. Hook: `AvatarAgent.on_keyframe` (architecture §6) |
+| T-S1-09 | **Structured association errors in Tier 1**: `FrontEndErrors` injects random identity switches, which GNC absorbs (L14, L25), whereas Tier 2 shows persistent aliasing errors (piles about 8 m apart, mostly across the pier) that break a BlueROV2's local SLAM at a 1-5 % rate (L28) | P1 | – | todo | | `realism_study` gains a burst / row-swap error mode; the table reports each kernel. Decide whether H1 and the realism claims need restating |
+| T-S2-05 | Re-record Tier 2 with DAVE multibeam sonar images, PX4 and Clearpath vehicles; repeat G1 and the parity study | P0 | T-I1-03 | todo | | Same `tier2_study.py` on the new recordings; ADR-0007 superseded. Blocks the claim that G1 holds on realistic sonar (R2) |
+| T-I1-05 | CI smoke test of the Tier-2 front-end on a tiny recorded fixture (≤ 1 MB in `testdata/`); today only analytic ray-cast tests run without Gazebo | P2 | T-F2-02 | todo | | Fixture regenerated by `experiments/gazebo/`; CI compares cluster counts |
 | T-F4-01 | Descriptor compression (int8/PQ); D = 0 packets for non-semantic landmarks | P1 | T-F2-01 | todo | | ≤ 32 B/landmark |
 | T-B2-01 | C++ back-end on GTSAM (iSAM2), matched to Python on shared graph vectors | P1 | T-B1-01 | todo | | Match to 1 mm / 0.01° |
 | T-B4-01 | Acoustic range factors (latency-aware, cross-frame) | P1 | T-B1-02 | todo | | – |
-| T-G1 | **Gate G1:** cross-medium association on Gazebo sonar data | P0 | T-F3-01 | todo | | Frame error < 1 m in Gazebo harbour |
+| T-G1 | **Gate G1:** cross-medium association on Gazebo sonar data | P0 | T-F3-01 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | Frame error < 1 m in Gazebo harbour. **Preliminary (10 seeds, LOG L28):** 10/10 with ground-truth intra-agent tracks, 0/95 wrong alignments; 6/10 with the NN tracker. Necessary, not sufficient: the sonar is a ray-cast proxy (ADR-0007, R2) |
 
 ## Milestone M3–M4: Paper A (target submission ≈ 2027-03-01)
 
@@ -114,6 +118,18 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-03 | Monthly novelty re-search (next: 2026-10-28) | P1 | – | todo (recurring) | |
 
 ## Notes / hand-offs
+
+- *2026-09-29 (Claude, Tier-2 session, branch `wp/T-S2-01-gazebo-tier2`):* **T-S2-*, T-F2-*, T-F3-01, T-G1 hand-off.** Works: the whole Tier-2 v0
+  pipeline (SDF world → Gazebo recorder → geometric front-end → paired SimData → runner),
+  10 seeds recorded, `make -C experiments tier2 tables` regenerates `paper/data/tier2*.csv|tex`
+  (needs the recordings in `results/tier2/`, see `experiments/gazebo/README.md`). With
+  ground-truth tracks, G1 holds 10/10 and the team is within 1.4× of the oracle (LOG L28).
+  Doesn't work: the realistic trackers. Fixed a runaway (ambiguous detections started new
+  tracks). The remaining failure is structural: they associate in the dead-reckoning frame,
+  where BlueROV2 drift reaches 8-10 m against 8 m between pier rows. Next: **T-F3-02**
+  (association against the agent's own SLAM estimate), then **T-S2-05** (DAVE sonar, needs
+  root/Docker). Provenance: the CSVs say `-dirty` until the branch is committed and
+  `make -C experiments tier2 tables` re-run.
 
 - *2026-09-28 (Claude, second session):* **T-S1-04 hand-off.** Works:
   `FrontEndErrors` (clutter, identity switches; own RNG stream, off by default),

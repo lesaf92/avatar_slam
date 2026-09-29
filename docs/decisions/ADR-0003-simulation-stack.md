@@ -2,6 +2,7 @@
 
 - **Status:** Accepted
 - **Date:** 2026-09-28
+- **Amended by:** [ADR-0007](ADR-0007-tier2-kinematic-rigs.md) (Tier 2 v0 uses kinematic rigs and a sonar proxy until DAVE and PX4 can be installed)
 
 ## Context
 Algorithm research needs thousands of seeded runs (bandwidth sweeps, ablations)
