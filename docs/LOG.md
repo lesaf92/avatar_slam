@@ -5,6 +5,66 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-09-29 (later): EKF tracker for Tier 2, work in progress (Claude, paused)
+
+Branch `wp/T-F3-02-agent-association`, 10 seeds of the Tier-2 recordings, all
+**simulation**. CSVs are in `results/` (git-ignored) and were produced by
+`python experiments/tier2_study.py --tiers T2ekf ...` at `a6a9d12` plus the
+uncommitted changes that this entry's commit contains.
+
+### L29. Covariance-gated EKF tracker: the association is nearly right, the team result is not yet (T-F3-02, partial)
+
+`avatar.frontend.ekf_tracker` replaces the dead-reckoning-frame gate of L28 with an
+EKF over the pose and the odometry biases (heading bias, translation scale, gyro
+scale) and per-landmark covariances. Three variants, same recordings:
+
+| Variant | Team merged | Wrong alignments | G1 | Team ATE mean (median) [m] | Solo ATE UAV / BlueROV2 0 / BlueROV2 1 [m] |
+|---|---|---|---|---|---|
+| v0: covariance gating, ambiguous detections dropped | 10/10 | 11/90 | 6/10 | 0.952 (0.965) | 0.16 / 0.25 / 1.35 |
+| v1: + landmarks must prove static before they correct the pose | 0/10 | 15/34 | 0/10 | 0.480 (0.226) | 1.35 / 0.11 / 0.96 |
+| v2: + match vs. new-landmark likelihood, tentative landmarks correct the pose weakly | 4/10 | 16/59 | 3/10 | 4.335 (0.877) | 1.89 / 0.11 / 0.92 |
+
+(Ground-truth tracks, L28: solo 0.16 / 0.11 / 0.14 m, G1 10/10; NN tracker: G1 6/10.)
+
+**Findings.**
+1. **The filter model is sound.** With ground-truth association
+   (`tracking="ekf_truth"`, diagnostic) the estimated scale error of BlueROV2 1 is
+   +0.0058 against a true +0.0052 and the position error stays at 0.1-0.5 m
+   (NEES with 2 dof: 1-34, mildly overconfident).
+2. **The v0 failure was not an association error but a sliding clutter cluster.**
+   On seed 0, BlueROV2 1 sees a cluster at exactly 28.9 m in its body frame at every
+   keyframe (ground-truth label: clutter; a wall seen along the track, whose visible
+   centre moves with the robot). The tracker took it for a static landmark; the
+   only way to reconcile it with the odometry was a scale estimate of +3.2 % (true
+   +0.5 %), and by the end of the run the pose error was 7.2 m against a claimed σ of
+   0.07 m. The large measurement floor (0.3 m) let a 0.5 m per-keyframe slide pass
+   the gate. v1 fixes it with a birth test (a landmark's detections must stay
+   within the process noise accumulated since its birth); a unit test covers it.
+3. **Tuning cannot fix v0.** Sweeping the measurement floor (0.03-1.0 m), the odometry
+   inflation and the ambiguity margin on seeds 0 and 1 moved BlueROV2 1's error
+   between 0.07 and 5 m for neighbouring settings, with no stable region.
+4. **v1 starves the UAV**: its D435i sees a pile for one to three keyframes, so
+   nothing confirms, the pose is never corrected, its uncertainty passes the 8 m row
+   separation and it matches the opposite pile (`upd=0` for hundreds of keyframes).
+   v2 answers with the likelihood test (a match under a large pose σ loses to "new")
+   and weak tentative updates that cannot touch the bias states.
+5. **v2 has almost no wrong associations** (10 seeds: UAV 0, BlueROV2 0 and 1 three
+   each, Husky 173 of 4.6e4 matches) **but the team result is worse than v0's.** The UAV
+   is at 1.89 m alone (9 of 10 runs above 0.5 m). Not diagnosed. Suspects: 1 266
+   detections dropped as ambiguous (of about 2 000 UAV clusters in 10 seeds) and
+   about two landmarks per part, both of which remove the re-observations that correct
+   the pose. The per-agent solo error of v0 (UAV 0.16 m) shows what is reachable.
+6. **Negative result.** v2 does not meet the T-F3-02 acceptance (G1 >= 9/10).
+
+**Caveats.** Parameters were explored on seeds 0 and 1 only (no held-out split
+was applied yet); the three rows were run at the same commit plus uncommitted
+changes, so they carry no clean provenance; nothing here is in `paper/data`.
+
+Reproduce: `python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0 --mode ekf`
+(add `--sweep` for the parameter grid) and `python experiments/tier2_study.py --tiers T2ekf --seeds 0 1 2 3 4 5 6 7 8 9 --out results/tier2_study_ekf.csv`.
+
+---
+
 ## 2026-09-29: Tier 2 (Gazebo) v0 and the limits of a dead-reckoning tracker (Claude)
 
 All runs: `harbor_fleet`, 600 s, seeds 0-9, M64, **simulation**. Tier 2 means

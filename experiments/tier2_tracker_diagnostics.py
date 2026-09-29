@@ -8,7 +8,9 @@ For one recorded run, prints per SLAM agent:
 2. the tracker's tracks, and how many tracks each true part received;
 3. the wrong-track events by kind (a spurious cluster started the track, or two
    different true parts share it, with the distance between them);
-4. with ``--sweep``, the agents' single-agent ATE for a grid of gate settings.
+4. with ``--sweep``, the agents' single-agent ATE for a grid of tracker settings (gate and
+   gate growth for ``nn``; measurement floor, odometry inflation and ambiguity margin for
+   ``ekf``).
 
     python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0
     python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed1 --sweep
@@ -28,6 +30,7 @@ from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 
 from avatar.agent import AvatarParams
+from avatar.frontend.ekf_tracker import EkfTrackerParams
 from avatar.geometry import compose
 from avatar.runner import run_independent
 from avatar.tier2.dataset import build_tier2_sim, load_meta
@@ -90,25 +93,31 @@ def track_report(agent, world) -> dict:
     }
 
 
-def _sweep_one(args: tuple[str, float, float, str]) -> tuple[float, float, dict, dict]:
-    run_dir, gate, growth, mode = args
+def _sweep_one(args: tuple[str, str, dict]) -> tuple[str, dict, dict]:
+    run_dir, mode, overrides = args
     params = AvatarParams()
-    fe = FrontEndParams(tracking=mode, track_gate_m=gate, track_drift_per_m=growth)
+    if mode == "ekf":
+        fe = FrontEndParams(tracking=mode, ekf=EkfTrackerParams(**overrides))
+    else:
+        fe = FrontEndParams(tracking=mode, **overrides)
     scenario, sim, stats = build_tier2_sim(run_dir, params, fe, cache=False)
     seed = int(load_meta(run_dir)["seed"])
     m = run_independent(scenario, sim, params, seed).metrics
     names = {i: a.config.name for i, a in sim.agents.items() if a.config.role == "slam"}
     ate = {n: m["ate_local_m"][i] for i, n in names.items()}
     wrong = {n: (stats[n]["wrong_track"], stats[n]["tracks"]) for n in names.values()}
-    return gate, growth, ate, wrong
+    return " ".join(f"{k}={v}" for k, v in overrides.items()), ate, wrong
 
 
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("run_dir")
-    ap.add_argument("--mode", default="nn", choices=["nn", "registration"])
+    ap.add_argument("--mode", default="nn", choices=["nn", "registration", "ekf"])
     ap.add_argument("--sweep", action="store_true", help="grid over gate and gate growth")
     ap.add_argument("--jobs", type=int, default=8)
+    ap.add_argument("--floors", type=float, nargs="+", default=[0.3, 0.6, 1.0])
+    ap.add_argument("--odom-scales", type=float, nargs="+", default=[1.5, 3.0])
+    ap.add_argument("--margins", type=float, nargs="+", default=[6.0, 12.0])
     args = ap.parse_args()
 
     _, sim, stats = build_tier2_sim(
@@ -133,16 +142,26 @@ def main() -> None:
             med, lo, hi = rep["confusion_distance_m"]
             print(f"   two-part confusions {med:.1f} m apart (median; min {lo:.1f}, max {hi:.1f})")
     if args.sweep:
-        grid = [
-            (args.run_dir, g, d, args.mode) for g in (1.0, 0.7) for d in (0.02, 0.01, 0.005, 0.0)
-        ]
+        if args.mode == "ekf":
+            grid = [
+                {"map_sigma_floor_m": f, "odom_noise_scale": q, "ambiguity_margin": m}
+                for f in args.floors
+                for q in args.odom_scales
+                for m in args.margins
+            ]
+        else:
+            grid = [
+                {"track_gate_m": g, "track_drift_per_m": d}
+                for g in (1.0, 0.7)
+                for d in (0.02, 0.01, 0.005, 0.0)
+            ]
         with ProcessPoolExecutor(max_workers=args.jobs) as ex:
-            results = list(ex.map(_sweep_one, grid))
-        print("\nsingle-agent ATE [m] by gate [m] and gate growth [m per m travelled]:")
-        for gate, growth, ate, wrong in results:
+            results = list(ex.map(_sweep_one, [(args.run_dir, args.mode, g) for g in grid]))
+        print("\nsingle-agent ATE [m] by tracker setting:")
+        for label, ate, wrong in results:
             cells = "  ".join(f"{n} {a:.2f}" for n, a in ate.items())
             w = " ".join(f"{n}:{wt[0]}/{wt[1]}" for n, wt in wrong.items())
-            print(f"  gate {gate:.1f} growth {growth:.3f} | {cells} | wrong/tracks {w}")
+            print(f"  {label:58s} | {cells} | wrong/tracks {w}")
 
 
 if __name__ == "__main__":

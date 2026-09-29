@@ -11,6 +11,7 @@ scenario, seed, odometry and estimator on two perception tiers:
   intra-agent association);
 * **T2reg**: the same, with keyframe-to-map registration before the gated
   association (a negative result, docs/LOG.md L28);
+* **T2ekf**: the same, with the EKF tracker (covariance gating, T-F3-02);
 * **T2nn-uuv / T2nn-land**: controlled ablations of T2nn, in which only the
   BlueROV2s (``uuv``) or only the Husky and the Tarot (``land``) use the
   nearest-neighbour tracker and the others keep ground-truth tracks.
@@ -59,6 +60,7 @@ TIERS: dict[str, str | dict[str, str] | None] = {
     "T2": "oracle",
     "T2nn": "nn",
     "T2reg": "registration",
+    "T2ekf": "ekf",
     "T2nn-uuv": {"uuv": "nn", "*": "oracle"},
     "T2nn-land": {"ugv": "nn", "uav": "nn", "*": "oracle"},
 }

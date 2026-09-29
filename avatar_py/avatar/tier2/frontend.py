@@ -48,8 +48,16 @@ from scipy.sparse import coo_matrix
 from scipy.sparse.csgraph import connected_components
 from scipy.spatial import cKDTree
 
+from avatar.frontend.ekf_tracker import (
+    BAD,
+    CONFIRMED,
+    EkfTracker,
+    EkfTrackerParams,
+    PlatformPrior,
+)
 from avatar.geometry import compose, transform_points
 from avatar.semantics import CLASS_NAMES, class_id, normalize
+from avatar.sim.agents import heading_bias_modelled
 from avatar.sim.sensors import SENSOR_LIBRARY, Detection, DetectionSensor
 from avatar.tier2.rays import sensor_points
 from avatar.tier2.sdf import RaySensorSpec
@@ -101,7 +109,9 @@ class FrontEndParams:
     #             Tier 1); detections of no part are one-off clutter;
     #   "nn": gated nearest neighbour in the dead-reckoning frame, gate growing
     #         with the distance since the track was last seen, ambiguity test;
-    #   "registration": keyframe-to-map registration, then tight gating.
+    #   "registration": keyframe-to-map registration, then tight gating;
+    #   "ekf": a filter over the pose and the odometry biases with per-landmark
+    #          covariances and Mahalanobis gating (avatar.frontend.ekf_tracker, T-F3-02).
     tracking: str = "oracle"
     # Tracker (dead-reckoning frame)
     track_gate_m: float = 1.0
@@ -123,6 +133,7 @@ class FrontEndParams:
     # (start a track). "new" runs away: each duplicate makes the next detection
     # ambiguous too (2 161 tracks for 48 parts on the UGV, docs/LOG.md L28).
     track_on_ambiguity: str = "drop"
+    ekf: EkfTrackerParams = field(default_factory=EkfTrackerParams)
     # Semantic oracle: max distance [m] from a detection to a GT part's surface
     label_match_m: float = 1.5
 
@@ -532,6 +543,16 @@ def detections_for_agent(
     """
     part_classes = [p.class_name for p in world.parts]
     tracker = Tracker(id_offset, params)
+    noise = agent_data.config.odometry_noise
+    ekf = EkfTracker(
+        id_offset,
+        params.ekf,
+        PlatformPrior(
+            noise.yaw_bias_std_rad_per_m if heading_bias_modelled(agent_data.config) else 0.0,
+            noise.scale_bias_std,
+            noise.yaw_scale_bias_std,
+        ),
+    )
     dr = np.array([0.0, 0.0, 0.0, 0.0])
     n_kf = len(agent_data.keyframes)
     out: list[list[Detection]] = []
@@ -543,6 +564,7 @@ def detections_for_agent(
         if k > 0 and kf.odom is not None:
             dr = compose(dr, kf.odom)
             tracker.step(float(np.linalg.norm(kf.odom[:3])))
+            ekf.predict(kf.odom, kf.odom_sigmas)
         z_a = kf.abs_z if kf.abs_z is not None else float(agent_data.gt[0, 2] + dr[2])
         pose_dr = np.array([dr[0], dr[1], z_a, dr[3]])
         gt_pose = agent_data.gt[k]
@@ -585,6 +607,14 @@ def detections_for_agent(
                 tracker.assign(k, it[1], p_dr[i], float(it[3][0]), taken, drift=True)
                 for i, it in enumerate(items)
             ]
+        elif params.tracking in ("ekf", "ekf_truth"):
+            ids = ekf.associate(
+                [it[1] for it in items],
+                np.array([it[2].p_body for it in items]).reshape(-1, 3),
+                np.array([it[3] for it in items]).reshape(-1, 3),
+                # "ekf_truth" (diagnostic upper bound): ground-truth identities
+                truth=[it[4] for it in items] if params.tracking == "ekf_truth" else None,
+            )
         elif params.tracking == "registration":
             ids = tracker.associate(
                 k, [it[1] for it in items], p_dr, np.array([it[3][0] for it in items])
@@ -616,10 +646,23 @@ def detections_for_agent(
                 )
             )
         out.append(dets)
-    stats["tracks"] = len(tracker.tracks)
-    stats["registrations"] = tracker.n_registrations
+    if params.tracking in ("ekf", "ekf_truth"):
+        # Detections are released once their landmark has proved static (a delay of
+        # ``confirm_frames`` keyframes online; applied after the pass here).
+        n_before = sum(len(d) for d in out)
+        out = [[d for d in dets if ekf.released(d.part_index - id_offset)] for dets in out]
+        stats["unreleased"] = n_before - sum(len(d) for d in out)
+        status = ekf._status[: ekf.n_landmarks]
+        stats["tracks"] = int(np.sum(status != BAD))
+        stats["landmarks_confirmed"] = int(np.sum(status == CONFIRMED))
+        stats["landmarks_bad"] = int(np.sum(status == BAD))
+        stats["registrations"] = ekf.n_updates
+        stats["dropped_ambiguous"] = ekf.n_dropped
+    else:
+        stats["tracks"] = len(tracker.tracks)
+        stats["registrations"] = tracker.n_registrations
+        stats["dropped_ambiguous"] = tracker.n_dropped
     stats["ambiguous_registrations"] = tracker.n_ambiguous
-    stats["dropped_ambiguous"] = tracker.n_dropped
     return out, stats
 
 
