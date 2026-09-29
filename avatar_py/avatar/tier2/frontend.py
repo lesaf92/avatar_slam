@@ -119,6 +119,10 @@ class FrontEndParams:
     # Ambiguity test per detection: a second track within ``ratio`` × the best
     # distance (inside the gate) starts a new track instead of a risky match.
     track_ambiguity_ratio: float | None = 2.0
+    # What an ambiguous detection does: "drop" (no update, no new track) or "new"
+    # (start a track). "new" runs away: each duplicate makes the next detection
+    # ambiguous too (2 161 tracks for 48 parts on the UGV, docs/LOG.md L28).
+    track_on_ambiguity: str = "drop"
     # Semantic oracle: max distance [m] from a detection to a GT part's surface
     label_match_m: float = 1.5
 
@@ -327,7 +331,8 @@ class Tracker:
         self.correction_xy = np.zeros(2)  # map frame = dead reckoning + correction
         self.s_registered = 0.0  # odometer at the last accepted registration
         self.n_registrations = 0
-        self.n_ambiguous = 0
+        self.n_ambiguous = 0  # registrations refused for a tie
+        self.n_dropped = 0  # detections dropped for an ambiguous association
 
     def register(self, media: list[Medium], p_map: FloatArray, sigmas: FloatArray) -> FloatArray:
         """Keyframe-to-map registration: horizontal offset that best explains the
@@ -389,8 +394,8 @@ class Tracker:
 
     def associate(
         self, k: int, media: list[Medium], p_dr: FloatArray, sigmas: FloatArray
-    ) -> list[tuple[int, int]]:
-        """Track ids and object keys for all detections of one keyframe."""
+    ) -> list[tuple[int, int] | None]:
+        """Track ids and object keys for all detections of one keyframe (``None``: dropped)."""
         if len(media) == 0:
             return []
         p_map = np.array(p_dr, dtype=float).copy()
@@ -413,11 +418,13 @@ class Tracker:
         sigma_h: float,
         taken: set[int],
         drift: bool = False,
-    ) -> tuple[int, int]:
+    ) -> tuple[int, int] | None:
         """Track id (offset applied) and object key for one detection.
 
         ``drift``: grow the gate by ``track_drift_per_m`` per metre travelled since
         the track was last seen (``nn`` mode; registration mode corrects drift).
+        Returns ``None`` if two tracks explain the detection about equally well
+        and ``track_on_ambiguity`` is ``"drop"``.
         """
         best, best_d, second_d = None, np.inf, np.inf
         for t in self.tracks:
@@ -439,6 +446,9 @@ class Tracker:
                     second_d = dxy
         ratio = self.params.track_ambiguity_ratio
         if best is not None and ratio is not None and second_d < ratio * max(best_d, 0.1):
+            if self.params.track_on_ambiguity == "drop":
+                self.n_dropped += 1
+                return None
             best = None
         if best is None:
             key = len(self.tracks)
@@ -558,6 +568,7 @@ def detections_for_agent(
             if items
             else np.zeros((0, 3))
         )
+        ids: list[tuple[int, int] | None]
         if params.tracking == "oracle":
             ids = []
             for it in items:
@@ -581,7 +592,10 @@ def detections_for_agent(
         else:
             raise ValueError(f"unknown tracking mode {params.tracking!r}")
         dets: list[Detection] = []
-        for (sensor, medium, c, sig, true_idx), (tid, okey) in zip(items, ids, strict=True):
+        for (sensor, medium, c, sig, true_idx), tid_okey in zip(items, ids, strict=True):
+            if tid_okey is None:  # ambiguous association: no detection is emitted
+                continue
+            tid, okey = tid_okey
             first = track_truth.setdefault(tid, true_idx)
             if first != true_idx:
                 stats["wrong_track"] += 1
@@ -605,6 +619,7 @@ def detections_for_agent(
     stats["tracks"] = len(tracker.tracks)
     stats["registrations"] = tracker.n_registrations
     stats["ambiguous_registrations"] = tracker.n_ambiguous
+    stats["dropped_ambiguous"] = tracker.n_dropped
     return out, stats
 
 

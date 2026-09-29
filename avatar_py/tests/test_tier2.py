@@ -131,6 +131,60 @@ def test_tracker_reuses_and_creates_tracks():
     assert e == 1000 and f not in (1000,)
 
 
+def test_tracker_ambiguous_detection_is_dropped_not_duplicated():
+    """Regression (docs/LOG.md L28): an ambiguous detection must not start a track.
+
+    Starting one made the next detection between the pair ambiguous too, so a
+    single crane leg collected 250 tracks on the Tier-2 harbour.
+    """
+    close = np.array([[5.0, 0.0, 1.0], [6.2, 0.0, 1.0]])  # two tracks 1.2 m apart
+    jitter = np.random.default_rng(0).uniform(-0.4, 0.4, size=(40, 2))  # detections between
+    counts = {}
+    for mode in ("drop", "new"):
+        tr = Tracker(0, FrontEndParams(track_on_ambiguity=mode))
+        for k, p in enumerate(close):
+            tr.assign(k, Medium.ABOVE, p, 0.1, set())
+        for k, j in enumerate(jitter):
+            tr.assign(2 + k, Medium.ABOVE, np.array([5.6 + j[0], j[1], 1.0]), 0.1, set())
+        counts[mode] = (len(tr.tracks), tr.n_dropped)
+    assert counts["drop"][0] <= 4 and counts["drop"][1] > 0
+    assert counts["new"][0] > 3 * counts["drop"][0] and counts["new"][1] == 0
+    tr = Tracker(0, FrontEndParams())
+    for k, p in enumerate(close):
+        tr.assign(k, Medium.ABOVE, p, 0.1, set())
+    assert tr.assign(2, Medium.ABOVE, np.array([5.6, 0.0, 1.0]), 0.1, set()) is None  # a tie
+    assert tr.assign(3, Medium.ABOVE, np.array([5.02, 0.0, 1.0]), 0.1, set()) is not None
+
+
+def _tracker_with(points: np.ndarray, travelled_m: float) -> Tracker:
+    """Registration tracker holding ``points``; ``travelled_m`` widens its search radius."""
+    tr = Tracker(0, FrontEndParams(tracking="registration"))
+    taken: set[int] = set()
+    for p in points:
+        tr.assign(0, Medium.ABOVE, p, 0.1, taken)
+    tr.step(travelled_m)
+    return tr
+
+
+def test_registration_recovers_a_drift_offset():
+    tracks = np.array([[5.0, 0.0, 1.0], [9.0, 3.0, 1.0], [14.0, -2.0, 1.0], [20.0, 6.0, 1.0]])
+    tr = _tracker_with(tracks, travelled_m=100.0)  # search radius 1 + 0.02 * 100 = 3 m
+    drift = np.array([1.4, -0.8, 0.0])
+    off = tr.register([Medium.ABOVE] * 3, tracks[:3] + drift, np.full(3, 0.1))
+    np.testing.assert_allclose(off, -drift[:2], atol=1e-9)
+    np.testing.assert_allclose(tr.correction_xy, -drift[:2], atol=1e-9)
+    assert tr.n_registrations == 1
+
+
+def test_registration_refuses_a_tie_along_a_regular_row():
+    """Two piles of a regular row match the row shifted by one spacing: no unique offset."""
+    row = np.array([[6.0 * i, 0.0, 1.0] for i in range(5)])
+    tr = _tracker_with(row, travelled_m=300.0)  # radius min(1 + 6, 8) m reaches the neighbours
+    off = tr.register([Medium.ABOVE] * 2, row[1:3] + np.array([0.3, 0.0, 0.0]), np.full(2, 0.1))
+    np.testing.assert_array_equal(off, np.zeros(2))
+    assert tr.n_registrations == 0 and tr.n_ambiguous == 1
+
+
 def test_tracker_coaxial_object_key():
     tr = Tracker(0, FrontEndParams())
     _, k1 = tr.assign(0, Medium.ABOVE, np.array([5.0, 0.0, 1.0]), 0.1, set())
