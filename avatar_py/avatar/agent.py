@@ -243,11 +243,14 @@ class AvatarAgent:
                 self.local.add_variable(lkey, VarType.POINT3, transform_points(pose, det.p_body))
                 self.meta[lid] = LandmarkMeta(lid, det.medium, int(medium_flag(det.medium)))
                 n_parts = len(self._part_object_ids)
-                obj = (  # clutter (index beyond the world's parts) belongs to no structure
-                    int(self._part_object_ids[det.part_index])
-                    if 0 <= det.part_index < n_parts
-                    else -1 - det.part_index
-                )
+                if det.object_key is not None:  # front-end tracker (Tier 2)
+                    obj = -(1 << 40) - int(det.object_key)
+                else:  # clutter (index beyond the world's parts) belongs to no structure
+                    obj = (
+                        int(self._part_object_ids[det.part_index])
+                        if 0 <= det.part_index < n_parts
+                        else -1 - det.part_index
+                    )
                 parts = self._object_parts.setdefault(obj, {})
                 parts[det.medium] = lid
                 if len(parts) == 2:  # both parts of one structure seen by this agent

@@ -248,6 +248,9 @@ class Detection:
     # Ground truth for evaluation only: the part really observed (differs from
     # ``part_index`` after an identity switch; -1 for clutter). None = same.
     true_part_index: int | None = None
+    # Front-end key of the physical structure this part belongs to (intra-agent
+    # coaxial linking). None: derived from ``part_index`` (Tier-1 oracle tracking).
+    object_key: int | None = None
 
 
 def detect(

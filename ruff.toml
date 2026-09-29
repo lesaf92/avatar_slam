@@ -18,3 +18,7 @@ known-first-party = ["avatar"]
 "experiments/*.py" = ["E402"]
 "avatar_py/avatar/cli.py" = ["E402"]
 "avatar_py/tests/conftest.py" = ["E402"]
+# SDF/XML templates are kept one element per line for readability.
+"avatar_py/avatar/tier2/sdf.py" = ["E501"]
+# The Tier-2 recorder imports the repository modules after extending sys.path.
+"experiments/gazebo/*.py" = ["E402"]

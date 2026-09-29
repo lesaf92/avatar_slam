@@ -7,7 +7,7 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data tables server cycle bandwidth drift realism
+.PHONY: paper-data tables server cycle bandwidth drift realism tier2-record tier2
 
 paper-data: server cycle bandwidth drift realism tables
 
@@ -29,6 +29,19 @@ drift:
 
 realism:
 	$(PY) realism_study.py --seeds 0 1 2 --out $(DATA)/realism.csv
+
+# Tier 2 (Gazebo Harmonic): needs a GPU, Gazebo and the recorder (gazebo/README.md).
+# Not part of `paper-data`, which must run without Gazebo; run it explicitly.
+T2RUNS ?= ../results/tier2
+tier2-record:
+	$(MAKE) -C gazebo
+	for s in $(SEEDS); do \
+		$(PY) gazebo/record.py --seed $$s --duration 600 --out $(T2RUNS)/harbor_fleet_seed$$s; \
+		$(PY) gazebo/check_geometry.py $(T2RUNS)/harbor_fleet_seed$$s --every 30; \
+	done
+
+tier2:
+	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(SEEDS) --out $(DATA)/tier2.csv
 
 tables:
 	$(PY) make_paper_tables.py
