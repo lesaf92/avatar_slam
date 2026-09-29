@@ -33,6 +33,7 @@ realism:
 # Tier 2 (Gazebo Harmonic): needs a GPU, Gazebo and the recorder (gazebo/README.md).
 # Not part of `paper-data`, which must run without Gazebo; run it explicitly.
 T2RUNS ?= ../results/tier2
+JOBS   ?= 4
 tier2-record:
 	$(MAKE) -C gazebo
 	for s in $(SEEDS); do \
@@ -41,7 +42,8 @@ tier2-record:
 	done
 
 tier2:
-	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(SEEDS) --out $(DATA)/tier2.csv
+	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(SEEDS) --jobs $(JOBS) \
+		--out $(DATA)/tier2.csv
 
 tables:
 	$(PY) make_paper_tables.py

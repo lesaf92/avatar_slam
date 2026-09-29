@@ -8,7 +8,12 @@ scenario, seed, odometry and estimator on two perception tiers:
 * **T2**: Gazebo Harmonic ray-cast range data through the geometric front-end
   (``avatar.tier2``), with ground-truth intra-agent association as in Tier 1;
 * **T2nn**: the same, with the nearest-neighbour tracker instead (realistic
-  intra-agent association).
+  intra-agent association);
+* **T2reg**: the same, with keyframe-to-map registration before the gated
+  association (a negative result, docs/LOG.md L28);
+* **T2nn-uuv / T2nn-land**: controlled ablations of T2nn, in which only the
+  BlueROV2s (``uuv``) or only the Husky and the Tarot (``land``) use the
+  nearest-neighbour tracker and the others keep ground-truth tracks.
 
 Modes: independent (single-agent SLAM), Avatar (decentralized) and the
 centralized oracle (ground-truth association). On T2 the oracle is also run
@@ -32,6 +37,7 @@ for _var in ("OPENBLAS_NUM_THREADS", "OMP_NUM_THREADS", "MKL_NUM_THREADS"):
 
 import argparse
 import csv
+import dataclasses
 import json
 import time
 from concurrent.futures import ProcessPoolExecutor
@@ -46,12 +52,57 @@ from avatar.tier2.dataset import build_tier2_sim, load_meta
 from avatar.tier2.frontend import FrontEndParams
 
 # Perception tiers: Tier 1; Tier 2 with ground-truth intra-agent association (as
-# Tier 1); Tier 2 with the nearest-neighbour tracker (realistic front-end).
-TIERS = {"T1": None, "T2": "oracle", "T2nn": "nn"}
+# Tier 1); Tier 2 with the nearest-neighbour tracker (realistic front-end); Tier 2
+# with registration-aided tracking.
+TIERS: dict[str, str | dict[str, str] | None] = {
+    "T1": None,
+    "T2": "oracle",
+    "T2nn": "nn",
+    "T2reg": "registration",
+    "T2nn-uuv": {"uuv": "nn", "*": "oracle"},
+    "T2nn-land": {"ugv": "nn", "uav": "nn", "*": "oracle"},
+}
 
 WRONG_XY_M = 2.0
 WRONG_YAW_RAD = np.deg2rad(5.0)
 G1_XY_M = 1.0
+
+
+def _modes(tier: str) -> list[str]:
+    """Distinct tracking modes a Tier-2 tier uses (one front-end cache per mode)."""
+    spec = TIERS[tier]
+    if spec is None:
+        return []
+    return sorted({spec} if isinstance(spec, str) else set(spec.values()))
+
+
+def _build(run_dir: str, mode: str) -> None:
+    """Fill the front-end cache of one (run, mode); each pair has its own cache file."""
+    build_tier2_sim(run_dir, AvatarParams(), FrontEndParams(tracking=mode))
+
+
+def _tier2_sim(run_dir: str, params: AvatarParams, tier: str):
+    """Scenario, SimData and front-end statistics of one Tier-2 tier.
+
+    A mixed tier takes each agent's detections from the sim of its own tracking
+    mode (matched on the agent name prefix, ``*`` for the rest).
+    """
+    spec = TIERS[tier]
+    if isinstance(spec, str):
+        return build_tier2_sim(run_dir, params, FrontEndParams(tracking=spec))
+    built = {m: build_tier2_sim(run_dir, params, FrontEndParams(tracking=m)) for m in _modes(tier)}
+    scenario, base, _ = next(iter(built.values()))
+    agents, stats = dict(base.agents), {}
+    for aid, ad in base.agents.items():
+        if ad.config.role != "slam":
+            continue
+        name = ad.config.name
+        mode = next((m for k, m in spec.items() if k != "*" and name.startswith(k)), spec["*"])
+        _, sim_m, st_m = built[mode]
+        agents[aid] = sim_m.agents[aid]
+        if name in st_m:
+            stats[name] = st_m[name]
+    return scenario, dataclasses.replace(base, agents=agents), stats
 
 
 def _one(run_dir: str, tier: str) -> dict:
@@ -61,8 +112,7 @@ def _one(run_dir: str, tier: str) -> dict:
     t0 = time.perf_counter()
     fe = {}
     if TIERS[tier] is not None:
-        fe_params = FrontEndParams(tracking=TIERS[tier])
-        scenario, sim, fe = build_tier2_sim(run_dir, params, fe_params)
+        scenario, sim, fe = _tier2_sim(run_dir, params, tier)
     else:
         scenario, sim = make_sim(
             meta["scenario"], seed, float(meta["duration_s"]), params, **meta["scenario_args"]
@@ -118,13 +168,13 @@ def main() -> None:
     for d in dirs:
         if not (Path(d) / "raw.npz").exists():
             raise SystemExit(f"{d}: not recorded (experiments/gazebo/record.py)")
-    # Build the T2 front-end caches first (sequentially: one cache file per run).
-    for d in dirs:
-        for t in args.tiers:
-            if TIERS[t] is not None:
-                build_tier2_sim(d, AvatarParams(), FrontEndParams(tracking=TIERS[t]))
     jobs = [(d, t) for d in dirs for t in args.tiers]
     with ProcessPoolExecutor(max_workers=args.jobs) as ex:
+        # Front-end caches first (segmentation is the slow part): one cache file
+        # per (run, tracking mode), so the builds are independent.
+        built = sorted({(d, m) for d, t in jobs for m in _modes(t)})
+        if built:
+            list(ex.map(_build, *zip(*built, strict=True)))
         rows = list(ex.map(_one, *zip(*jobs, strict=True)))
     keys: list[str] = []
     for r in rows:

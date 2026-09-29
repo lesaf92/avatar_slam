@@ -207,7 +207,21 @@ TIER_NAMES = {
     "T1": "Tier 1 (abstract)",
     "T2": "Tier 2 (Gazebo), GT tracks",
     "T2nn": "Tier 2 (Gazebo), NN tracker",
+    "T2reg": "Tier 2 (Gazebo), registration",
+    "T2nn-uuv": "Tier 2 (Gazebo), NN on BlueROV2s only",
+    "T2nn-land": "Tier 2 (Gazebo), NN on Husky + Tarot only",
 }
+ROW_NAMES = {  # row labels of the first table (Tier-2 rows sit under one sub-header)
+    "T1": "Tier 1 (abstract)",
+    "T2": "\\quad GT tracks",
+    "T2nn": "\\quad NN tracker",
+    "T2reg": "\\quad registration",
+    "T2nn-uuv": "\\quad NN, BlueROV2s only",
+    "T2nn-land": "\\quad NN, Husky + Tarot only",
+}
+TIER_TAGS = {"T1": "One", "T2": "Two", "T2nn": "TwoNN", "T2reg": "TwoReg",
+             "T2nn-uuv": "TwoNNUuv", "T2nn-land": "TwoNNLand"}  # fmt: skip
+AGENT_TIERS = ("T1", "T2", "T2nn")  # per-robot table: main tiers only (column width)
 FLEET = (("ugv_0", "Husky"), ("uav_0", "Tarot 680"), ("uuv_0", "BlueROV2 0"),
          ("uuv_1", "BlueROV2 1"))  # fmt: skip
 
@@ -225,6 +239,8 @@ def tier2() -> None:
     ]
     macros = ["% generated from tier2.csv"]
     for t in tiers:
+        if t == "T2":
+            lines.append("\\multicolumn{7}{l}{Tier 2 (Gazebo, kinematic rigs, sonar proxy):} \\\\")
         sel = [r for r in rows if r["tier"] == t]
         merged = sum(int(r["n_connected"]) == int(r["n_slam"]) for r in sel)
         at = np.median([_num(r["team_connected_s"]) for r in sel])
@@ -234,10 +250,10 @@ def tier2() -> None:
         av = mean_ci([_num(r["team_ate_avatar_m"]) for r in sel])
         orc = mean_ci([_num(r["team_ate_oracle_robust_m"]) for r in sel])
         lines.append(
-            f"{TIER_NAMES[t]} & {merged}/{len(sel)} & {at:.0f} & {wrong}/{n_al} & "
+            f"{ROW_NAMES[t]} & {merged}/{len(sel)} & {at:.0f} & {wrong}/{n_al} & "
             f"{g1}/{len(sel)} & {av} & {orc} \\\\"
         )
-        tag = {"T1": "One", "T2": "Two", "T2nn": "TwoNN"}[t]
+        tag = TIER_TAGS[t]
         macros += [
             f"\\newcommand{{\\tier{tag}Avatar}}"
             f"{{{np.mean([_num(r['team_ate_avatar_m']) for r in sel]):.2f}}}",
@@ -254,6 +270,7 @@ def tier2() -> None:
     (DATA / "tier2_summary.tex").write_text("\n".join(macros) + "\n")
 
     # Per-robot ATE [m]: alone vs. Avatar (own frame, fused graph), mean over seeds.
+    tiers = [t for t in tiers if t in AGENT_TIERS]
     head = " & ".join(f"\\multicolumn{{2}}{{c}}{{{TIER_NAMES[t].split(',')[-1].strip()}}}"
                       if t != "T1" else "\\multicolumn{2}{c}{Tier 1}" for t in tiers)  # fmt: skip
     lines = [
