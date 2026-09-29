@@ -1,8 +1,10 @@
 \section{Discussion and Limitations}
 \label{sec:discussion}
-All results are from the Tier-1 simulator, in which sensors are abstracted at the level of
+Almost all results are from the Tier-1 simulator, in which sensors are abstracted at the level of
 landmark parts. Front-end errors (identity switches, clutter) are injected, but occlusion is
-not modelled. Four limitations shape the claims of this paper.
+not modelled. A Tier-2 check in Gazebo uses kinematic sensor rigs and a ray-cast proxy for the
+sonar, not a physics-based sonar or vehicle dynamics; all results are simulation. Five
+limitations shape the claims of this paper.
 First, collaboration corrects a drifting AUV only when its solo drift is small. With metre-level
 drift, each neighbour's frame absorbs the nearest cluster of matches rigidly, and the
 trajectory does not bend. This needs anchors at both ends of the drift that are linked to the
@@ -15,3 +17,8 @@ geometry.
 Fourth, cycle consistency cannot check an alignment that closes no cycle. The centralized
 baseline shows how an aliased alignment on sparse data can then corrupt the whole team.
 Multi-hop sharing without double counting is future work.
+Fifth, intra-agent association. The Tier-2 result uses ground-truth tracks. A tracker that
+gates in the dead-reckoning frame fails once an underwater robot's drift approaches the spacing of
+similar structures, and its errors are persistent, unlike the random identity switches injected in
+Tier 1, which the robust kernel absorbs. Association against the agent's own estimate is future
+work, and the Tier-1 error model may understate the danger.
