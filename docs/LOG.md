@@ -9,8 +9,8 @@ Newest entries first. Every result gives the command that reproduces it.
 
 All runs: `harbor_fleet`, 600 s, seeds 0-9, M64, **simulation**. Tier 2 means
 Gazebo Harmonic with kinematic sensor rigs and a ray-cast sonar proxy (ADR-0007),
-not DAVE, PX4 or Clearpath. The CSV records `4bfff60-dirty` (the branch was
-not yet committed); re-run after committing to get a clean label.
+not DAVE, PX4 or Clearpath. `paper/data/tier2.csv` records commit `b4681ec`
+(clean).
 
 ### L28. Tier 2 v0: geometry is enough for G1 with ground-truth tracks; realistic tracking is not there yet
 

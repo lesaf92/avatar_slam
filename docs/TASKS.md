@@ -128,8 +128,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
   tracks). The remaining failure is structural: they associate in the dead-reckoning frame,
   where BlueROV2 drift reaches 8-10 m against 8 m between pier rows. Next: **T-F3-02**
   (association against the agent's own SLAM estimate), then **T-S2-05** (DAVE sonar, needs
-  root/Docker). Provenance: the CSVs say `-dirty` until the branch is committed and
-  `make -C experiments tier2 tables` re-run.
+  root/Docker). Provenance: `paper/data/tier2.csv` records the clean commit `b4681ec`.
 
 - *2026-09-28 (Claude, second session):* **T-S1-04 hand-off.** Works:
   `FrontEndErrors` (clutter, identity switches; own RNG stream, off by default),
