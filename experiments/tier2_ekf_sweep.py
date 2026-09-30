@@ -34,6 +34,14 @@ from avatar.tier2.dataset import load_meta
 from avatar.tier2.frontend import FrontEndParams, detections_for_agent
 from avatar.tier2.sdf import GZ_SENSORS
 
+
+def _parse(default: object, text: str) -> object:
+    """``text`` as the type of ``default`` (booleans: 0/1/true/false)."""
+    if isinstance(default, bool):
+        return text.lower() in ("1", "true", "yes")
+    return type(default)(text)
+
+
 RUNS = Path(__file__).resolve().parents[1] / "results" / "tier2"
 
 
@@ -73,7 +81,7 @@ def main() -> None:
     grid = {}
     for tok in sys.argv[sep + 1 :]:
         key, vals = tok.split("=")
-        grid[key] = [type(getattr(defaults, key))(v) for v in vals.split(",")]
+        grid[key] = [_parse(getattr(defaults, key), v) for v in vals.split(",")]
     combos = [dict(zip(grid, c, strict=True)) for c in itertools.product(*grid.values())] or [{}]
     jobs = [(who, s, c) for c in combos for s in seeds]
     with ProcessPoolExecutor(max_workers=12) as ex:

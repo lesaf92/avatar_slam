@@ -297,3 +297,41 @@ def test_birth_streak_restarts_after_a_long_gap():
         t.predict(np.zeros(4), np.array([0.01, 0.01, 0.01, 0.002]))
     _detect(t, (12.0, 3.0))
     assert t._nobs[0] == 1 and t._status[0] == TENTATIVE
+
+
+def _row_tracker(xs: list[float], **kw) -> EkfTracker:
+    """Confirmed landmarks on a row (y = 0) and a pose that is uncertain by 4 m."""
+    t = _tracker(map_sigma_floor_m=0.1, **kw)
+    for x in xs:
+        _add(t, A, (x, 0.0), sigma=0.05)
+    _set_pose_cov(t, 4.0)
+    return t
+
+
+def _frame(t: EkfTracker, xs: list[float]):
+    n = len(xs)
+    p = np.array([[x, 0.0, 0.0] for x in xs])
+    return t.associate([A] * n, p, np.full((n, 3), 0.05))
+
+
+def test_joint_pairing_resolves_detections_that_are_each_ambiguous():
+    """Three piles seen in one frame. With a 4 m pose σ each detection alone fits two piles
+    of an irregular row about equally well; together only one pairing is consistent."""
+    row = [0.0, 6.0, 12.6, 18.5, 24.9]  # irregular spacing 6.0, 6.6, 5.9, 6.4
+    seen = [5.7, 12.3, 18.2]  # landmarks 1, 2, 3 as seen from a pose 0.3 m off
+    out_off = _frame(_row_tracker(row, joint_pairing=False), seen)
+    assert all(o is None for o in out_off)  # ambiguous singly: dropped
+    t = _row_tracker(row)
+    out = _frame(t, seen)
+    assert [o[0] for o in out] == [1001, 1002, 1003]
+    assert t.n_joint == 1 and t.n_landmarks == 5  # no new landmark
+
+
+def test_joint_pairing_refuses_a_tie_on_a_regular_row():
+    """On a perfectly regular row the pairing shifted by one pile is equally good: no
+    decision, so no match and no new landmark."""
+    row = [0.0, 6.0, 12.0, 18.0, 24.0]
+    t = _row_tracker(row)
+    out = _frame(t, [5.7, 11.7, 17.7])
+    assert all(o is None for o in out)
+    assert t.n_joint == 0 and t.n_landmarks == 5

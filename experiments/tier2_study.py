@@ -185,7 +185,10 @@ def main() -> None:
     args = ap.parse_args()
     for kv in args.ekf:
         key, val = kv.split("=")
-        EKF_OVERRIDES[key] = type(getattr(EkfTrackerParams(), key))(val)
+        default = getattr(EkfTrackerParams(), key)
+        EKF_OVERRIDES[key] = (
+            val.lower() in ("1", "true", "yes") if isinstance(default, bool) else type(default)(val)
+        )
     rev = commit()
     dirs = [str(Path(args.runs) / f"{args.scenario}_seed{s}") for s in args.seeds]
     for d in dirs:

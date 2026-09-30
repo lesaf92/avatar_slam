@@ -50,9 +50,11 @@ the factor graph's business).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from functools import lru_cache
 
 import numpy as np
 from numpy.typing import NDArray
+from scipy.stats import chi2
 
 from avatar.types import Medium
 
@@ -104,6 +106,16 @@ class EkfTrackerParams:
     landmark_density_per_m2: float = 0.005
     # Log-likelihood a match must exceed the new-landmark hypothesis by.
     new_landmark_margin: float = 1.0
+    # Detections of one keyframe that are each ambiguous between landmarks are paired
+    # jointly (branch and bound over the joint likelihood, with "new landmark" as an
+    # option). The best pairing is taken if it beats the runner-up by this log-likelihood
+    # margin; ``joint_max_dets`` bounds the search; ``joint_gate`` is the probability of
+    # the joint chi-square gate. The relative geometry of the piles seen in one frame is
+    # known to centimetres even when the pose σ is a metre.
+    joint_pairing: bool = True
+    joint_margin_ll: float = 3.0
+    joint_max_dets: int = 8
+    joint_gate: float = 0.999
     # A landmark is released (its detections are emitted) when confirmed or observed
     # this many times in all; one-off clutter and sliding clusters never are.
     release_min_obs: int = 3
@@ -122,6 +134,12 @@ class PlatformPrior:
     heading_bias_rad_per_m: float = 0.0
     scale: float = 0.0
     gyro_scale: float = 0.0
+
+
+@lru_cache(maxsize=64)
+def _chi2_gate(dof: int, prob: float) -> float:
+    """Inverse chi-square cdf (cached)."""
+    return float(chi2.ppf(prob, dof))
 
 
 def _rot(theta: float) -> tuple[FloatArray, FloatArray]:
@@ -175,6 +193,7 @@ class EkfTracker:
         # Distance [m] between the two competing landmarks at each ambiguous drop
         # (small: near-duplicates of one object; large: aliasing between objects).
         self.ambiguity_gaps_m: list[float] = []
+        self.n_joint = 0  # keyframes in which a joint pairing resolved ambiguous detections
 
     @property
     def x(self) -> FloatArray:
@@ -441,6 +460,81 @@ class EkfTracker:
         elif self._nobs[j] >= prm.confirm_frames:
             self._status[j] = CONFIRMED
 
+    # ------------------------------------------------------------------ joint pairing
+    def _joint_pairing(
+        self,
+        dets: list[int],
+        cands: dict[int, FloatArray],
+        p_body: FloatArray,
+        sigmas: FloatArray,
+        ll_new: float,
+    ) -> dict[int, int | None] | None:
+        """Best joint pairing of the given (individually ambiguous) detections.
+
+        Every detection is paired with one of its candidate landmarks or left unpaired (it
+        then starts a new landmark). A pairing is scored by the joint log-likelihood under
+        the covariance of the stacked innovations ``m_j - q_i`` (pose error shared between
+        all of them), plus ``ll_new`` per unpaired detection, and pruned by the joint
+        chi-square gate (JCBB). Returns ``{detection: landmark or None}`` if the best
+        pairing beats the runner-up by ``joint_margin_ll``, else ``None``.
+        """
+        prm = self.params
+        n = len(dets)
+        meas = [self._measurement(p_body[i], sigmas[i]) for i in dets]
+        floor = prm.map_sigma_floor_m**2
+        d_all = N_STATE + 2 * self.n_landmarks
+        P = self._P[:d_all, :d_all]
+        lm = self._landmarks()
+        options = [[None, *[int(j) for j in cands[i]]] for i in dets]
+        if float(np.prod([len(o) for o in options])) > 30_000:
+            return None
+
+        def joint_ll(pairs: list[tuple[int, int]]) -> tuple[float, float]:
+            """(joint d², joint log-likelihood without the unpaired terms)."""
+            k = len(pairs)
+            js = sorted({j for _, j in pairs})
+            cols = list(range(N_STATE)) + [N_STATE + 2 * j + c for j in js for c in (0, 1)]
+            Psub = P[np.ix_(cols, cols)]
+            J = np.zeros((2 * k, len(cols)))
+            nu = np.zeros(2 * k)
+            Rn = np.zeros((2 * k, 2 * k))
+            for r, (a, j) in enumerate(pairs):
+                q, H, Rs = meas[a]
+                c = N_STATE + 2 * js.index(j)
+                J[2 * r : 2 * r + 2, :N_STATE] = -H
+                J[2 * r : 2 * r + 2, c : c + 2] = np.eye(2)
+                nu[2 * r : 2 * r + 2] = lm[j] - q
+                Rn[2 * r : 2 * r + 2, 2 * r : 2 * r + 2] = Rs + floor * np.eye(2)
+            S = J @ Psub @ J.T + Rn
+            sign, logdet = np.linalg.slogdet(S)
+            if sign <= 0:
+                return np.inf, -np.inf
+            d2 = float(nu @ np.linalg.solve(S, nu))
+            return d2, -0.5 * (d2 + logdet) - k * np.log(2.0 * np.pi)
+
+        best: list[tuple[float, tuple[int | None, ...]]] = []  # two best (ll, assignment)
+
+        def visit(pos: int, chosen: list[int | None], pairs: list[tuple[int, int]]) -> None:
+            if pos == n:
+                ll = (joint_ll(pairs)[1] if pairs else 0.0) + (n - len(pairs)) * ll_new
+                best.append((ll, tuple(chosen)))
+                best.sort(key=lambda x: -x[0])
+                del best[2:]
+                return
+            for opt in options[pos]:
+                if opt is None:
+                    visit(pos + 1, [*chosen, None], pairs)
+                    continue
+                trial = [*pairs, (pos, opt)]
+                d2, _ = joint_ll(trial)
+                if d2 < _chi2_gate(2 * len(trial), prm.joint_gate):
+                    visit(pos + 1, [*chosen, opt], trial)
+
+        visit(0, [], [])
+        if len(best) < 2 or best[0][0] - best[1][0] < prm.joint_margin_ll:
+            return None
+        return {dets[a]: opt for a, opt in enumerate(best[0][1])}
+
     # ------------------------------------------------------------------ association
     def associate(
         self,
@@ -528,10 +622,32 @@ class EkfTracker:
                 updated |= apply_match(i, j)
             if not updated:
                 break
+        # Individually ambiguous detections of this keyframe: pair them jointly.
+        forced_new: set[int] = set()
+        if prm.joint_pairing:
+            amb: dict[int, FloatArray] = {}
+            for i in sorted(undecided):
+                idx, ll = candidates(i)
+                if len(idx) > 1 and ll[idx[0]] - ll[idx[1]] < margin_ll:
+                    amb[i] = idx
+            if len(amb) >= 2:
+                pick = sorted(amb, key=lambda i: -float(candidates(i)[1][amb[i][0]]))
+                pick = sorted(pick[: prm.joint_max_dets])
+                pairing = self._joint_pairing(pick, amb, p_body, sigmas, ll_new)
+                if pairing is not None:
+                    self.n_joint += 1
+                    for i, j in pairing.items():
+                        if j is None:
+                            forced_new.add(i)
+                        else:
+                            apply_match(i, j)
         # Whatever is left: ambiguous between landmarks (drop), or no landmark clearly
         # beats "new" (start one).
         new: list[int] = []
         for i in sorted(undecided):
+            if i in forced_new:
+                new.append(i)
+                continue
             idx, ll = candidates(i)
             if len(idx) > 1 and ll[idx[0]] - ll[idx[1]] < margin_ll:
                 dropped.add(i)
