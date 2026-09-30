@@ -184,7 +184,15 @@ def realism() -> None:
         "\\midrule",
     ]
     presets = list(dict.fromkeys(r["preset"] for r in rows))
-    levels = {"none": "none", "low": "5\\,\\% + 0.5", "high": "15\\,\\% + 1.0"}
+    levels = {
+        "none": "none",
+        "low": "5\\,\\% + 0.5",
+        "high": "15\\,\\% + 1.0",
+        "burst_low": "5\\,\\% in bursts + 0.5",
+        "burst_high": "13\\,\\% in bursts + 1.0",
+        "split_half": "half of revisits split",
+        "split_all": "all revisits split",
+    }
     n_agents = max(int(r["n_connected_dec"]) for r in rows)
     for p_ in presets:
         for j, lv in enumerate(dict.fromkeys(r["errors"] for r in rows if r["preset"] == p_)):

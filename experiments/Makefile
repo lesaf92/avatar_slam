@@ -28,7 +28,7 @@ drift:
 		--out $(DATA)/drift_anchored.csv
 
 realism:
-	$(PY) realism_study.py --seeds 0 1 2 --out $(DATA)/realism.csv
+	$(PY) realism_study.py --seeds 0 1 2 --workers $(JOBS) --out $(DATA)/realism.csv
 
 # Tier 2 (Gazebo Harmonic): needs a GPU, Gazebo and the recorder (gazebo/README.md).
 # Not part of `paper-data`, which must run without Gazebo; run it explicitly.
