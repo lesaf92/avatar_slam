@@ -48,6 +48,7 @@ import numpy as np
 from _provenance import commit
 
 from avatar.agent import AvatarParams
+from avatar.frontend.ekf_tracker import EkfTrackerParams
 from avatar.runner import make_sim, run_centralized, run_decentralized, run_independent
 from avatar.tier2.dataset import build_tier2_sim, load_meta
 from avatar.tier2.frontend import FrontEndParams
@@ -65,9 +66,19 @@ TIERS: dict[str, str | dict[str, str] | None] = {
     "T2nn-land": {"ugv": "nn", "uav": "nn", "*": "oracle"},
 }
 
+# Overrides of EkfTrackerParams for the "ekf" tracking mode (``--ekf key=value``).
+EKF_OVERRIDES: dict[str, float] = {}
+
 WRONG_XY_M = 2.0
 WRONG_YAW_RAD = np.deg2rad(5.0)
 G1_XY_M = 1.0
+
+
+def _fe_params(mode: str) -> FrontEndParams:
+    """Front-end parameters of a tracking mode (with the ``--ekf`` overrides)."""
+    if mode == "ekf":
+        return FrontEndParams(tracking=mode, ekf=EkfTrackerParams(**EKF_OVERRIDES))
+    return FrontEndParams(tracking=mode)
 
 
 def _modes(tier: str) -> list[str]:
@@ -80,7 +91,7 @@ def _modes(tier: str) -> list[str]:
 
 def _build(run_dir: str, mode: str) -> None:
     """Fill the front-end cache of one (run, mode); each pair has its own cache file."""
-    build_tier2_sim(run_dir, AvatarParams(), FrontEndParams(tracking=mode))
+    build_tier2_sim(run_dir, AvatarParams(), _fe_params(mode))
 
 
 def _tier2_sim(run_dir: str, params: AvatarParams, tier: str):
@@ -91,8 +102,8 @@ def _tier2_sim(run_dir: str, params: AvatarParams, tier: str):
     """
     spec = TIERS[tier]
     if isinstance(spec, str):
-        return build_tier2_sim(run_dir, params, FrontEndParams(tracking=spec))
-    built = {m: build_tier2_sim(run_dir, params, FrontEndParams(tracking=m)) for m in _modes(tier)}
+        return build_tier2_sim(run_dir, params, _fe_params(spec))
+    built = {m: build_tier2_sim(run_dir, params, _fe_params(m)) for m in _modes(tier)}
     scenario, base, _ = next(iter(built.values()))
     agents, stats = dict(base.agents), {}
     for aid, ad in base.agents.items():
@@ -163,8 +174,18 @@ def main() -> None:
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(10)))
     ap.add_argument("--jobs", type=int, default=4)
     ap.add_argument("--tiers", nargs="+", default=list(TIERS), choices=list(TIERS))
+    ap.add_argument(
+        "--ekf",
+        nargs="*",
+        default=[],
+        metavar="KEY=VALUE",
+        help="EkfTrackerParams overrides for the ekf tracker, e.g. landmark_density_per_m2=0.01",
+    )
     ap.add_argument("--out", default="results/tier2_study.csv")
     args = ap.parse_args()
+    for kv in args.ekf:
+        key, val = kv.split("=")
+        EKF_OVERRIDES[key] = type(getattr(EkfTrackerParams(), key))(val)
     rev = commit()
     dirs = [str(Path(args.runs) / f"{args.scenario}_seed{s}") for s in args.seeds]
     for d in dirs:

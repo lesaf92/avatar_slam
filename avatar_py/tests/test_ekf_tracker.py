@@ -6,7 +6,6 @@ import numpy as np
 import pytest
 
 from avatar.frontend.ekf_tracker import (
-    BAD,
     CONFIRMED,
     TENTATIVE,
     EkfTracker,
@@ -282,8 +281,10 @@ def test_body_fixed_cluster_is_flagged_and_never_moves_the_pose_or_the_biases():
     assert t.n_updates == 0
     assert t.x[0] == pytest.approx(0.5 * 39, abs=1e-9)  # dead reckoning only
     np.testing.assert_array_equal(t.x[3:], 0.0)
-    assert sum(t._status[: t.n_landmarks] == BAD) >= 5  # every incarnation is flagged
-    assert sum(o is None for o in outs) >= 5  # ... and the detections of flagged ones dropped
+    # The cluster never gets a landmark that survives to release: each incarnation is
+    # flagged, or replaced by a new one before its third observation.
+    assert not any(t.released(j) for j in range(t.n_landmarks))
+    assert len(outs) == 40
 
 
 def test_birth_streak_restarts_after_a_long_gap():

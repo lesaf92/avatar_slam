@@ -653,7 +653,7 @@ def detections_for_agent(
         out = [[d for d in dets if ekf.released(d.part_index - id_offset)] for dets in out]
         stats["unreleased"] = n_before - sum(len(d) for d in out)
         status = ekf._status[: ekf.n_landmarks]
-        stats["tracks"] = int(np.sum(status != BAD))
+        stats["tracks"] = sum(ekf.released(j) for j in range(ekf.n_landmarks))
         stats["landmarks_confirmed"] = int(np.sum(status == CONFIRMED))
         stats["landmarks_bad"] = int(np.sum(status == BAD))
         stats["registrations"] = ekf.n_updates
