@@ -1,0 +1,7 @@
+# Environment of paper/data (written by experiments/make_paper_tables.py).
+# The numbers depend on the NumPy/SciPy versions: see avatar_py/requirements-lock.txt.
+host: luiz-predator-neo
+python: 3.12.3
+numpy: 2.5.3
+scipy: 1.18.1
+cpu: Intel(R) Core(TM) i9-14900HX, 32 threads
