@@ -18,6 +18,7 @@ import pickle
 from pathlib import Path
 
 import numpy as np
+import scipy
 
 from avatar.agent import AvatarParams
 from avatar.runner import make_sim
@@ -54,9 +55,14 @@ def build_tier2_sim(
         meta["scenario"], int(meta["seed"]), float(meta["duration_s"]), params,
         **meta["scenario_args"],
     )  # fmt: skip
-    # Cache key: parameters and the front-end source (a code change invalidates it).
+    # Cache key: parameters, the front-end source (a code change invalidates it) and the
+    # NumPy/SciPy versions (random-number streams and solvers differ between them, LOG L33).
     src = Path(frontend_module.__file__).read_bytes()
-    key = repr(fe_params) + hashlib.sha1(src).hexdigest()
+    key = (
+        repr(fe_params)
+        + hashlib.sha1(src).hexdigest()
+        + f"|np{np.__version__}|sp{scipy.__version__}"
+    )
     cache_file = run / f"detections_{fe_params.tracking}.pkl"
     cached = None
     if cache and cache_file.exists():

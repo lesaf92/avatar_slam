@@ -310,7 +310,36 @@ def tier2(csv_name: str = "tier2.csv", suffix: str = "", prefix: str = "tier") -
     (DATA / f"tab_tier2{suffix}_agents.tex").write_text("\n".join(lines) + "\n")
 
 
+def write_environment() -> None:
+    """Record the software and hardware the paper data were generated with (LOG L33)."""
+    import os
+    import platform
+    import sys
+
+    import scipy
+
+    cpu = next(
+        (
+            ln.split(":", 1)[1].strip()
+            for ln in open("/proc/cpuinfo")
+            if ln.startswith("model name")
+        ),
+        platform.processor(),
+    )
+    lines = [
+        "# Environment of paper/data (written by experiments/make_paper_tables.py).",
+        "# The numbers depend on the NumPy/SciPy versions: see avatar_py/requirements-lock.txt.",
+        f"host: {platform.node()}",
+        f"python: {sys.version.split()[0]}",
+        f"numpy: {np.__version__}",
+        f"scipy: {scipy.__version__}",
+        f"cpu: {cpu}, {os.cpu_count()} threads",
+    ]
+    (DATA / "environment.txt").write_text("\n".join(lines) + "\n")
+
+
 def main() -> None:
+    write_environment()
     made = []
     for fn, src in ((server_vs_avatar, "server_vs_avatar.csv"),
                     (cycle_check, "association_cycle_check.csv"),

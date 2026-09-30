@@ -119,8 +119,9 @@ ROS 2 packages depend on the cores, never the reverse (ADR-0002).
 ## 6. Build and test commands
 
 ```bash
-# Python reference package
-pip install -e "avatar_py[dev]"
+# Python reference package (the paper data use the pinned versions in
+# avatar_py/requirements-lock.txt: results depend on NumPy/SciPy, docs/LOG.md L33)
+pip install -r avatar_py/requirements-lock.txt -e "avatar_py[dev]"
 pytest avatar_py/tests -q
 ruff check avatar_py tools experiments && ruff format --check avatar_py tools experiments
 
