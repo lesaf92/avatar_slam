@@ -20,7 +20,9 @@ make -C experiments tier2-record tier2 tables   # Tier 2 (needs Gazebo and a GPU
 | `trajectory_study.py` | Trajectory shape and height vs. single-agent drift and team consistency; the drift table (H1, D8) | T-S4-04 / T-X1-02 |
 | `uav_altitude_sweep.py` | UAV altitude vs. its ability to join the team | T-S1-06 |
 | `realism_study.py` | Front-end errors and robust kernels | T-S1-04 |
-| `tier2_study.py` | Tier 1 vs. Tier 2 (Gazebo) parity with GT, NN and registration tracking; gate G1 | T-S2-01..03, T-G1 |
+| `tier2_ekf_sweep.py` | One robot's ATE and association statistics over EKF-tracker parameter grids | T-F3-02 |
+| `tier2_tracker_diagnostics.py` | Dead-reckoning drift, duplicate tracks, wrong-track events and gate sweeps of one recording | T-F3-01 / T-F3-02 |
+| `tier2_study.py` | Tier 1 vs. Tier 2 (Gazebo) parity with GT, NN, registration and EKF tracking; gate G1 | T-S2-01..03, T-G1 |
 | `gazebo/` | Tier-2 world, recorder (C++, gz-transport), geometry check | T-S2-01..03 |
 | `make_paper_tables.py` | LaTeX tables and macros from `paper/data/*.csv` | T-E3-01 |
 | `_provenance.py` | Commit label written into every CSV | AGENTS.md §5 |

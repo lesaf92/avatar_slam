@@ -5,63 +5,106 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
-## 2026-09-29 (later): EKF tracker for Tier 2, work in progress (Claude, paused)
+## 2026-09-30: EKF-SLAM tracker for Tier 2 (Claude)
 
-Branch `wp/T-F3-02-agent-association`, 10 seeds of the Tier-2 recordings, all
-**simulation**. CSVs are in `results/` (git-ignored) and were produced by
-`python experiments/tier2_study.py --tiers T2ekf ...` at `a6a9d12` plus the
-uncommitted changes that this entry's commit contains.
+Branch `wp/T-F3-02-agent-association`; `harbor_fleet`, 600 s, M64; all **simulation**
+(Tier 2 = Gazebo, kinematic rigs, sonar proxy, ADR-0007). Seeds 0-9 are the
+**development set**: every design decision below was made on them. Seeds 10-19 were
+recorded afterwards (`make -C experiments tier2-record`, same geometry check) and
+serve validation, with the default fixed beforehand. Two more density values were
+run on them as a sensitivity check, and the two failing seeds were analysed
+afterwards, so any further change needs a third set. `paper/data/tier2.csv` and
+`tier2_heldout.csv` record commit `fcee201` (clean).
 
-### L29. Covariance-gated EKF tracker: the association is nearly right, the team result is not yet (T-F3-02, partial)
+### L29. A joint-covariance EKF-SLAM tracker takes G1 from 4/10 to 8/10 on fresh seeds (T-F3-02)
 
-`avatar.frontend.ekf_tracker` replaces the dead-reckoning-frame gate of L28 with an
-EKF over the pose and the odometry biases (heading bias, translation scale, gyro
-scale) and per-landmark covariances. Three variants, same recordings:
+`avatar.frontend.ekf_tracker` associates detections against the agent's own filtered
+estimate: an EKF over pose, odometry biases (heading, translation scale, gyro scale;
+priors from the platform spec) and landmark positions, with the **joint** covariance.
+Gate: Mahalanobis distance of `m_j - q(x)`, a match must beat the runner-up and a
+"new landmark" hypothesis (`landmark_density_per_m2` = 0.005), ambiguous detections
+between landmarks are dropped, tentative landmarks must prove static before they
+may inform the bias states, detections are released once a landmark is confirmed or
+seen three times.
 
-| Variant | Team merged | Wrong alignments | G1 | Team ATE mean (median) [m] | Solo ATE UAV / BlueROV2 0 / BlueROV2 1 [m] |
-|---|---|---|---|---|---|
-| v0: covariance gating, ambiguous detections dropped | 10/10 | 11/90 | 6/10 | 0.952 (0.965) | 0.16 / 0.25 / 1.35 |
-| v1: + landmarks must prove static before they correct the pose | 0/10 | 15/34 | 0/10 | 0.480 (0.226) | 1.35 / 0.11 / 0.96 |
-| v2: + match vs. new-landmark likelihood, tentative landmarks correct the pose weakly | 4/10 | 16/59 | 3/10 | 4.335 (0.877) | 1.89 / 0.11 / 0.92 |
+| Perception | Dev G1 | Dev wrong | Dev team ATE [m] | Held-out G1 | Held-out wrong | Held-out team ATE [m] |
+|---|---|---|---|---|---|---|
+| Tier 1 | 10/10 | 1/100 | 0.119 ± 0.016 | 10/10 | 0/100 | 0.146 ± 0.024 |
+| Tier 2, ground-truth tracks | 10/10 | 0/95 | 0.249 ± 0.032 | 10/10 | 1/89 | 0.220 ± 0.028 |
+| Tier 2, NN tracker (L28) | 6/10 | 21/83 | 2.375 ± 0.883 | 4/10 | 23/84 | 2.068 ± 1.117 |
+| **Tier 2, EKF tracker** | **10/10** | **1/89** | 0.417 ± 0.417 | **8/10** | **8/92** | 0.531 ± 0.570 |
 
-(Ground-truth tracks, L28: solo 0.16 / 0.11 / 0.14 m, G1 10/10; NN tracker: G1 6/10.)
+Per-robot ATE alone [m] (development / held-out; ground-truth tracks in parentheses):
+Husky 0.17 / 0.16 (0.17 / 0.16), Tarot 0.16 / 0.30 (0.16 / 0.15), BlueROV2 0
+0.11 / 0.09 (0.11 / 0.09), BlueROV2 1 0.42 / 0.44 (0.14 / 0.15).
+
+```
+make -C experiments tier2-record tier2 tables PY=python JOBS=12     # both seed sets
+python experiments/tier2_ekf_sweep.py uuv_1 0 1 2 3 4 -- landmark_density_per_m2=0.01,0.005,0.003
+```
+
+**How it got there** (development seeds, team level; the first three rows were run
+at `a6a9d12` plus uncommitted changes, so they carry no clean provenance):
+
+| Variant | Merged | Wrong alignments | G1 | Team ATE mean [m] |
+|---|---|---|---|---|
+| v0: gating with independent pose and landmark covariances | 10/10 | 11/90 | 6/10 | 0.952 |
+| v1: + landmarks must prove static before they correct the pose | 0/10 | 15/34 | 0/10 | 0.480 |
+| v2: + match vs. new-landmark likelihood, weak tentative updates | 4/10 | 16/59 | 3/10 | 4.335 |
+| v3: joint covariance (the default) | 10/10 | 1/89 | 10/10 | 0.417 |
 
 **Findings.**
 1. **The filter model is sound.** With ground-truth association
-   (`tracking="ekf_truth"`, diagnostic) the estimated scale error of BlueROV2 1 is
-   +0.0058 against a true +0.0052 and the position error stays at 0.1-0.5 m
-   (NEES with 2 dof: 1-34, mildly overconfident).
-2. **The v0 failure was not an association error but a sliding clutter cluster.**
-   On seed 0, BlueROV2 1 sees a cluster at exactly 28.9 m in its body frame at every
-   keyframe (ground-truth label: clutter; a wall seen along the track, whose visible
-   centre moves with the robot). The tracker took it for a static landmark; the
-   only way to reconcile it with the odometry was a scale estimate of +3.2 % (true
-   +0.5 %), and by the end of the run the pose error was 7.2 m against a claimed σ of
-   0.07 m. The large measurement floor (0.3 m) let a 0.5 m per-keyframe slide pass
-   the gate. v1 fixes it with a birth test (a landmark's detections must stay
-   within the process noise accumulated since its birth); a unit test covers it.
-3. **Tuning cannot fix v0.** Sweeping the measurement floor (0.03-1.0 m), the odometry
-   inflation and the ambiguity margin on seeds 0 and 1 moved BlueROV2 1's error
-   between 0.07 and 5 m for neighbouring settings, with no stable region.
-4. **v1 starves the UAV**: its D435i sees a pile for one to three keyframes, so
-   nothing confirms, the pose is never corrected, its uncertainty passes the 8 m row
-   separation and it matches the opposite pile (`upd=0` for hundreds of keyframes).
-   v2 answers with the likelihood test (a match under a large pose σ loses to "new")
-   and weak tentative updates that cannot touch the bias states.
-5. **v2 has almost no wrong associations** (10 seeds: UAV 0, BlueROV2 0 and 1 three
-   each, Husky 173 of 4.6e4 matches) **but the team result is worse than v0's.** The UAV
-   is at 1.89 m alone (9 of 10 runs above 0.5 m). Not diagnosed. Suspects: 1 266
-   detections dropped as ambiguous (of about 2 000 UAV clusters in 10 seeds) and
-   about two landmarks per part, both of which remove the re-observations that correct
-   the pose. The per-agent solo error of v0 (UAV 0.16 m) shows what is reachable.
-6. **Negative result.** v2 does not meet the T-F3-02 acceptance (G1 >= 9/10).
+   (`tracking="ekf_truth"`, a diagnostic) BlueROV2 1's estimated scale error is
+   +0.0058 against a true +0.0052, and the position error stays at 0.1-0.5 m.
+2. **A sliding clutter cluster broke v0, not the association.** On seed 0,
+   BlueROV2 1 sees a cluster at exactly 28.9 m in its body frame at every keyframe
+   (ground-truth label: clutter; a wall seen along the track). Taken for a static
+   landmark, the only way to reconcile it with the odometry was a scale estimate of
+   +3.2 % (true +0.5 %), and the pose error grew to 7.2 m against a claimed σ of
+   0.07 m. The static birth test fixes it (a unit test covers it). Tuning could not:
+   sweeping the measurement floor, odometry inflation and ambiguity margin moved
+   BlueROV2 1's error between 0.07 and 5 m for neighbouring settings.
+3. **v1 starved the UAV**: its depth camera sees a pile for one to three keyframes, so
+   nothing confirmed and its pose was never corrected. v2 (weak updates from
+   tentative landmarks, and a match that must beat "new") fixed the UAV but
+   BlueROV2 1 stayed at 0.9-1.4 m.
+4. **The real cause was the independent-landmark covariance.** With ground-truth
+   identities, BlueROV2 1 still ended with 1.6-1.7 landmarks per part on the failing
+   seeds (1.0 on the good seed): the gate rejected true revisits, because a filter
+   that treats landmarks as independent reports the small *absolute* pose σ, not the
+   drift since the landmark was mapped. Each duplicate cost the local SLAM a loop
+   closure (about 2 m of error with 1-2 wrong tracks). Keeping the cross-covariances
+   (state augmentation) fixed it: on seeds 0-4, all four robots reach their
+   ground-truth-track accuracy over a plateau of settings (BlueROV2 1 0.14 m, UAV
+   0.14 m, BlueROV2 0 0.11 m, Husky 0.16 m), with the corner (density 0.03,
+   margin 1.0) still failing for the UAV.
+5. **The plateau is narrower than seeds 0-4 suggested.** On seeds 5-9, which I had not
+   looked at when picking density 0.003, BlueROV2 1 had one seed with
+   245 wrong tracks and 3.0 m error: a new pile at 28.5 m, 6 m along the row from a
+   landmark mapped at the start, looked like a re-detection, and that one match
+   rotated the pose by 5°. Density 0.01 avoids it but costs the UAV (0.36 m instead
+   of 0.18 m). Team level, development seeds: density 0.01 G1 8/10, **0.005 10/10**,
+   0.003 9/10 (wrong alignments 1/91, 1/89, 1/86). Held-out: 0.01 7/10 (10/90
+   wrong), **0.005 8/10 (8/92)**, 0.003 7/10 (14/93). 0.005 is the middle of the
+   range, fixed before the held-out run; the in-sample 10/10 was optimistic.
+6. **Residual failures on the held-out seeds.** Seed 12 (team ATE 2.74 m): BlueROV2 1
+   alone at 3.13 m with **no wrong tracks** but 324 of about 1 170 detections dropped as
+   ambiguous, all between landmarks 5.9 m apart (the pile spacing), so its pose was
+   never corrected; its true scale error is -1.6 % (1.6σ of the prior). Seed 19
+   (0.81 m, 6 of 10 alignments wrong): the UAV alone at 1.57 m with 19 wrong tracks
+   of 217 matches, again aliasing between adjacent piles. No single detection
+   separates adjacent piles when the pose σ is a metre or more. A frame-level
+   joint pairing (JCBB, or a multi-hypothesis tracker) should, since the relative
+   geometry of the piles in one frame is known to centimetres: task T-F3-03.
+7. **Acceptance of T-F3-02 (G1 >= 9/10, no wrong alignment, BlueROV2 <= 2x the
+   ground-truth value): met on the development seeds, not on the held-out ones**
+   (G1 8/10, 8 wrong alignments of 92).
 
-**Caveats.** Parameters were explored on seeds 0 and 1 only (no held-out split
-was applied yet); the three rows were run at the same commit plus uncommitted
-changes, so they carry no clean provenance; nothing here is in `paper/data`.
-
-Reproduce: `python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0 --mode ekf`
-(add `--sweep` for the parameter grid) and `python experiments/tier2_study.py --tiers T2ekf --seeds 0 1 2 3 4 5 6 7 8 9 --out results/tier2_study_ekf.csv`.
+**Caveats.** One scenario, one sonar proxy (ADR-0007), 20 seeds; parameters were
+chosen on the development seeds; the ekf tracker uses the platform's bias priors
+(datasheet values), which the graph estimator does not use for the scale error;
+Tier 2 keeps Tier-1 odometry.
 
 ---
 

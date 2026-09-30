@@ -78,40 +78,57 @@ drift is not yet corrected (Sec.~\ref{sec:discussion}).
   \providecommand{\tierTwoMerged}{?}\providecommand{\tierTwoRuns}{?}%
   \providecommand{\tierTwoNNGOne}{?}\providecommand{\tierTwoNNWrong}{?}%
   \providecommand{\tierTwoNNAvatar}{?}\providecommand{\tierTwoRegGOne}{?}%
+  \providecommand{\tierTwoEKFGOne}{?}\providecommand{\tierTwoEKFWrong}{?}%
   \providecommand{\tierTwoNNUuvGOne}{?}\providecommand{\tierTwoNNLandGOne}{?}}
+\IfFileExists{data/tier2_heldout_summary.tex}{\input{data/tier2_heldout_summary.tex}}{%
+  \providecommand{\heldTwoGOne}{?}\providecommand{\heldTwoWrong}{?}%
+  \providecommand{\heldTwoAvatar}{?}\providecommand{\heldTwoRuns}{?}%
+  \providecommand{\heldTwoNNGOne}{?}\providecommand{\heldTwoNNWrong}{?}%
+  \providecommand{\heldTwoEKFGOne}{?}\providecommand{\heldTwoEKFWrong}{?}%
+  \providecommand{\heldTwoEKFAvatar}{?}\providecommand{\heldTwoEKFMerged}{?}}
 The same scenario is rendered in Gazebo Harmonic. Each robot is a kinematic sensor rig placed at
 its ground-truth pose at every keyframe, with a VLP-16, a D435i depth camera, and a ray-cast
 proxy for the imaging sonar (no speckle, multipath, or shadows). Odometry, depth, and ground
 truth are those of Tier 1 for the same seed, so only perception differs. A geometric front-end
 gates returns by medium, removes ground and seabed, clusters, and fits circles. Extended objects
-such as hulls have no viewpoint-invariant centre and are mostly dropped. Table~\ref{tab:tier2} reports
-\tierTwoRuns{} seeds. With ground-truth intra-agent tracks, the team merges in every run
-(\tierTwoMerged), no accepted alignment is wrong (\tierTwoWrong{} wrong), and the frame error of
-every robot stays below 1\,m (gate G1, \tierTwoGOne{} runs). Team ATE is \tierTwoAvatar\,m against
-\tierTwoOracle\,m for the oracle, versus \tierOneAvatar\,m and \tierOneOracle\,m in Tier 1: the
-ratio to the oracle is similar, and the absolute error grows because noisy clusters replace idealized
-detections. This does not yet show that G1 holds on realistic sonar images, since the proxy is
-idealized.
+such as hulls have no viewpoint-invariant centre and are mostly dropped. Table~\ref{tab:tier2}
+reports \tierTwoRuns{} development seeds, on which every design decision was made, and
+Table~\ref{tab:tier2held} \heldTwoRuns{} further seeds recorded afterwards. With ground-truth
+intra-agent tracks, the team merges in every run (\tierTwoMerged), no accepted alignment is wrong
+on the development seeds (\tierTwoWrong{} wrong), and the frame error of every robot stays below
+1\,m (gate G1, \tierTwoGOne{} development runs, \heldTwoGOne{} held-out). Team ATE is
+\tierTwoAvatar\,m against \tierTwoOracle\,m for the oracle, versus \tierOneAvatar\,m and
+\tierOneOracle\,m in Tier 1: the ratio to the oracle is similar, and the absolute error grows
+because noisy clusters replace idealized detections. This does not yet show that G1 holds on
+realistic sonar images, since the proxy is idealized.
 
-A nearest-neighbour tracker that associates detections in the dead-reckoning frame is not
-sufficient. G1 holds in only \tierTwoNNGOne{} runs, with \tierTwoNNWrong{} wrong alignments and
-a team ATE of \tierTwoNNAvatar\,m; registering each keyframe to the track map first is worse
-(G1 in \tierTwoRegGOne{} runs). The failure is mostly underwater (Table~\ref{tab:tier2agents}): with
-this tracker on the BlueROV2s alone G1 holds in \tierTwoNNUuvGOne{} runs, on the Husky and Tarot
-alone in \tierTwoNNLandGOne{}. A BlueROV2's raw dead-reckoning drift becomes comparable to the
-spacing of similar piles, so the gate cannot tell them apart. Association has to use the agent's
-own estimate (Sec.~\ref{sec:discussion}); the ground-truth-track row is therefore the
-result for the estimator, and the two tracker rows are negative results for the front-end.
+Real robots do not know which detection is which, so the front-end must also associate
+detections within one robot. A nearest-neighbour tracker that gates in the dead-reckoning frame
+is not sufficient: G1 holds in \tierTwoNNGOne{} development runs and \heldTwoNNGOne{} held-out
+runs (\heldTwoNNWrong{} wrong alignments held-out), because a BlueROV2's raw drift becomes
+comparable to the spacing of similar piles; registering each keyframe to the track map first is
+worse (G1 in \tierTwoRegGOne{} development runs). An extended Kalman filter over the robot's own
+pose, its odometry biases, and the landmark positions, with their joint covariance, gates
+detections against its own estimate and lets a landmark inform the biases only after it has proved
+static. It reaches G1 in \tierTwoEKFGOne{} development runs (\tierTwoEKFWrong{} wrong
+alignments) and \heldTwoEKFGOne{} held-out runs (\heldTwoEKFWrong{} wrong), with a held-out
+team ATE of \heldTwoEKFAvatar\,m against \heldTwoAvatar\,m for ground-truth tracks. The gap to
+the development seeds is real: the two failing held-out runs are a robot whose pose
+uncertainty is of the order of the pile spacing, so no single detection tells adjacent piles
+apart (Sec.~\ref{sec:discussion}). The failure is mostly underwater with the simpler tracker
+(Table~\ref{tab:tier2agents}): with it on the BlueROV2s alone G1 holds in \tierTwoNNUuvGOne{}
+development runs, on the Husky and Tarot alone in \tierTwoNNLandGOne{}.
 
 \begin{table}[t]
   \centering
-  \caption{Perception tiers (reference fleet, harbor, 600\,s, simulation; Tier 2: Gazebo, kinematic
-  rigs, ray-cast sonar proxy). ``Team'': runs in which all four robots share one frame; ``At'':
-  median time the anchor's frame graph covers the team; ``Wrong'': accepted alignments with frame
-  error above 2\,m or 5$^\circ$; G1: runs in which every robot's frame error is below 1\,m; ATE:
-  mean $\pm$ 95\,\% CI over seeds. Oracle: centralized, ground-truth association, robust kernel.
-  ``GT tracks'': ground-truth intra-agent association; ``NN'': nearest-neighbour tracker in the
-  dead-reckoning frame.}
+  \caption{Perception tiers on the development seeds (reference fleet, harbor, 600\,s,
+  simulation; Tier 2: Gazebo, kinematic rigs, ray-cast sonar proxy). ``Team'': runs in which all
+  four robots share one frame; ``At'': median time the anchor's frame graph covers the team;
+  ``Wrong'': accepted alignments with frame error above 2\,m or 5$^\circ$; G1: runs in which every
+  robot's frame error is below 1\,m; ATE: mean $\pm$ 95\,\% CI over seeds. Oracle: centralized,
+  ground-truth association, robust kernel. ``GT tracks'': ground-truth intra-agent association;
+  ``NN'': nearest-neighbour tracker in the dead-reckoning frame; ``EKF'': tracker over the robot's
+  own filtered estimate.}
   \label{tab:tier2}
   \scriptsize
   \setlength{\tabcolsep}{3pt}
@@ -120,8 +137,18 @@ result for the estimator, and the two tracker rows are negative results for the 
 
 \begin{table}[t]
   \centering
+  \caption{As Table~\ref{tab:tier2} on ten held-out seeds, recorded after every design decision
+  (the tracker parameters, in particular, were fixed on the development seeds).}
+  \label{tab:tier2held}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \IfFileExists{data/tab_tier2_heldout.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_tier2_heldout.tex}}}{\todo{run make -C experiments tier2 tables}}
+\end{table}
+
+\begin{table}[t]
+  \centering
   \caption{Each robot's ATE [m] alone and in \avatar{} (its own frame, fused graph), mean over
-  seeds, per perception tier as in Table~\ref{tab:tier2}.}
+  the development seeds, per perception tier as in Table~\ref{tab:tier2}.}
   \label{tab:tier2agents}
   \scriptsize
   \setlength{\tabcolsep}{3pt}

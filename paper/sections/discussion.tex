@@ -17,8 +17,11 @@ geometry.
 Fourth, cycle consistency cannot check an alignment that closes no cycle. The centralized
 baseline shows how an aliased alignment on sparse data can then corrupt the whole team.
 Multi-hop sharing without double counting is future work.
-Fifth, intra-agent association. The Tier-2 result uses ground-truth tracks. A tracker that
-gates in the dead-reckoning frame fails once an underwater robot's drift approaches the spacing of
-similar structures, and its errors are persistent, unlike the random identity switches injected in
-Tier 1, which the robust kernel absorbs. Association against the agent's own estimate is future
-work, and the Tier-1 error model may understate the danger.
+Fifth, intra-agent association. The Tier-2 estimator result uses ground-truth tracks. A tracker
+that gates in the dead-reckoning frame fails once an underwater robot's drift approaches the
+spacing of similar structures, and its errors are persistent, unlike the random identity switches
+injected in Tier 1, which the robust kernel absorbs. A filter over the robot's own estimate,
+with the joint covariance of pose and landmarks, recovers most of the gap, but on fresh seeds it
+still fails when the pose uncertainty is of the order of the pile spacing and no single detection
+separates adjacent piles. Pairing a keyframe's detections jointly is future work, and the Tier-1
+error model may understate the danger.

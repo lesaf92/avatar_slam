@@ -52,6 +52,7 @@ flowchart TB
 | Tier-2 world and rigs | `tier2/sdf.py` ✅: scenario → SDF world, sensor specs, `ros_gz_bridge` YAML (ADR-0007) | – | – |
 | Tier-2 recorder | `experiments/gazebo/record.py` + `gz_recorder.cc` ✅ (C++ over gz-transport, no ROS) | `experiments/gazebo/` | – |
 | Tier-2 front-end | `tier2/frontend.py`, `tier2/rays.py` ✅: medium gating, ground removal, clustering, circle fits, sonar without elevation, per-agent tracker | – | detector nodes 🔜 (T-F2-*) |
+| Intra-agent association | `frontend/ekf_tracker.py` ✅ (T-F3-02): EKF-SLAM over pose, biases and landmarks; used by the Tier-2 front-end | – | – |
 | Tier-2 dataset | `tier2/dataset.py` ✅: Tier-1 odometry, depth and ground truth (same seed) with Tier-2 detections | – | – |
 | Trajectory library | `sim/trajectories.py` ✅: 10 kinds + CSV replay, `TrajectorySpec`, YAML presets in `experiments/scenarios/` | – | – |
 | Channel + network | `comm/channel.py` (incl. Wi-Fi mesh, M64, X150 profiles), `comm/network.py` ✅ | – | comm emulator node 🔜 |
@@ -177,14 +178,18 @@ Only perception differs between a Tier-1 and a Tier-2 run of the same seed
 [`experiments/gazebo/README.md`](../experiments/gazebo/README.md), ADR-0007.
 
 **Intra-agent association.** The Tier-2 front-end assigns track ids in one of
-three modes (`FrontEndParams.tracking`): `oracle` (ground-truth part identity, as in
-Tier 1), `nn` (gated nearest neighbour), and `registration` (keyframe-to-map
-offset first). `nn` and `registration` gate in the agent's **dead-reckoning frame**,
-so they work only while drift stays well below the spacing of similar landmarks
-(harbour piles: about 6 m along a row, 8 m between the two rows; a BlueROV2's raw
-dead-reckoning error reached 8-10 m in 600 s in the two seeds checked, docs/LOG.md
-L28). The proper place for association is the agent, against its own SLAM estimate
-(task T-F3-02, extension points below).
+four modes (`FrontEndParams.tracking`): `oracle` (ground-truth part identity, as in
+Tier 1), `nn` (gated nearest neighbour), `registration` (keyframe-to-map offset
+first) and `ekf` (`avatar.frontend.ekf_tracker`). `nn` and `registration` gate in the
+agent's **dead-reckoning frame**, so they work only while drift stays well below the
+spacing of similar landmarks (harbour piles: about 6 m along a row, 8 m between the two
+rows; a BlueROV2's raw dead-reckoning error reached 8-10 m in 600 s in the two seeds
+checked, docs/LOG.md L28). `ekf` runs an EKF-SLAM over the agent's own pose, odometry
+biases (heading, translation scale, gyro scale) and landmark positions with the
+**joint** covariance, gates on the covariance of `m_j - q(x)`, requires a match to beat
+a "new landmark" hypothesis, and lets a landmark inform the biases only after a static
+birth test (LOG L29). It needs only odometry, its σ and the platform's bias priors,
+so it can run as a front-end component; it is not yet inside `AvatarAgent`.
 
 ## 6. Extension points (where parallel work plugs in)
 
@@ -197,7 +202,7 @@ L28). The proper place for association is the agent, against its own SLAM estima
 | GTSAM port (T-B2-01) | Mirror `FactorGraph` API. Shared graph vectors in `testdata/` |
 | ROS 2 node (T-F*, T-S3-01) | Wrap `AvatarAgent`: feed `KeyframeData`; publish `EncodedPacket` |
 | New scenario (T-S4-*) | Add a builder in `sim/scenarios.py` + `SCENARIOS` registry |
-| Agent-side association (T-F3-02) | `AvatarAgent.on_keyframe` keys landmarks by `Detection.part_index`; add a gated association step against `self.local` estimates (pose + landmark marginals) for detections without an id |
+| Association inside the agent | `AvatarAgent.on_keyframe` keys landmarks by `Detection.part_index`; the EKF tracker (T-F3-02) would run beside it and supply the ids. Frame-level joint pairing: T-F3-03 |
 | DAVE / PX4 / Clearpath rigs (T-S2-02/03) | Replace the sensor specs in `tier2/sdf.py` (`GZ_SENSORS`) and the recorder's pose driver; the front-end and dataset code do not change |
 
 ## 7. Performance (v0, 4-core container)
