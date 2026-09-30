@@ -88,7 +88,8 @@ drift is not yet corrected (Sec.~\ref{sec:discussion}).
   \providecommand{\heldTwoAvatar}{?}\providecommand{\heldTwoRuns}{?}%
   \providecommand{\heldTwoNNGOne}{?}\providecommand{\heldTwoNNWrong}{?}%
   \providecommand{\heldTwoEKFGOne}{?}\providecommand{\heldTwoEKFWrong}{?}%
-  \providecommand{\heldTwoEKFAvatar}{?}\providecommand{\heldTwoEKFMerged}{?}}
+  \providecommand{\heldTwoEKFAvatar}{?}\providecommand{\heldTwoEKFMerged}{?}%
+  \providecommand{\heldTwoEKFMedian}{?}\providecommand{\heldTwoMedian}{?}}
 The same scenario is rendered in Gazebo Harmonic. Each robot is a kinematic sensor rig placed at
 its ground-truth pose at every keyframe, with a VLP-16, a D435i depth camera, and a ray-cast
 proxy for the imaging sonar (no speckle, multipath, or shadows). Odometry, depth, and ground
@@ -97,8 +98,8 @@ gates returns by medium, removes ground and seabed, clusters, and fits circles. 
 such as hulls have no viewpoint-invariant centre and are mostly dropped. Table~\ref{tab:tier2}
 reports \tierTwoRuns{} development seeds, on which every design decision was made, and
 Table~\ref{tab:tier2held} \heldTwoRuns{} further seeds recorded afterwards. With ground-truth
-intra-agent tracks, the team merges in every run (\tierTwoMerged), no accepted alignment is wrong
-on the development seeds (\tierTwoWrong{} wrong), and the frame error of every robot stays below
+intra-agent tracks, the team merges in every run (\tierTwoMerged), an accepted alignment is wrong
+in only \tierTwoWrong{} cases on the development seeds, and the frame error of every robot stays below
 1\,m (gate G1, \tierTwoGOne{} development runs, \heldTwoGOne{} held-out). Team ATE is
 \tierTwoAvatar\,m against \tierTwoOracle\,m for the oracle, versus \tierOneAvatar\,m and
 \tierOneOracle\,m in Tier 1: the ratio to the oracle is similar, and the absolute error grows
@@ -115,11 +116,15 @@ pose, its odometry biases, and the landmark positions, with their joint covarian
 detections against its own estimate, pairs the ambiguous detections of one keyframe jointly, and
 lets a landmark inform the biases only after it has proved static. It reaches G1 in
 \tierTwoEKFGOne{} development runs (\tierTwoEKFWrong{} wrong alignments) and \heldTwoEKFGOne{}
-held-out runs (\heldTwoEKFWrong{} wrong), with a held-out team ATE of \heldTwoEKFAvatar\,m
-against \heldTwoAvatar\,m for ground-truth tracks. The runs in which it fails involve the
-Tarot: its depth camera sees a pile for a few keyframes at a time, so between fixes its pose
-uncertainty is of the order of the pile spacing, and a new pile is occasionally taken for a mapped
-one (Sec.~\ref{sec:discussion}). The remedy is a sensor. With a light LiDAR added to the Tarot
+held-out runs (\heldTwoEKFWrong{} wrong). The median held-out team ATE is \heldTwoEKFMedian\,m
+against \heldTwoMedian\,m for ground-truth tracks; the mean, \heldTwoEKFAvatar\,m, is dominated by one
+run. The runs in which it fails involve the Tarot, for two reasons. Its depth camera sees a pile for
+a few keyframes at a time, so between fixes its pose uncertainty is of the order of the pile
+spacing, and a new pile is occasionally taken for a mapped one (Sec.~\ref{sec:discussion}); the UAV's
+frame is then several metres off. In other runs it shares only four or five landmarks with the
+ground robot, and the anchor accepts an alignment turned by about half a revolution, which moves
+every other robot by tens of metres. These counts are estimates: they move by about two runs
+when the NumPy version changes, so the environment is pinned in the repository. The remedy is a sensor. With a light LiDAR added to the Tarot
 (the optional upgrade of the fleet, modelled as a VLP-16-class unit), the same tracker, not
 retuned, reaches G1 in \lidarTwoEKFGOne{} of \lidarTwoEKFRuns{} runs with \lidarTwoEKFWrong{}
 wrong alignments (Table~\ref{tab:tier2lidar}), because the Tarot then sees many piles per

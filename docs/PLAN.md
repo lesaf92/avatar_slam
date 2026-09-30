@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v1.6 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v1.7 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -109,12 +109,12 @@ separated by `‖` can run **in parallel** by different agents.
 - **Goal:** a reproducible dev environment and CI that stays green.
 - **Deliverables:** repo skeleton, CI (Python, C++, ROS 2 colcon, LaTeX), Docker
   images (`ros:jazzy` + Gazebo Harmonic + DAVE), pre-commit hooks.
-- **Blocked on the host (PI action, T-I1-06, D12): get more disk space and Docker
-  access.** `/` has 21 GB free of 468 GB; the DAVE / PX4 / Clearpath image and its build
-  need at least 40 GB, and the user must be in group `docker`. Until then no agent
-  starts anything that needs that space (T-I1-03, T-S2-05) and every other task stays
-  small (recordings are regenerable; `results/` is 1.2 GB, of which 0.77 GB are
-  front-end caches and 0.45 GB recordings). Details: `experiments/gazebo/README.md`.
+- **Host (T-I1-06, D12): resolved 2026-09-30.** The project moved to `luiz-predator-neo`
+  (i9-14900HX, 32 threads; RTX 4070 8 GB; about 300 GB free; Docker with the GPU). Compute
+  differs from the old host, so timings are re-measured. Tier-2 recording and the DAVE sonar
+  run in the images `avatar-tier2` and `avatar-dave` (`docker/`, `experiments/gazebo/README.md`).
+  The reference Python environment is `avatar_py/requirements-lock.txt`: results depend on the
+  NumPy version (LOG L33).
 - **Accept:** a fresh clone passes all AGENTS.md §6 commands in CI.
 
 ### WP-R: Research and novelty ‖ everything
@@ -227,7 +227,7 @@ separated by `‖` can run **in parallel** by different agents.
 |---|---|---|---|
 | **M0** | 2026-10-05 | Foundation: rules, plan, v0 sim + backbone + codec, CI | CI green; `avatar.cli compare` runs |
 | **M1** | 2026-10-31 | Backbone v1 in the fast sim: robust association (X2), VoI scheduler (C2), gateway (C3); first ablations. Gazebo world spawns all 4 domains (S2) | H1/H2 trends visible in the fast sim |
-| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28-L30):** passes on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy): 30 of 30 seeds. With a realistic front-end (an EKF-SLAM tracker over the agent's own estimate, with joint pairing): 19/20 development seeds and 9/10 fresh seeds (the dead-reckoning NN tracker: 10/20 and 6/10). Repeat on DAVE sonar images (T-S2-05) before calling it |
+| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28-L33, pinned environment):** passes on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy): 40 of 40 seeds (development 0-19, held-out 20-39). With a realistic front-end (an EKF-SLAM tracker over the agent's own estimate, with joint pairing): 18/20 development and 18/20 held-out seeds (the dead-reckoning NN tracker: 8/20 and 11/20); with a UAV LiDAR, 30/30. A 20-seed count moves by about two runs with the NumPy version, and two of the failures are a wrong few-inlier alignment (T-F3-05). Repeat on DAVE sonar images (T-S2-05) before calling it |
 | **M2** | 2026-12-20 | ROS 2 end-to-end (front-ends → backbone → comm emulator); baselines on air/ground and underwater subsets | Full experiment matrix runs unattended |
 | **M3** | 2027-02-10 | Paper A: experiments + real-data validation + draft | Internal review passed |
 | **M4** | ≈ 2027-03-01 | **Paper A submission** (RA-L + IROS 2027 option; verify the deadline) + arXiv | Submitted |
@@ -272,7 +272,7 @@ and M6 moves to ≈ 2027-06, with the neural layer scoped down.
 | R10 | D435i-only UAV contributes few landmarks (≤ 6 m depth) | H | L | Stand-off inspection paths; optional light LiDAR (D6) | S |
 | R4 | Perceptual aliasing in regular pile grids yields wrong alignments | M | H | PCM/GNC + object-graph matching (X2); the Aliasing scenario as a gate | X |
 | R11 | **Intra-agent** association fails when the pose uncertainty approaches the spacing of similar landmarks (Tier 2: BlueROV2 drift 8-10 m vs. 8 m between pier rows), and the damage is mostly duplicate landmarks (lost loop closures), which no robust kernel repairs (Tier 1 confirms it, LOG L32) | M | H | Joint-covariance EKF tracker with joint pairing (T-F3-02/03, done: fresh-seed G1 6/10 → 9/10); the UAV's sparse-fix aliasing (T-F3-04) is the residual; structured errors in Tier 1 (T-S1-09, done: LOG L32) | F, X |
-| R12 | Tier-2 host lacks DAVE, PX4 and Clearpath (no Docker access, 21 GB free disk), so Tier-2 results rest on proxies | H | M | **Get more disk space and Docker access (T-I1-06, D12)**, then the Docker image (T-I1-03, T-S2-05); label Tier-2 results as kinematic rigs and sonar proxy everywhere | I, S |
+| R12 | Tier-2 results rest on proxies (kinematic rigs, ray-cast sonar) until DAVE's sonar images, and PX4 and Clearpath if they are added, are recorded; the host now has Docker and a GPU (T-I1-06 done) | H | M | DAVE sonar recording and front-end (T-S2-05, ADR-0008); PX4 and Clearpath deferred; label Tier-2 results as kinematic rigs and sonar proxy everywhere until then | I, S |
 | R5 | Neural layer scope creep delays Paper A | H | M | Neural layer is Paper B only; gate G2 | N |
 | R6 | Multi-agent development drifts (contracts break) | M | M | ADRs, golden vectors, CI on every PR, TASKS.md ownership | I |
 | R7 | GPU compute limits (Gazebo GPU sonar + 3DGS) | M | M | Fast sim for CI and sweeps; Gazebo on the lab GPU; Docker images | I |
@@ -319,10 +319,11 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 | D9 | AUV heading model | Compass-aided (bias-free) vs. gyro-integrated (bias) | **Decided (PI, 2026-09-28):** if heading is mostly magnetometer-based, ignore the bias; if the magnetometer is unreliable (steel in harbours), model it. See LOG L24 |
 | D10 | Robust estimation | Huber vs. certifiable / GNC methods | **PI guidance (2026-09-28):** adopt Carlone-group robust estimation (graduated non-convexity) where it helps; decide the default from data (LOG L25) |
 | D11 | Hypothesis targets | Pass/fail thresholds vs. reference values | **Decided (PI, 2026-09-28):** numeric targets in H1–H3 are ideal reference values for comparison; the paper reports measured gains and their trend, step by step |
-| D12 | Host resources for the Docker route (DAVE, PX4, Clearpath) | ≥ 40 GB free on `/` (now 21 GB) or Docker `data-root` on another disk; user in group `docker` (or rootless `podman`) | **Open (PI).** Blocks T-I1-03, T-S2-05 and therefore G1 on DAVE sonar images (R2). Agents avoid large disk use until it is settled |
+| D12 | Host resources for the Docker route (DAVE, PX4, Clearpath) | ≥ 40 GB free on `/` (now 21 GB) or Docker `data-root` on another disk; user in group `docker` (or rootless `podman`) | **Resolved 2026-09-30 (PI).** The project moved to `luiz-predator-neo`: about 300 GB free, user in group `docker`, GPU in containers. T-I1-03 and T-S2-05 are unblocked |
 
 ## 10. Changelog
 
+- **v1.7 (2026-09-30).** Host moved to `luiz-predator-neo`: D12 and T-I1-06 resolved, T-I1-03 and T-S2-05 in progress. ADR-0008 (proposed): Tier 2 records in Docker and adds DAVE's multibeam sonar. Paper data regenerated in a pinned environment (LOG L33): Tier 1 unchanged, EKF G1 18/20 on both seed sets, a few-inlier alignment failure (new task T-F3-05) and a realism study on 20 seeds (T-S1-10). DAVE's sonar runs headless and deterministically (LOG L34).
 - **v1.6 (2026-09-30).** Host blocker made explicit: more disk space and Docker access
   (T-I1-06, D12) before the DAVE / PX4 / Clearpath work (T-I1-03, T-S2-05) can start.
   T-S1-09 and T-I1-05 done (LOG L32, fixture); R11 text corrected.

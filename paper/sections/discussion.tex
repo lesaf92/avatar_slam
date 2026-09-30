@@ -25,6 +25,8 @@ closures, which no robust kernel repairs (Sec.~\ref{sec:experiments}). A filter 
 with the joint covariance of pose and landmarks and joint pairing of a keyframe's ambiguous
 detections, recovers most of the gap, but it still fails occasionally for the robot whose sensor
 gives sparse fixes: when its pose uncertainty is of the order of the pile spacing, a single
-detection cannot separate a new pile from a mapped one. Pairing over a window of keyframes is
-future work. In simulation, a light LiDAR on that robot removes the failure
+detection cannot separate a new pile from a mapped one. It also shares few landmarks with the
+others, and an alignment built on four or five of them can be a mirror image that no acceptance
+test rejects, which moves the whole team (Sec.~\ref{sec:experiments}). Pairing over a window of
+keyframes is future work. In simulation, a light LiDAR on that robot removes the failure
 (Sec.~\ref{sec:experiments}).

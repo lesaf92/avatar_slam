@@ -1,15 +1,22 @@
 # Regenerate every number in the manuscript (AGENTS.md §5, docs/PLAN.md WP-E).
 #   make -C experiments paper-data     # runs the experiments, then the tables
 #   make -C experiments tables         # tables only, from existing paper/data CSVs
+#   make -C experiments all-data       # paper-data, then the Tier-2 studies (on the recordings
+#                                      # in results/), then the tables last
 # Run from a clean tree: each CSV records `git describe --dirty`.
 
 PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data tables server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar
+.PHONY: paper-data all-data tables server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar
 
 paper-data: server cycle bandwidth drift realism tables
+
+# `paper-data` builds the tables from whatever Tier-2 CSVs exist, so the Tier-2 studies come
+# first here and the tables are rebuilt in a second make (a goal that is already made is skipped).
+all-data: paper-data tier2 tier2-heldout tier2-lidar
+	$(MAKE) tables
 
 server:
 	$(PY) server_vs_avatar.py --seeds $(SEEDS) --profiles m64 x150 acoustic_generic \

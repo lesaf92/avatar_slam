@@ -5,6 +5,135 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-09-30 (luiz-predator-neo, later): DAVE's multibeam sonar (Claude)
+
+Branch `wp/T-I1-03-docker-tier2`; container `avatar-dave` on the RTX 4070; **simulation**.
+
+### L34. DAVE's multibeam sonar runs headless in a container, with deterministic speckle (T-S2-05, step 1)
+
+Setup: `docker/Dockerfile.dave` on top of `avatar-tier2`: CUDA 12.6 toolkit and DAVE
+(`IOES-Lab/dave`) at `d2121a5b4457361e60106aaa029b0a448977d70e` (2026-09-08, the last ROS 2
+Jazzy / Gazebo Harmonic commit; the next one moves DAVE to Lyrical / Jetty), building
+`dave_interfaces`, `multibeam_sonar_system` (which builds the CUDA sensor `multibeam_sonar`)
+and `dave_multibeam_sonar_demo` for `sm_89`. Test world
+`experiments/gazebo/sonar_smoke/world.sdf`: DAVE's BlueView P900 configuration (512 beams over
+65 degrees each side, 300 rays over 6 degrees each side, 900 kHz, 10 m) at 3 m depth, a
+1 x 1 x 2 m box with its face 5.5 m ahead and a cylinder of radius 0.3 m at (8, -2.5) m.
+The Dockerfile needed two fixes that the log shows: the package is called
+`dave_multibeam_sonar_demo`, and the venv of `avatar-tier2` had to leave `PATH` for colcon.
+
+**Findings.**
+1. **It works.** The plugin loads, uses the GPU and publishes: ROS 2 `.../sonar_image`
+   (a colour-mapped `bgr8` picture), `.../sonar_image_raw` (`ProjectedSonarImage`:
+   float32 dB, 399 range bins of 2.5 cm by 513 beams of 0.25 degrees) and `.../normal_image`,
+   and gz-transport `.../point_cloud`.
+2. **The geometry is right.** Box face: peak 77.7 dB at 5.52 m (true 5.50 m). Cylinder: peak
+   69.9 dB at 8.10 m and -17.0 degrees (true 8.08 m, -17.4 degrees). The noise floor near the
+   axis is 28-35 dB at every range and the median of the image is -9 dB, so a global
+   threshold yields one huge blob; the front-end needs a local background estimate (CFAR).
+3. **Speckle was not reproducible, and is now.** With `blazingSonarImage` the seed is
+   `time(NULL)`; `Dockerfile.dave` patches it to `1234 + frame counter`. Two independent
+   runs of three stepped frames are bit-identical, and the frames differ from each other
+   (mean difference 3.8-4.4 dB), so each frame has fresh speckle. This holds if the frames
+   are counted the same way in every run: one sonar update per keyframe, to be arranged
+   in the recorder.
+4. **Time stamps are not usable**: the header stamp was 0 in one run and wall-clock time in
+   another, never simulation time. Frames have to be matched to keyframes by order.
+5. **Not yet tested:** time per frame; the Gemini 720s geometry (120 degrees by 20 degrees,
+   tens of metres); several sonars in one world; the rig integration. DAVE's speckle
+   amplitude is attached to the ray index, not to the surface point, so it does not stay
+   fixed on an object as the sonar moves: another difference from real data to report.
+
+Reproduce: `docker build -f docker/Dockerfile.tier2 -t avatar-tier2 .`, `docker build -f
+docker/Dockerfile.dave --build-arg CUDA_ARCH=89 -t avatar-dave .`, then
+`AVATAR_TIER2_IMAGE=avatar-dave docker/tier2.sh bash experiments/gazebo/sonar_smoke/run.sh`
+(prints PASS).
+
+---
+
+## 2026-09-30 (luiz-predator-neo): the paper data in the pinned environment (Claude)
+
+Branch `wp/T-I1-03-docker-tier2`; new host (i9-14900HX, 32 threads; RTX 4070 8 GB; Docker
+with the NVIDIA toolkit; 333 GB free); Tier 1 and Tier 2, **simulation**.
+`paper/data/*.csv` record commit `4f380e1` (clean); `paper/data/environment.txt` records
+the versions (Python 3.12.3, NumPy 2.5.3, SciPy 1.18.1).
+
+### L33. Results depend on the NumPy version: Tier 1 is unchanged, Tier 2 loses two seeds to a fragile alignment decision
+
+**Environment.** On this host the Tier-2 numbers differed from the old host's. The
+dependence was traced to the NumPy major version (1.26 there, 2.x here); the SciPy version
+and the hardware do not change them. Fixes: `avatar_py/requirements-lock.txt` (pip freeze
+of the venv), NumPy and SciPy versions in the front-end cache key
+(`avatar/tier2/dataset.py`), `environment.txt` written by `make_paper_tables.py`, and
+`AGENTS.md` §6 installing from the lock file. The CI fixture and its golden values, made
+under NumPy 1.26, still pass under 2.5.3 (158 tests). Then every study was regenerated
+(28 jobs, 64 min).
+
+Tier-2 results, old (NumPy 1.26) -> new (2.5.3). G1 = runs with every frame error < 1 m;
+wrong = accepted alignments above 2 m or 5 degrees, of all accepted:
+
+| Tracker | Dev seeds 0-19, G1 | wrong | Held-out seeds 20-39, G1 | wrong |
+|---|---|---|---|---|
+| ground-truth tracks | 20/20 -> 20/20 | 1/184 -> 1/179 | 20/20 -> 20/20 | 0/188 -> 0/183 |
+| NN (dead reckoning) | 10/20 -> 8/20 | 44/167 -> 40/162 | 9/20 -> 11/20 | 40/175 -> 39/174 |
+| registration | 5/20 -> 4/20 | 71/152 -> 63/148 | not run | |
+| **EKF** | **19/20 -> 18/20** | 8/181 -> 7/174 | **19/20 -> 18/20** | 6/183 -> 7/178 |
+| EKF, UAV LiDAR fleet (30 seeds: 0-19, 30-39) | 30/30 -> 30/30 | 1/276 -> 1/271 | | |
+
+Mean team ATE of the EKF tracker: 0.35 -> 2.31 m (dev), 0.27 -> 2.27 m (held-out). The
+medians are 0.219 m and 0.247 m (ground-truth tracks: 0.207 and 0.246 m).
+
+**Findings.**
+1. **The recorder is reproducible across GPUs.** 30 s of seed 0 recorded in the container
+   on the RTX 4070 equals the recording made on the old RTX 3050 for all five sensors
+   (100 % of the returns agree, maximum |dr| = 0).
+2. **Tier 1 is unchanged.** Server, bandwidth, drift and cycle-check data differ by at
+   most 1.1e-7 in relative terms (the cycle check is identical). The realism table
+   (3 seeds) keeps its conclusions (L32): the robust-kernel columns move by at most
+   0.2 m (all revisits split, default preset, GNC-TLS: 1.24 -> 1.44 m); only the
+   no-kernel column at 15 % random switches and 1.0 clutter worsens a lot
+   (3.14 -> 12 m, the team merging in 0/3 runs both times).
+3. **Two seeds that used to pass now fail catastrophically (dev seed 8, held-out
+   seed 28).** The front-end output is identical (seed 8: 7878 detections, the same
+   clusters per agent, solo ATEs equal to 1e-14) but the back end accepts a wrong
+   pairwise alignment `ugv_0 <- uav_0`: 4 inliers, 58.5 m and 177 degrees off (seed 28:
+   5 inliers, 42.3 m, 179 degrees). The reverse alignment `uav_0 <- ugv_0` is right
+   (1.1 m and 0.3 m). `ugv_0` is the anchor, so the UAV and both BlueROV2s inherit the
+   error (frame error 58-59 m and 42-46 m; team ATE 39.5 and 40.0 m).
+   Nothing vetoes it: `min_inliers` is 4, and the cycle check (T-X2-02) compares cycles
+   of the team frame graph, but `ugv_0` is a leaf attached only to `uav_0`. Why a
+   perturbation of 1e-14 selects the flipped solution is **not yet known**; the guess is
+   a near tie between the true transform and its 180-degree mirror on 4-5 landmarks
+   (T-F3-05).
+4. **The other two failures are unchanged** (seeds 19 and 21, 9.6 m): the UAV's frame is
+   about 10 m and 10 degrees off against every partner, the aliasing that the LiDAR fleet
+   removes (L31). The LiDAR result stands (30/30, 1 wrong alignment in 271).
+5. **What this does to the claims.** EKF G1 is 36/40 (90 %), not 38/40. The count of a
+   20-seed study moves by about two runs between environments (NN 10 -> 8 and 9 -> 11),
+   so the EKF-versus-NN gap (18 against 8-11) is larger than that noise, while the
+   EKF-versus-ground-truth gap (18 against 20) is not larger. The failure has a second
+   mechanism (few-inlier alignments involving the UAV), not only the duplicate landmarks
+   of L29-L30; the paper's "the runs in which it fails involve the Tarot" is right, but
+   its reason was incomplete. Means of team ATE are dominated by one run each; the paper
+   now also gives medians.
+6. **Wording errors I made, corrected in the paper.** "No accepted alignment is wrong on
+   the development seeds (1/184 wrong)" contradicted itself; it now says how many are
+   wrong.
+7. **A trap in the Makefile.** `make paper-data tier2 tier2-heldout tier2-lidar tables`
+   built the tables before the Tier-2 CSVs were rewritten (`paper-data` already lists
+   `tables`, so the last goal was a no-op), and the Tier-2 macros were stale until
+   `make tables` was run again. Fixed with `make all-data`.
+
+Reproduce (Python environment of `requirements-lock.txt`, recordings in `results/`):
+```
+pip install -r avatar_py/requirements-lock.txt -e "avatar_py[dev]"
+make -C experiments all-data JOBS=28
+```
+Follow-ups: T-F3-05 (few-inlier alignment acceptance; needs fresh held-out seeds, since
+seeds 20-39 have been looked at), T-S1-10 (realism study on 20 seeds).
+
+---
+
 ## 2026-09-30 (night): structured association errors in Tier 1 (Claude)
 
 Branch `wp/T-S1-09-structured-errors`; Tier 1, `harbor_fleet`, presets `fleet_default`

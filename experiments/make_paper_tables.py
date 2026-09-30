@@ -274,6 +274,8 @@ def tier2(csv_name: str = "tier2.csv", suffix: str = "", prefix: str = "tier") -
         macros += [
             f"\\newcommand{{\\{prefix}{tag}Avatar}}"
             f"{{{np.mean([_num(r['team_ate_avatar_m']) for r in sel]):.2f}}}",
+            f"\\newcommand{{\\{prefix}{tag}Median}}"
+            f"{{{np.median([_num(r['team_ate_avatar_m']) for r in sel]):.2f}}}",
             f"\\newcommand{{\\{prefix}{tag}Oracle}}"
             f"{{{np.mean([_num(r['team_ate_oracle_robust_m']) for r in sel]):.2f}}}",
             f"\\newcommand{{\\{prefix}{tag}At}}{{{at:.0f}}}",
