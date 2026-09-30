@@ -13,7 +13,7 @@ paper-data: server cycle bandwidth drift realism tables
 
 server:
 	$(PY) server_vs_avatar.py --seeds $(SEEDS) --profiles m64 x150 acoustic_generic \
-		--out $(DATA)/server_vs_avatar.csv
+		--workers $(JOBS) --out $(DATA)/server_vs_avatar.csv
 
 cycle:
 	$(PY) association_precision.py --scenario harbor --duration 90 --seeds $$(seq 0 49) \
@@ -21,7 +21,7 @@ cycle:
 
 bandwidth:
 	$(PY) bandwidth_sweep.py --seeds $(SEEDS) --rates 16 32 64 128 256 512 1024 \
-		--out $(DATA)/bandwidth_sweep.csv
+		--workers $(JOBS) --out $(DATA)/bandwidth_sweep.csv
 
 drift:
 	$(PY) trajectory_study.py --presets fleet_transit_anchored --seeds $(SEEDS) \
