@@ -121,20 +121,41 @@ python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0
 #   dead-reckoning drift, tracks per part, wrong-track events, gate sweep
 ```
 
-## Host prerequisites for the Docker route (T-I1-03, T-S2-05)
+## Docker route (T-I1-03, T-S2-05)
 
-State of the lab machine on 2026-09-30, and what the DAVE / PX4 / Clearpath re-record
-(ADR-0007 to be superseded) needs. Everything else is in place.
+Tier-2 recording and the DAVE sonar run in containers, as the host user, with the
+repository mounted at `/work` (nothing becomes root-owned). Verified on 2026-09-30 on
+`luiz-predator-neo` (Ubuntu 24.04, i9-14900HX, RTX 4070 8 GB, 333 GB free, the user in group
+`docker`, `nvidia-container-toolkit` working). The old lab machine (RTX 3050, no Docker
+access, 21 GB free) is what "Setup without root" above describes; it remains a fallback for
+the proxy sensors only.
 
-| Item | State | Needed |
-|---|---|---|
-| Docker daemon | running; `/var/run/docker.sock` is `root:docker` mode 660 | the user in group `docker` (`sudo usermod -aG docker luiz`; then `sg docker -c '...'` works in an open session, or log in again) |
-| GPU in containers | `nvidia-container-toolkit` 1.18.2 installed, driver 580.173.02, RTX 3050 6 GB | check: `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi` |
-| Disk | **21 GB free of 468 GB on `/` (96 % used)** | at least 40 GB free for the image and build layers (Gazebo Harmonic, DAVE, PX4 SITL, Clearpath), or Docker's `data-root` on another disk |
-| Network | GitHub, `packages.ros.org` and the conda/PyPI mirrors reachable | – |
-| Rootless alternative | `/etc/subuid` has a range for the user, but `podman` and `uidmap` are not installed | `sudo apt install podman uidmap` and `nvidia-ctk cdi generate` (GPU) |
-| `sudo` | needs a password (the user is in `sudo`) | not needed after the steps above |
-| ROS 2 Jazzy | installed on the host (415 packages, Clearpath included) | – (the container uses `ros:jazzy`) |
+```
+docker build -f docker/Dockerfile.tier2 -t avatar-tier2 .        # 5.2 GB: ROS 2 Jazzy, Gazebo Harmonic, pinned Python
+docker build -f docker/Dockerfile.dave --build-arg CUDA_ARCH=89 -t avatar-dave .   # 18.9 GB: + DAVE multibeam sonar
+docker/tier2.sh make -C experiments/gazebo                       # the C++ recorder, built in the container
+docker/tier2.sh python experiments/gazebo/record.py --seed 0 --duration 600 \
+    --out results/tier2/harbor_fleet_seed0
+AVATAR_TIER2_IMAGE=avatar-dave docker/tier2.sh bash experiments/gazebo/sonar_smoke/run.sh
+```
+`CUDA_ARCH` is the GPU's compute capability (89: RTX 40 series, 86: RTX 30 series).
+Requirements on another host: the Docker daemon with the user in group `docker` (or rootless
+`podman` with a CDI spec), the NVIDIA container toolkit, and about 40 GB of free disk.
+Membership of `docker` is root-equivalent on the host.
 
-Membership of the `docker` group is root-equivalent on the host. The rootless route
-avoids that at the cost of one `apt` run and a CDI spec for the GPU.
+Checked (LOG L33, L34):
+- A 30 s recording made in `avatar-tier2` on the RTX 4070 equals the one made on the old host
+  for all five sensors (100 % of the returns agree, |dr| = 0).
+- DAVE's `multibeam_sonar` (commit `d2121a5`, the last Jazzy / Harmonic one; ADR-0008) builds
+  for `sm_89` and runs headless; the ranges and bearings of a box and a cylinder in
+  `sonar_smoke/world.sdf` agree with the geometry.
+
+Things that are easy to trip on:
+- The venv of `avatar-tier2` is first on `PATH`; ament (colcon) needs the system Python, so
+  `Dockerfile.dave` removes it for the build. Run `rclpy` scripts with `/usr/bin/python3` and
+  the analysis (NumPy, SciPy) with the venv's `python`.
+- The sonar image topic (`.../sonar_image`) is a colour-mapped picture; the data is
+  `.../sonar_image_raw` (`marine_acoustic_msgs/ProjectedSonarImage`, float32 dB, ranges by
+  beams), and its header stamp is 0.
+- `blazingSonarImage` seeds the speckle with `time(NULL)`; `Dockerfile.dave` patches it to a
+  fixed seed plus a frame counter so that a recording is reproducible (L34).

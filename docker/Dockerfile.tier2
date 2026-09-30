@@ -1,0 +1,33 @@
+# Tier-2 recording environment (task T-I1-03): ROS 2 Jazzy + Gazebo Harmonic + the pinned
+# Python environment of the paper data. Records the reference fleet headless on the GPU.
+#
+#   docker build -f docker/Dockerfile.tier2 -t avatar-tier2 .
+#   docker/tier2.sh make -C experiments/gazebo
+#   docker/tier2.sh python experiments/gazebo/record.py --seed 0 --duration 600 \
+#       --out results/tier2/harbor_fleet_seed0
+#
+# The repository is mounted at /work (not copied), and the container runs as the host
+# user, so nothing in the repository becomes root-owned. Needs the NVIDIA container
+# toolkit (`--gpus all`) for rendering.
+FROM ros:jazzy
+
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        ros-jazzy-ros-gz \
+        build-essential cmake pkg-config git \
+        python3-venv python3-pip \
+        libglvnd0 libegl1 libgl1 libgles2 libvulkan1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# The pinned versions of the paper data (results depend on NumPy, docs/LOG.md L33).
+COPY avatar_py/requirements-lock.txt /tmp/requirements-lock.txt
+RUN python3 -m venv /opt/venv && /opt/venv/bin/pip install --no-cache-dir -r /tmp/requirements-lock.txt
+
+ENV PATH=/opt/venv/bin:$PATH \
+    NVIDIA_VISIBLE_DEVICES=all \
+    NVIDIA_DRIVER_CAPABILITIES=all \
+    GZ_IP=127.0.0.1 \
+    PYTHONPATH=/work/avatar_py \
+    HOME=/tmp
+WORKDIR /work
+# `ros:jazzy` sources ROS in its entrypoint; keep it so `gz` and the vendor libraries resolve.

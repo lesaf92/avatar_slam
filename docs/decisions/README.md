@@ -13,5 +13,6 @@ accepted ADRs, except to add a "Superseded by" line.
 | [0005](ADR-0005-contracts.md) | Wire format and ROS messages are versioned contracts | Accepted |
 | [0006](ADR-0006-reference-fleet-and-comm-stack.md) | Reference fleet, communication stack, transparent relay | Accepted |
 | [0007](ADR-0007-tier2-kinematic-rigs.md) | Tier 2 v0: kinematic sensor rigs and a ray-cast sonar proxy (amends 0003) | Accepted (v0) |
+| [0008](ADR-0008-tier2-docker-dave-sonar.md) | Tier 2 v1: recording in Docker and DAVE's multibeam sonar (amends 0007) | Proposed |
 
 Template: copy `ADR-template.md`.

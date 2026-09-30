@@ -3,6 +3,7 @@
 - **Status:** Accepted (v0; revisit when DAVE/PX4 can be installed)
 - **Date:** 2026-09-29
 - **Amends:** ADR-0003 (two-tier simulation), item 2
+- **Amended by:** ADR-0008 (proposed): the sonar proxy is to be complemented by DAVE's multibeam sonar
 
 ## Context
 ADR-0003 plans Tier 2 as one Gazebo Harmonic world with DAVE (underwater
