@@ -249,14 +249,17 @@ def tier2(csv_name: str = "tier2.csv", suffix: str = "", prefix: str = "tier") -
             lines.append("\\multicolumn{7}{l}{Tier 2 (Gazebo, kinematic rigs, sonar proxy):} \\\\")
         sel = [r for r in rows if r["tier"] == t]
         merged = sum(int(r["n_connected"]) == int(r["n_slam"]) for r in sel)
-        at = np.median([_num(r["team_connected_s"]) for r in sel])
+        # Median over the runs that merged (a run without a common frame has no time).
+        times = [t for t in (_num(r["team_connected_s"]) for r in sel) if np.isfinite(t)]
+        at = float(np.median(times)) if times else float("nan")
         wrong = sum(int(r["wrong_alignments"]) for r in sel)
         n_al = sum(int(r["alignments"]) for r in sel)
         g1 = sum(r["g1_pass"] == "True" for r in sel)
         av = mean_ci([_num(r["team_ate_avatar_m"]) for r in sel])
         orc = mean_ci([_num(r["team_ate_oracle_robust_m"]) for r in sel])
         lines.append(
-            f"{ROW_NAMES[t]} & {merged}/{len(sel)} & {at:.0f} & {wrong}/{n_al} & "
+            f"{ROW_NAMES[t]} & {merged}/{len(sel)} & {'--' if np.isnan(at) else f'{at:.0f}'} & "
+            f"{wrong}/{n_al} & "
             f"{g1}/{len(sel)} & {av} & {orc} \\\\"
         )
         tag = TIER_TAGS[t]
