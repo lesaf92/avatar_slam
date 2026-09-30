@@ -80,6 +80,15 @@ ground-truth pose and measures its distance to the scene primitives; it caught
 a pose/scan off-by-one in the first recorder (docs/LOG.md L28) and must be run
 on every new recording.
 
+## Front-end regression test without Gazebo
+
+`testdata/tier2` is the first 61 keyframes of one recording (517 KB) with the
+statistics the front-end produced on them (`golden.json`).
+`avatar_py/tests/test_tier2_fixture.py` compares them in the normal `pytest` job.
+Regenerate with `python tools/gen_tier2_fixture.py results/tier2/harbor_fleet_seed0
+--out testdata/tier2` when the front-end, the Tier-1 scenario or the recorder changes
+on purpose, and say why in the commit.
+
 ## Intra-agent tracking modes and their limits
 
 `FrontEndParams.tracking` selects how detections get landmark ids:

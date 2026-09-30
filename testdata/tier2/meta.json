@@ -1,0 +1,68 @@
+{
+ "commit": "de7d6c6-dirty",
+ "scenario": "harbor_fleet",
+ "scenario_args": {},
+ "seed": 0,
+ "duration_s": 60.0,
+ "n_keyframes": 61,
+ "rigs": {
+  "ugv_0": [
+   "vlp16",
+   "d435i"
+  ],
+  "uav_0": [
+   "d435i_down30"
+  ],
+  "uuv_0": [
+   "gemini_720s"
+  ],
+  "uuv_1": [
+   "gemini_720s"
+  ]
+ },
+ "sensors": {
+  "vlp16": {
+   "kind": "lidar",
+   "h_samples": 900,
+   "v_samples": 16,
+   "h_fov_rad": 6.283185307179586,
+   "v_fov_rad": 0.5235987755982988,
+   "min_range_m": 0.5,
+   "max_range_m": 100.0,
+   "pitch_rad": 0.0
+  },
+  "d435i": {
+   "kind": "depth",
+   "h_samples": 212,
+   "v_samples": 128,
+   "h_fov_rad": 1.5184364492350666,
+   "v_fov_rad": 1.0122909661567112,
+   "min_range_m": 0.3,
+   "max_range_m": 10.0,
+   "pitch_rad": 0.0
+  },
+  "d435i_down30": {
+   "kind": "depth",
+   "h_samples": 212,
+   "v_samples": 128,
+   "h_fov_rad": 1.5184364492350666,
+   "v_fov_rad": 1.0122909661567112,
+   "min_range_m": 0.3,
+   "max_range_m": 10.0,
+   "pitch_rad": 0.5235987755982988
+  },
+  "gemini_720s": {
+   "kind": "sonar",
+   "h_samples": 128,
+   "v_samples": 16,
+   "h_fov_rad": 1.5707963267948966,
+   "v_fov_rad": 0.3490658503988659,
+   "min_range_m": 0.5,
+   "max_range_m": 50.0,
+   "pitch_rad": 0.0
+  }
+ },
+ "wall_time_s": 19.92914128303528,
+ "source": "results/tier2/harbor_fleet_seed0",
+ "fixture": true
+}

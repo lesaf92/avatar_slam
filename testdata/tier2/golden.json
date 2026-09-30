@@ -1,0 +1,116 @@
+{
+ "ekf": {
+  "uav_0": {
+   "clusters": 14,
+   "detections": 7,
+   "dropped_ambiguous": 0,
+   "matched": 14,
+   "spurious": 0,
+   "tracks": 2,
+   "wrong_track": 0
+  },
+  "ugv_0": {
+   "clusters": 526,
+   "detections": 515,
+   "dropped_ambiguous": 0,
+   "matched": 510,
+   "spurious": 16,
+   "tracks": 24,
+   "wrong_track": 0
+  },
+  "uuv_0": {
+   "clusters": 423,
+   "detections": 345,
+   "dropped_ambiguous": 28,
+   "matched": 343,
+   "spurious": 80,
+   "tracks": 21,
+   "wrong_track": 2
+  },
+  "uuv_1": {
+   "clusters": 123,
+   "detections": 119,
+   "dropped_ambiguous": 1,
+   "matched": 95,
+   "spurious": 28,
+   "tracks": 14,
+   "wrong_track": 0
+  }
+ },
+ "nn": {
+  "uav_0": {
+   "clusters": 18,
+   "detections": 18,
+   "dropped_ambiguous": 0,
+   "matched": 18,
+   "spurious": 0,
+   "tracks": 9,
+   "wrong_track": 0
+  },
+  "ugv_0": {
+   "clusters": 520,
+   "detections": 414,
+   "dropped_ambiguous": 106,
+   "matched": 505,
+   "spurious": 15,
+   "tracks": 41,
+   "wrong_track": 0
+  },
+  "uuv_0": {
+   "clusters": 421,
+   "detections": 417,
+   "dropped_ambiguous": 4,
+   "matched": 339,
+   "spurious": 82,
+   "tracks": 45,
+   "wrong_track": 8
+  },
+  "uuv_1": {
+   "clusters": 123,
+   "detections": 123,
+   "dropped_ambiguous": 0,
+   "matched": 95,
+   "spurious": 28,
+   "tracks": 14,
+   "wrong_track": 0
+  }
+ },
+ "oracle": {
+  "uav_0": {
+   "clusters": 14,
+   "detections": 14,
+   "dropped_ambiguous": 0,
+   "matched": 14,
+   "spurious": 0,
+   "tracks": 0,
+   "wrong_track": 0
+  },
+  "ugv_0": {
+   "clusters": 526,
+   "detections": 526,
+   "dropped_ambiguous": 0,
+   "matched": 510,
+   "spurious": 16,
+   "tracks": 0,
+   "wrong_track": 0
+  },
+  "uuv_0": {
+   "clusters": 419,
+   "detections": 419,
+   "dropped_ambiguous": 0,
+   "matched": 343,
+   "spurious": 76,
+   "tracks": 0,
+   "wrong_track": 0
+  },
+  "uuv_1": {
+   "clusters": 123,
+   "detections": 123,
+   "dropped_ambiguous": 0,
+   "matched": 95,
+   "spurious": 28,
+   "tracks": 0,
+   "wrong_track": 0
+  }
+ }
+}
