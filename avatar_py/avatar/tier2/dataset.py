@@ -25,8 +25,10 @@ from avatar.runner import make_sim
 from avatar.sim.measurements import SimData
 from avatar.sim.scenarios import Scenario
 from avatar.tier2 import frontend as frontend_module
+from avatar.tier2 import sonar_image as sonar_image_module
 from avatar.tier2.frontend import FrontEndParams, detections_for_agent
-from avatar.tier2.sdf import GZ_SENSORS
+from avatar.tier2.sdf import DAVE_SONARS, GZ_SENSORS, SONAR_DB_MAX, SONAR_DB_MIN
+from avatar.tier2.sonar_image import SonarFrames
 
 TRACK_ID_STRIDE = 1_000_000
 
@@ -41,11 +43,16 @@ def build_tier2_sim(
     params: AvatarParams | None = None,
     fe_params: FrontEndParams | None = None,
     cache: bool = True,
+    sonar: str | None = None,
 ) -> tuple[Scenario, SimData, dict]:
     """Scenario, Tier-2 SimData and front-end statistics for one recorded run.
 
     Front-end output is cached in ``<run_dir>/detections_<tracking>.pkl`` (keyed
     by the front-end parameters and source) because segmentation takes a while.
+
+    ``sonar`` names a sonar recording of the run (``<run_dir>/<sonar>.npz``, made by
+    ``experiments/gazebo/record_sonar.py``): the sensors it holds are read from it as images
+    of DAVE's multibeam sonar instead of the ray-cast proxy (ADR-0008).
     """
     run = Path(run_dir)
     meta = load_meta(run)
@@ -57,13 +64,19 @@ def build_tier2_sim(
     )  # fmt: skip
     # Cache key: parameters, the front-end source (a code change invalidates it) and the
     # NumPy/SciPy versions (random-number streams and solvers differ between them, LOG L33).
-    src = Path(frontend_module.__file__).read_bytes()
+    src = (
+        Path(frontend_module.__file__).read_bytes() + Path(sonar_image_module.__file__).read_bytes()
+    )
     key = (
         repr(fe_params)
         + hashlib.sha1(src).hexdigest()
         + f"|np{np.__version__}|sp{scipy.__version__}"
     )
-    cache_file = run / f"detections_{fe_params.tracking}.pkl"
+    sonar_file = run / f"{sonar}.npz" if sonar else None
+    if sonar_file is not None:
+        st = sonar_file.stat()
+        key += f"|{sonar}:{st.st_size}:{st.st_mtime_ns}"
+    cache_file = run / f"detections_{fe_params.tracking}{'_' + sonar if sonar else ''}.pkl"
     cached = None
     if cache and cache_file.exists():
         blob = pickle.loads(cache_file.read_bytes())
@@ -71,6 +84,7 @@ def build_tier2_sim(
             cached = blob
     if cached is None:
         raw = np.load(run / "raw.npz")
+        sz = np.load(sonar_file) if sonar_file is not None else None
         fe_rng = np.random.default_rng(int(meta["seed"]) + 40_000)
         per_agent, stats = {}, {}
         n_parts = len(sim.world.parts)
@@ -79,8 +93,20 @@ def build_tier2_sim(
             sensors = meta["rigs"].get(name, [])
             if ad.config.role != "slam" or not sensors:
                 continue
-            specs = {s: GZ_SENSORS[s] for s in sensors}
-            data = {s: raw[f"{name}/{s}"] for s in sensors}
+            specs, data = {}, {}
+            for s in sensors:
+                if sz is not None and f"{name}/{s}" in sz.files and s in DAVE_SONARS:
+                    specs[s] = DAVE_SONARS[s].image_spec()
+                    data[s] = SonarFrames(
+                        sz[f"{name}/{s}"],
+                        sz[f"{name}/{s}/range_m"],
+                        sz[f"{name}/{s}/azimuth_rad"],
+                        SONAR_DB_MIN,
+                        SONAR_DB_MAX,
+                    )
+                else:
+                    specs[s] = GZ_SENSORS[s]
+                    data[s] = raw[f"{name}/{s}"]
             offset = n_parts + TRACK_ID_STRIDE * (aid + 1)
             dets, st = detections_for_agent(
                 ad, data, specs, sim.world, sim.instance_descriptors, offset, fe_params, fe_rng

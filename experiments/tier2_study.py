@@ -63,6 +63,11 @@ TIERS: dict[str, str | dict[str, str] | None] = {
     "T2reg": "registration",
     "T2ekf": "ekf",
     "T2nn-uuv": {"uuv": "nn", "*": "oracle"},
+    # The BlueROV2s' imaging sonar is DAVE's multibeam sonar (ADR-0008; the recording made by
+    # record_sonar.py): a "+sonar" suffix selects the images of ``sonar.npz`` in the run directory.
+    "T2s": "oracle+sonar",
+    "T2snn": "nn+sonar",
+    "T2sekf": "ekf+sonar",
     "T2nn-land": {"ugv": "nn", "uav": "nn", "*": "oracle"},
 }
 
@@ -74,11 +79,18 @@ WRONG_YAW_RAD = np.deg2rad(5.0)
 G1_XY_M = 1.0
 
 
+def _split(mode: str) -> tuple[str, str | None]:
+    """``"ekf+sonar"`` -> (tracking mode ``"ekf"``, sonar recording ``"sonar"``)."""
+    tracking, _, sonar = mode.partition("+")
+    return tracking, (sonar or None)
+
+
 def _fe_params(mode: str) -> FrontEndParams:
     """Front-end parameters of a tracking mode (with the ``--ekf`` overrides)."""
-    if mode == "ekf":
-        return FrontEndParams(tracking=mode, ekf=EkfTrackerParams(**EKF_OVERRIDES))
-    return FrontEndParams(tracking=mode)
+    tracking = _split(mode)[0]
+    if tracking == "ekf":
+        return FrontEndParams(tracking=tracking, ekf=EkfTrackerParams(**EKF_OVERRIDES))
+    return FrontEndParams(tracking=tracking)
 
 
 def _modes(tier: str) -> list[str]:
@@ -91,7 +103,7 @@ def _modes(tier: str) -> list[str]:
 
 def _build(run_dir: str, mode: str) -> None:
     """Fill the front-end cache of one (run, mode); each pair has its own cache file."""
-    build_tier2_sim(run_dir, AvatarParams(), _fe_params(mode))
+    build_tier2_sim(run_dir, AvatarParams(), _fe_params(mode), sonar=_split(mode)[1])
 
 
 def _tier2_sim(run_dir: str, params: AvatarParams, tier: str):
@@ -102,8 +114,10 @@ def _tier2_sim(run_dir: str, params: AvatarParams, tier: str):
     """
     spec = TIERS[tier]
     if isinstance(spec, str):
-        return build_tier2_sim(run_dir, params, _fe_params(spec))
-    built = {m: build_tier2_sim(run_dir, params, _fe_params(m)) for m in _modes(tier)}
+        return build_tier2_sim(run_dir, params, _fe_params(spec), sonar=_split(spec)[1])
+    built = {
+        m: build_tier2_sim(run_dir, params, _fe_params(m), sonar=_split(m)[1]) for m in _modes(tier)
+    }
     scenario, base, _ = next(iter(built.values()))
     agents, stats = dict(base.agents), {}
     for aid, ad in base.agents.items():

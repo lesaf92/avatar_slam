@@ -33,13 +33,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # DAVE at the pinned commit, only the packages the sonar depends on.
 RUN mkdir -p /opt/dave_ws/src && cd /opt/dave_ws/src \
     && git clone -q https://github.com/IOES-Lab/dave.git && cd dave && git checkout -q ${DAVE_REF}
-# With `blazingSonarImage` the speckle seed is time(NULL): recordings could not be reproduced,
-# and frames within one wall-clock second would share their speckle. A fixed base seed plus a
-# per-frame counter makes a recording deterministic (docs/LOG.md L34).
-RUN cd /opt/dave_ws/src/dave/gazebo/dave_gz_multibeam_sonar/multibeam_sonar \
-    && sed -i 's|seed = static_cast<unsigned long long>(time(NULL));|static unsigned long long frameCounter = 0; seed = 1234ULL + frameCounter++;|' \
-        sonar_calculation_cuda.cu \
-    && grep -q 'frameCounter++' sonar_calculation_cuda.cu
+# With `blazingSonarImage` the speckle seed is time(NULL): recordings could not be reproduced.
+# The patch seeds it from the simulation time and the sensor name (docs/LOG.md L34).
+COPY docker/patch_dave_seed.py /tmp/patch_dave_seed.py
+RUN python3 /tmp/patch_dave_seed.py \
+    /opt/dave_ws/src/dave/gazebo/dave_gz_multibeam_sonar/multibeam_sonar
 WORKDIR /opt/dave_ws
 # multibeam_sonar_system builds multibeam_sonar (the CUDA sensor) as a subdirectory, and skips
 # it without a message if CUDA is not found, so the build is checked for the libraries.

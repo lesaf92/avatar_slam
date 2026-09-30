@@ -61,6 +61,7 @@ from avatar.sim.agents import heading_bias_modelled
 from avatar.sim.sensors import SENSOR_LIBRARY, Detection, DetectionSensor
 from avatar.tier2.rays import sensor_points
 from avatar.tier2.sdf import RaySensorSpec
+from avatar.tier2.sonar_image import SonarImage, SonarImageParams, detect_blobs
 from avatar.types import LandmarkFlags, Medium
 
 FloatArray = NDArray[np.float64]
@@ -134,6 +135,8 @@ class FrontEndParams:
     # ambiguous too (2 161 tracks for 48 parts on the UGV, docs/LOG.md L28).
     track_on_ambiguity: str = "drop"
     ekf: EkfTrackerParams = field(default_factory=EkfTrackerParams)
+    # Sonar images (spec kind "sonar_image", DAVE's multibeam sonar, ADR-0008)
+    sonar_image: SonarImageParams = field(default_factory=SonarImageParams)
     # Semantic oracle: max distance [m] from a detection to a GT part's surface
     label_match_m: float = 1.5
 
@@ -224,13 +227,33 @@ def _dominant_plane_z(z: FloatArray, below: float, band: float) -> float | None:
 
 def segment(
     spec: RaySensorSpec,
-    data: NDArray,
+    data: NDArray | SonarImage,
     agent_z_m: float,
     seabed_z_m: float,
     params: FrontEndParams,
     rng: np.random.Generator,
 ) -> list[Cluster]:
-    """Clusters (body frame) in one scan / depth image, after noise and gating."""
+    """Clusters (body frame) in one scan / depth image, after noise and gating.
+
+    A sonar image (``spec.kind == "sonar_image"``) is detected as such
+    (:mod:`avatar.tier2.sonar_image`); it carries its own noise and its acoustic world holds
+    only what is below the waterline, so no noise is added and no medium gating is needed.
+    """
+    if spec.kind == "sonar_image":
+        assert isinstance(data, SonarImage)
+        return [
+            Cluster(
+                np.array([b.x, b.y, 0.0]),  # elevation unobserved, as for the proxy
+                np.array(
+                    [max(b.cross_range_m, b.along_range_m), min(b.cross_range_m, b.along_range_m)]
+                ),
+                0.05,
+                b.range_m,
+                True,
+                False,
+            )
+            for b in detect_blobs(data, params.sonar_image)
+        ]
     d = np.asarray(data, dtype=np.float64).copy()
     finite = np.isfinite(d)
     if spec.kind == "lidar":
