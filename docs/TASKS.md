@@ -60,7 +60,8 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 
 | ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
 |---|---|---|---|---|---|---|
-| T-I1-03 | Docker image: `ros:jazzy` + Gazebo Harmonic + DAVE (ros2 branch) + PX4 SITL | P0 | – | todo | | `docker compose up` spawns the empty world |
+| T-I1-06 | **Host: get more disk space and Docker access** (PI action, decision D12): free ≥ 40 GB on `/` (21 GB free now; `results/` regenerable 1.2 GB, of which 0.77 GB caches) or move Docker's `data-root` to another disk; add the user to group `docker` (`sudo usermod -aG docker luiz`) or install rootless `podman` | P0 | – | todo | PI | `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi` works for the agent user (`sg docker -c '…'`) and `df -h /` shows ≥ 40 GB free. Details in `experiments/gazebo/README.md` |
+| T-I1-03 | Docker image: `ros:jazzy` + Gazebo Harmonic + DAVE (ros2 branch) + PX4 SITL | P0 | T-I1-06 | blocked | | `docker compose up` spawns the empty world. Needs ≥ 40 GB of disk and Docker access (T-I1-06) |
 | T-S2-01 | Gazebo Harmonic harbour world (piles, hulls, quay, buoys) from scenario YAML | P0 | T-S4-01, T-I1-03 | review | Claude · `wp/T-S2-01-gazebo-tier2` | World loads; GT exported. **v0 (ADR-0007):** built from the Python scenario (`avatar.tier2.sdf`), not YAML, and without the Docker image; both deps stay open |
 | T-S2-02 | Spawn the reference fleet in `unified.launch.py`: Husky (`clearpath_simulator`), PX4 SITL hexacopter (Tarot-like), BlueROV2 (DAVE), static gateway, optional BlueBoat | P0 | T-S2-01 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | All move on scripted paths. **v0 done as kinematic sensor rigs** at the Tier-1 ground-truth pose (ADR-0007). Clearpath, PX4 and DAVE vehicles are **blocked** by T-I1-03 (no root / Docker on the lab machine); tracked as T-S2-05 |
 | T-S2-03 | Sensor bridges: VLP-16 (`gpu_lidar`), D435i (`rgbd_camera`), Micron Gemini (DAVE multibeam: 90°, 128 beams, 50 m), DVL A50, Bar30, IMU (`ros_gz_bridge`), NED→ENU at the boundary | P0 | T-S2-02 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | Topics per `conventions.md` §7. **v0:** VLP-16, D435i depth and a ray-cast Gemini proxy are recorded over gz-transport (`experiments/gazebo/`, geometry check per recording); no ROS bridge yet, DVL/Bar30/IMU come from the Tier-1 odometry models |
@@ -120,6 +121,8 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-03 | Monthly novelty re-search (next: 2026-10-28) | P1 | – | todo (recurring) | |
 
 ## Notes / hand-offs
+
+- *2026-09-30 (Claude, host blocker):* **Waiting on the PI: T-I1-06 (more disk space, Docker access).** T-S2-05 and T-I1-03 cannot start without it; nothing else is blocked. Until it is done, agents keep disk use small (no new recordings beyond what a task needs; `results/` is git-ignored and regenerable). Free list, quickest first: `results/**/detections*.pkl` (767 MB of caches), `results/tier2*/*/raw.npz` (452 MB, `make tier2-record` re-creates them at about 22 s each), then space elsewhere on `/` (about 425 GB in use, not in this repository).
 
 - *2026-09-30 (Claude, T-I1-05 to review):* **T-I1-05 hand-off** (branch `wp/T-I1-05-tier2-fixture`). Works: fixture, generator, test (runs in the normal `pytest` job, no Gazebo). Regenerate the fixture (`python tools/gen_tier2_fixture.py results/tier2/harbor_fleet_seed0 --out testdata/tier2`) and say why in the commit whenever the front-end, the Tier-1 scenario or the recorder changes on purpose; the fixture is valid only with the scenario code that made the recording.
 
