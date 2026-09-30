@@ -9,6 +9,8 @@ team study, and it isolates one robot's association.
 
     python experiments/tier2_ekf_sweep.py uuv_1 0 1 2 3 4 -- \
         landmark_density_per_m2=0.01,0.003 new_landmark_margin=1.0,0.0
+
+``TIER2_RUNS`` selects another recording directory (default ``results/tier2``).
 """
 
 from __future__ import annotations
@@ -42,7 +44,7 @@ def _parse(default: object, text: str) -> object:
     return type(default)(text)
 
 
-RUNS = Path(__file__).resolve().parents[1] / "results" / "tier2"
+RUNS = Path(os.environ.get("TIER2_RUNS", Path(__file__).resolve().parents[1] / "results" / "tier2"))
 
 
 def _one(args: tuple[str, int, dict]) -> tuple[dict, float, dict]:

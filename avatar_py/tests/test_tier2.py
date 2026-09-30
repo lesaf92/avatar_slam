@@ -68,6 +68,16 @@ def test_sensor_points_rejects_out_of_range_and_inf():
     np.testing.assert_allclose(np.linalg.norm(p, axis=1), [5.0])
 
 
+def test_uav_lidar_variant_adds_a_lidar_rig_to_the_uav_only():
+    base, _ = make_sim("harbor_fleet", 0, 2.0, AvatarParams())
+    lidar, _ = make_sim("harbor_fleet", 0, 2.0, AvatarParams(), uav_lidar=True)
+    assert rig_sensors(base)["uav_0"] == ["d435i_down30"]
+    assert rig_sensors(lidar)["uav_0"] == ["d435i_down30", "vlp16"]
+    assert {k: v for k, v in rig_sensors(lidar).items() if k != "uav_0"} == {
+        k: v for k, v in rig_sensors(base).items() if k != "uav_0"
+    }
+
+
 def test_world_sdf_and_bridge_are_consistent():
     scenario, sim = make_sim("harbor_fleet", 0, 2.0, AvatarParams())
     poses = {a.config.name: a.gt[0] for a in sim.agents.values()}

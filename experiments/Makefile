@@ -7,7 +7,7 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data tables server cycle bandwidth drift realism tier2-record tier2
+.PHONY: paper-data tables server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar
 
 paper-data: server cycle bandwidth drift realism tables
 
@@ -32,12 +32,17 @@ realism:
 
 # Tier 2 (Gazebo Harmonic): needs a GPU, Gazebo and the recorder (gazebo/README.md).
 # Not part of `paper-data`, which must run without Gazebo; run it explicitly.
-# Seeds 0-19 are the development set (every design decision was made on them, LOG L29,
-# L30); seeds 20-29 were recorded afterwards and are used once, for validation.
-T2RUNS  ?= ../results/tier2
-JOBS    ?= 4
-T2DEV   ?= $(shell seq 0 19)
-HELDOUT ?= $(shell seq 20 29)
+# Seeds 0-19: development set (every design decision was made on them, LOG L29-L31).
+# Seeds 20-39: held-out set, recorded afterwards (20-29 were analysed after their
+# run, 30-39 only ran once). LIDAR: the fleet with a LiDAR on the UAV (LOG L31),
+# recorded into T2LIDARRUNS, on seeds 0-19 and 30-39; the tracker was not tuned for it.
+T2RUNS      ?= ../results/tier2
+T2LIDARRUNS ?= ../results/tier2_uavlidar
+JOBS        ?= 4
+T2DEV       ?= $(shell seq 0 19)
+HELDOUT     ?= $(shell seq 20 39)
+T2LIDAR     ?= $(shell seq 0 19) $(shell seq 30 39)
+
 tier2-record:
 	$(MAKE) -C gazebo
 	for s in $(T2DEV) $(HELDOUT); do \
@@ -45,11 +50,24 @@ tier2-record:
 		$(PY) gazebo/check_geometry.py $(T2RUNS)/harbor_fleet_seed$$s --every 30; \
 	done
 
+tier2-record-lidar:
+	for s in $(T2LIDAR); do \
+		$(PY) gazebo/record.py --seed $$s --duration 600 --scenario-arg uav_lidar=true \
+			--out $(T2LIDARRUNS)/harbor_fleet_seed$$s; \
+		$(PY) gazebo/check_geometry.py $(T2LIDARRUNS)/harbor_fleet_seed$$s --every 30; \
+	done
+
 tier2:
 	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(T2DEV) --jobs $(JOBS) \
 		--out $(DATA)/tier2.csv
+
+tier2-heldout:
 	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(HELDOUT) --jobs $(JOBS) \
 		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_heldout.csv
+
+tier2-lidar:
+	$(PY) tier2_study.py --runs $(T2LIDARRUNS) --seeds $(T2LIDAR) --jobs $(JOBS) \
+		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_uavlidar.csv
 
 tables:
 	$(PY) make_paper_tables.py

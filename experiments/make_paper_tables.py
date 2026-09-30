@@ -311,7 +311,9 @@ def main() -> None:
                     (realism, "realism.csv"),
                     (tier2, "tier2.csv"),
                     (lambda: tier2("tier2_heldout.csv", "_heldout", "held"),
-                     "tier2_heldout.csv")):  # fmt: skip
+                     "tier2_heldout.csv"),
+                    (lambda: tier2("tier2_uavlidar.csv", "_uavlidar", "lidar"),
+                     "tier2_uavlidar.csv")):  # fmt: skip
         if (DATA / src).exists():
             fn()
             made.append(src)
