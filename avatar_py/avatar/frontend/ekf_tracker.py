@@ -172,6 +172,9 @@ class EkfTracker:
         self.n_landmarks = 0
         self.n_dropped = 0  # detections dropped as ambiguous
         self.n_updates = 0  # updates of the pose from matches
+        # Distance [m] between the two competing landmarks at each ambiguous drop
+        # (small: near-duplicates of one object; large: aliasing between objects).
+        self.ambiguity_gaps_m: list[float] = []
 
     @property
     def x(self) -> FloatArray:
@@ -532,6 +535,8 @@ class EkfTracker:
             idx, ll = candidates(i)
             if len(idx) > 1 and ll[idx[0]] - ll[idx[1]] < margin_ll:
                 dropped.add(i)
+                lm = self._landmarks()
+                self.ambiguity_gaps_m.append(float(np.hypot(*(lm[idx[0]] - lm[idx[1]]))))
             elif confident(idx, ll):  # cleared up after the last round
                 apply_match(i, int(idx[0]))
             else:
