@@ -7,6 +7,8 @@ set -u
 HERE=/work/experiments/gazebo/sonar_smoke
 OUT=/work/results/sonar_smoke
 mkdir -p "$OUT"
+# The sonar plugin creates an (empty) debug_timings.txt in the working directory.
+cd "$OUT"
 for run in a b; do
   gz sim -s --headless-rendering -v 1 "$HERE/world.sdf" > "$OUT/gz_$run.log" 2>&1 &
   GZ=$!
