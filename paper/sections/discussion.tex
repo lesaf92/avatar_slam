@@ -25,4 +25,5 @@ with the joint covariance of pose and landmarks and joint pairing of a keyframe'
 detections, recovers most of the gap, but it still fails occasionally for the robot whose sensor
 gives sparse fixes: when its pose uncertainty is of the order of the pile spacing, a single
 detection cannot separate a new pile from a mapped one. Pairing over a window of keyframes is
-future work, and the Tier-1 error model may understate the danger.
+future work, and the Tier-1 error model may understate the danger. In simulation, a light LiDAR
+on that robot removes the failure (Sec.~\ref{sec:experiments}).

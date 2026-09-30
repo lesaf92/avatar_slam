@@ -89,18 +89,19 @@ on every new recording.
 | `oracle` | ground-truth part identity, as in Tier 1 | the Tier-2 headline: G1 10/10, 0/95 wrong alignments |
 | `nn` | gated nearest neighbour in the **dead-reckoning frame**; ambiguous detections are dropped (`track_on_ambiguity`) | fails: G1 6/10, 21/83 wrong alignments |
 | `registration` | keyframe-to-map offset, then the same gating | worse: G1 2/10, 37/77 wrong |
-| `ekf` | EKF-SLAM over pose, odometry biases and landmarks with the joint covariance (`avatar.frontend.ekf_tracker`) | development seeds 0-19: G1 19/20, 8/181 wrong; fresh seeds 20-29: G1 **9/10**, 6/92 wrong (LOG L30) |
+| `ekf` | EKF-SLAM over pose, odometry biases and landmarks with the joint covariance (`avatar.frontend.ekf_tracker`) | development seeds 0-19: G1 19/20, 8/181 wrong; held-out seeds 20-39: G1 **19/20**, 6/183 wrong (LOG L30, L31) |
 
 `nn` and `registration` fail once a BlueROV2's raw drift (peaks of 8-10 m here)
 approaches the spacing of similar piles (8 m between the pier rows). `ekf` associates
 against the agent's own filtered estimate and pairs a keyframe's ambiguous detections
 jointly (LOG L29, L30); its residual failure is the UAV, whose sparse fixes leave a
-pose σ of about 2 m, so a new pile 8 m from a mapped one is sometimes taken for it
-(task T-F3-04). Report Tier-2 results with `oracle` tracks as the estimator's result
+pose σ of about 2 m, so a new pile 8 m from a mapped one is sometimes taken for it. A
+LiDAR on the UAV removes it (`--scenario-arg uav_lidar=true`, LOG L31). Report Tier-2 results with `oracle` tracks as the estimator's result
 and `ekf` as the realistic front-end, each labelled as such.
 
-Seeds 0-19 are the development set and 20-29 the held-out set (recorded after every
-design decision, used once): `make -C experiments tier2-record tier2 tables`.
+Seeds 0-19 are the development set and 20-39 the held-out set (recorded after every
+design decision): `make -C experiments tier2-record tier2 tier2-heldout tables`. The
+fleet with a LiDAR on the UAV: `tier2-record-lidar tier2-lidar` (seeds 0-19 and 30-39).
 
 ```bash
 python experiments/tier2_study.py --runs results/tier2 --out results/tier2_study.csv

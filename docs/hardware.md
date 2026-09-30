@@ -52,6 +52,10 @@ The simulator uses speeds below these maxima: UGV 1.0 m/s, UAV 1.0 m/s, BlueROV2
    3 m altitude. Along the centre line between rows it saw 5 objects in 120 s.
    A light LiDAR (a Livox Mid-360 class unit) would make the UAV a first-class
    mapper. This is an optional upgrade (UNVERIFIED specs; decision D6).
+   **Simulation evidence (docs/LOG.md L31):** with a VLP-16-class LiDAR next to the
+   D435i the Tarot's own SLAM error is 0.10 m in all 30 runs (camera only: one run in
+   ten above 1.5 m) and the team's association stays right (G1 30/30). Check payload
+   and endurance before buying.
 2. **The UGV carries the team frame.** VLP-16 LIO is the most stable estimator
    in the team, so `ugv_0` is the anchor.
 3. **Heading is the UUV's weak point.** DVL velocity is good, but heading comes

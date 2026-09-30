@@ -5,6 +5,72 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-09-30 (evening): the UAV's aliasing is a sensor problem (Claude)
+
+Branch `wp/T-F3-04-uav-aliasing`; `harbor_fleet`, 600 s, M64; **simulation**. The
+held-out set is now seeds 20-39 (20-29 were analysed after their run, 30-39 were run
+once and looked at only afterwards); `tier2_heldout.csv` and `tier2_uavlidar.csv`
+record commit `2a23a57` (clean), `tier2.csv` is unchanged (`0135c61`).
+
+### L31. A LiDAR on the Tarot removes the residual aliasing failure (T-F3-04, decision D6)
+
+After L30 the only recurring failure was the Tarot alone at 1.6-1.7 m (seeds 19 and
+21). **Why software will not fix it:** its filter is consistent (L30 item 3), it
+sees one pile per keyframe so there is nothing to pair jointly, and the wrong match
+is allowed by the map's own uncertainty: two landmarks mapped a hundred keyframes
+apart are only known relative to each other to about 2 m, so a pile 2.8 m from one
+looks like it. A window of keyframes would not add that information (reasoned, not
+implemented). A stricter match rule trades this failure for lost matches (L29
+item 5). Instance descriptors would probably separate the piles in the sim (cosine to
+the own pile 0.93, to another pile 0.49 on average) but the sim's descriptor model
+is not validated against real embeddings, so that would be an upper bound; not tried.
+
+**Test:** a fleet variant with a VLP-16-class LiDAR on the Tarot next to its D435i
+(`harbor_fleet(uav_lidar=True)`, a stand-in for the optional Livox-class unit of
+D6; `docs/hardware.md`). Its returns pass the geometry check (median 1.9 cm, p95 17
+cm, 2.8 % beyond 0.2 m). The tracker and its parameters are unchanged. Seeds 0-19
+and 30-39 (30 runs).
+
+| Fleet, perception | Runs | G1 | Wrong alignments | Team ATE [m] |
+|---|---|---|---|---|
+| Camera only, ground-truth tracks (held-out 20-39) | 20 | 20/20 | 0/188 | 0.233 ± 0.019 |
+| Camera only, NN tracker | 20 | 9/20 | 40/175 | 3.102 ± 1.927 |
+| **Camera only, EKF tracker** | 20 | 19/20 | 6/183 | 0.275 ± 0.072 |
+| LiDAR on the Tarot, ground-truth tracks | 30 | 30/30 | 0/283 | 0.189 ± 0.015 |
+| LiDAR on the Tarot, NN tracker | 30 | 23/30 | 30/247 | 2.399 ± 0.624 |
+| **LiDAR on the Tarot, EKF tracker** | 30 | **30/30** | **1/276** | 0.260 ± 0.132 |
+
+```
+make -C experiments tier2-record-lidar tier2-heldout tier2-lidar tables PY=python JOBS=12
+```
+
+**Findings.**
+1. **The Tarot goes from the weak link to the best mapper**: alone, 0.10 m in all 30
+   runs (max 0.11 m), against 0.23-0.24 m mean with one run above 1.5 m in each of
+   the camera-only sets (development seed 19, held-out seed 21). It sees many piles per
+   keyframe (7 323 matched detections on seed 19 instead of 217), so joint pairing
+   works for it.
+2. **The team improves as well**: with ground-truth tracks the team ATE is 0.189 m
+   against 0.233 m, and the NN tracker also does better (23/30 against 9/20), so the
+   LiDAR helps more than the tracker.
+3. **One failure is left, and it moved to an AUV**: seed 33, BlueROV2 1 alone at
+   3.29 m and one wrong alignment. Same mode as development seed 6 (3.02 m): a
+   confident wrong match of a single far detection (28 m) that rotates the pose by
+   about 5° (L29 item 5). Camera-only fleet: development seed 6 and none in the 20 held-out
+   seeds; LiDAR fleet: seed 33 (1 in 30).
+4. **Recommendation for D6 (the PI decides):** the light LiDAR removes the tracker's
+   only recurrent failure in simulation and improves the team even with perfect
+   tracks. Check first: payload and endurance of the Tarot 680 Pro (1.5-2.5 kg, about
+   15 min; a VLP-16 is 0.83 kg, a Mid-360 class unit is lighter), power, and that a
+   LiDAR in the propwash and near steel piles behaves like the model.
+
+**Caveats.** The LiDAR is modelled as a VLP-16 (360° × 30°, 100 m), not a Livox
+Mid-360 (specs UNVERIFIED); the LiDAR and camera-only runs are not paired (the extra
+sensor changes later random draws, so odometry noise differs); 30 and 20 seeds; one
+scenario and the sonar proxy of ADR-0007.
+
+---
+
 ## 2026-09-30 (later): joint pairing and validation on fresh seeds (Claude)
 
 Branch `wp/T-F3-03-joint-association`; `harbor_fleet`, 600 s, M64; **simulation**.

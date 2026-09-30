@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v1.4 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v1.5 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -307,7 +307,7 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 | D3 | Authors | – | **Decided (PI):** sole confirmed author Luiz Eugenio Santos Araujo Filho. Affiliation still to be given. Contacting *A&B* / DRACo authors for data remains open |
 | D4 | Compute | GPU workstation for Gazebo + 3DGS | Open. Needed by M1 |
 | D5 | Scenario priority | Harbour first vs. Dam first | Harbour (it matches A&B for comparison) |
-| D6 | Purchases for field work | M64 modems, UGPS G2, mesh radios, RTK; optional BlueBoat and a UAV LiDAR | Open. See [`hardware.md`](hardware.md) §6 |
+| D6 | Purchases for field work | M64 modems, UGPS G2, mesh radios, RTK; optional BlueBoat and a UAV LiDAR | Open. **Evidence (LOG L31): the UAV LiDAR removes the tracker's recurrent failure in simulation (G1 30/30, Tarot alone 0.10 m), so it is the first item to buy.**  See [`hardware.md`](hardware.md) §6 |
 | D7 | Affiliation / funding line for the paper | – | Open |
 | D8 | Scope of H1 (drift correction) | All drift vs. small drift | **Decided (PI, 2026-09-28):** claim correction only for small drift (solo AUV drift ≲ 1 m over the mission); metre-level correction is later work (T-X1-03). LOG L20–L23 |
 | D9 | AUV heading model | Compass-aided (bias-free) vs. gyro-integrated (bias) | **Decided (PI, 2026-09-28):** if heading is mostly magnetometer-based, ignore the bias; if the magnetometer is unreliable (steel in harbours), model it. See LOG L24 |
@@ -316,6 +316,9 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 
 ## 10. Changelog
 
+- **v1.5 (2026-09-30).** T-F3-04: the UAV's residual aliasing is a sensor problem; a
+  LiDAR on the Tarot gives G1 30/30 (LOG L31). D6 now has evidence. Held-out seeds
+  are 20-39.
 - **v1.4 (2026-09-30).** T-F3-03: joint pairing of ambiguous detections; fresh-seed
   G1 9/10 (LOG L30). Development seeds are now 0-19, held-out 20-29. New task T-F3-04
   (UAV aliasing).
