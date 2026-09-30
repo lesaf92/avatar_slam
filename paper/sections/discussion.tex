@@ -8,7 +8,8 @@ limitations shape the claims of this paper.
 First, collaboration corrects a drifting AUV only when its solo drift is small. With metre-level
 drift, each neighbour's frame absorbs the nearest cluster of matches rigidly, and the
 trajectory does not bend. This needs anchors at both ends of the drift that are linked to the
-team.
+team, and a front-end that recognizes at least some revisits: if it recognizes none, no robust
+kernel restores the loop closures (Sec.~\ref{sec:experiments}).
 Second, the gain is not uniform: in a few runs the shared constraints make a drifting vehicle
 slightly worse. Holding its heading bias at the local estimate removed most such cases.
 Third, ordering records by expected information did not beat a simple quality order. At
@@ -19,11 +20,11 @@ baseline shows how an aliased alignment on sparse data can then corrupt the whol
 Multi-hop sharing without double counting is future work.
 Fifth, intra-agent association. The Tier-2 estimator result uses ground-truth tracks. A tracker
 that gates in the dead-reckoning frame fails once an underwater robot's drift approaches the
-spacing of similar structures, and its errors are persistent, unlike the random identity switches
-injected in Tier 1, which the robust kernel absorbs. A filter over the robot's own estimate,
+spacing of similar structures; the damage is mostly duplicate landmarks, that is, lost loop
+closures, which no robust kernel repairs (Sec.~\ref{sec:experiments}). A filter over the robot's own estimate,
 with the joint covariance of pose and landmarks and joint pairing of a keyframe's ambiguous
 detections, recovers most of the gap, but it still fails occasionally for the robot whose sensor
 gives sparse fixes: when its pose uncertainty is of the order of the pile spacing, a single
 detection cannot separate a new pile from a mapped one. Pairing over a window of keyframes is
-future work, and the Tier-1 error model may understate the danger. In simulation, a light LiDAR
-on that robot removes the failure (Sec.~\ref{sec:experiments}).
+future work. In simulation, a light LiDAR on that robot removes the failure
+(Sec.~\ref{sec:experiments}).

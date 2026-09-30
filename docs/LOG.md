@@ -5,6 +5,73 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-09-30 (night): structured association errors in Tier 1 (Claude)
+
+Branch `wp/T-S1-09-structured-errors`; Tier 1, `harbor_fleet`, presets `fleet_default`
+and `fleet_exploration`, 3 seeds, 600 s, M64; **simulation**. `paper/data/realism.csv`
+records commit `4306589` (clean).
+
+### L32. Bursts of wrong identities are absorbed by GNC; missing loop closures are what hurts (T-S1-09)
+
+L28 item 7 guessed that Tier 1's random identity switches "probably understate the
+danger" of the persistent errors seen in Tier 2. Two error models were added to
+`FrontEndErrors` to test it (both off by default; the existing streams and results
+are untouched, a test checks it):
+- **Bursts** (`id_switch_persist_kf` = 25): a switch lasts 25 keyframes for that sensor
+  and part. Onsets 0.003 and 0.010 give 4.7 % and about 13 % wrong attributions,
+  matching the random levels (4.3 % and 13.1 %, measured on `harbor_fleet`).
+- **Splits** (`id_split_prob`, `id_split_gap_kf` = 30): a part seen again after 30
+  keyframes gets a new identity, so the revisit closes no loop. This is what cost the
+  Tier-2 trackers their loop closures (L29).
+
+Team ATE [m], mean of 3 seeds (in parentheses: runs in which the whole team merged, if
+not all); the last two columns are the robust kernels:
+
+| Preset | Front-end errors | No kernel | Huber | GNC-TLS |
+|---|---|---|---|---|
+| default | none | 0.10 | 0.10 | 0.11 |
+| | 5 % random + 0.5 clutter | 2.06 (1/3) | 0.34 | 0.10 |
+| | 5 % in bursts + 0.5 | 1.22 | 0.27 | 0.11 |
+| | 15 % random + 1.0 | 3.14 (0/3) | 0.76 (2/3) | 0.12 |
+| | 13 % in bursts + 1.0 | 1.56 (1/3) | 0.20 | 0.10 |
+| | half of the revisits split | 0.11 | 0.11 | 0.11 |
+| | all revisits split | 1.30 | 1.29 | 1.24 |
+| exploration | none | 0.13 | 0.13 | 0.13 |
+| | 13 % in bursts + 1.0 | 1.31 (1/3) | 0.51 | 0.13 |
+| | all revisits split | 1.25 | 1.24 | 1.12 |
+
+```
+make -C experiments realism tables PY=python JOBS=12
+```
+
+**Findings.**
+1. **The L28 hypothesis is not supported.** At the same rate of wrong attributions,
+   bursts of 25 keyframes are absorbed by GNC-TLS as well as random switches are (team
+   0.10-0.13 m against 0.11-0.13 m error-free). Huber is not always enough
+   (0.51 m on the exploration preset with 13 % bursts). Tier 1's random-switch model
+   did not understate the danger of persistent wrong identities.
+2. **Missing loop closures are the error that matters, and no kernel helps.** With
+   every revisit split, the UAV alone goes from 0.14 to 2.38 m and BlueROV2 1 from 0.10 to
+   1.47 m (default preset, GNC), the team from 0.11 to 1.24 m. Half of the revisits
+   split costs nothing (team 0.11 m): one recognised revisit closes the loop. This
+   matches Tier 2, where the lost accuracy came from duplicate landmarks (L29 item 4).
+3. **Consequence for the claims.** H1's drift correction and the Tier-1 team results
+   assume that at least some revisits are recognised; the discussion says so. The
+   robust-kernel result (Table `tab:realism`) stands.
+4. **Reproducibility caveat.** Regenerating `realism.csv` on this machine changes the
+   previously committed rows slightly: the committed file came from another software
+   environment (old and current code give identical results here, checked on two
+   cases). The Huber and GNC columns are unchanged to rounding; the no-kernel 15 %
+   cell moved from 12 m to 3.1 m (a total failure either way). The other Tier-1 CSVs
+   (server, bandwidth, drift, cycle check) were not regenerated and may shift the
+   same way.
+
+**Caveats.** Tier 1 only; 3 seeds; two presets; one burst length (25) and one gap
+(30 keyframes); splits are random per revisit, whereas the Tier-2 tracker's were
+concentrated where its pose uncertainty was high.
+
+---
+
 ## 2026-09-30 (evening): the UAV's aliasing is a sensor problem (Claude)
 
 Branch `wp/T-F3-04-uav-aliasing`; `harbor_fleet`, 600 s, M64; **simulation**. The
@@ -345,7 +412,9 @@ make -C experiments tier2 tables PY=python JOBS=10         # -> paper/data/tier2
    (up to 15 %, L14, L25) and GNC keeps the team at its error-free accuracy.
    Here 1-5 % *structured* errors (piles 8 m apart merged into one track)
    break a BlueROV2's local SLAM. The two are not the same experiment, but Tier 1's
-   random-switch injection probably understates the danger.
+   random-switch injection probably understates the danger. **[Not supported: L32
+   item 1. Bursts of wrong identities are absorbed too; L29 item 4 showed that the
+   damage came from lost loop closures.]**
 
 **Consequences.**
 - The Tier-2 headline uses ground-truth intra-agent tracks, labelled as such;

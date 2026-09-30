@@ -111,3 +111,21 @@ python experiments/tier2_ekf_sweep.py uuv_1 0 1 2 3 4 -- landmark_density_per_m2
 python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0 --sweep
 #   dead-reckoning drift, tracks per part, wrong-track events, gate sweep
 ```
+
+## Host prerequisites for the Docker route (T-I1-03, T-S2-05)
+
+State of the lab machine on 2026-09-30, and what the DAVE / PX4 / Clearpath re-record
+(ADR-0007 to be superseded) needs. Everything else is in place.
+
+| Item | State | Needed |
+|---|---|---|
+| Docker daemon | running; `/var/run/docker.sock` is `root:docker` mode 660 | the user in group `docker` (`sudo usermod -aG docker luiz`; then `sg docker -c '...'` works in an open session, or log in again) |
+| GPU in containers | `nvidia-container-toolkit` 1.18.2 installed, driver 580.173.02, RTX 3050 6 GB | check: `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi` |
+| Disk | **21 GB free of 468 GB on `/` (96 % used)** | at least 40 GB free for the image and build layers (Gazebo Harmonic, DAVE, PX4 SITL, Clearpath), or Docker's `data-root` on another disk |
+| Network | GitHub, `packages.ros.org` and the conda/PyPI mirrors reachable | – |
+| Rootless alternative | `/etc/subuid` has a range for the user, but `podman` and `uidmap` are not installed | `sudo apt install podman uidmap` and `nvidia-ctk cdi generate` (GPU) |
+| `sudo` | needs a password (the user is in `sudo`) | not needed after the steps above |
+| ROS 2 Jazzy | installed on the host (415 packages, Clearpath included) | – (the container uses `ros:jazzy`) |
+
+Membership of the `docker` group is root-equivalent on the host. The rootless route
+avoids that at the cost of one `apt` run and a CDI spec for the GPU.
