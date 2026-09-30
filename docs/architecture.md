@@ -187,8 +187,9 @@ rows; a BlueROV2's raw dead-reckoning error reached 8-10 m in 600 s in the two s
 checked, docs/LOG.md L28). `ekf` runs an EKF-SLAM over the agent's own pose, odometry
 biases (heading, translation scale, gyro scale) and landmark positions with the
 **joint** covariance, gates on the covariance of `m_j - q(x)`, requires a match to beat
-a "new landmark" hypothesis, and lets a landmark inform the biases only after a static
-birth test (LOG L29). It needs only odometry, its σ and the platform's bias priors,
+a "new landmark" hypothesis, pairs a keyframe's individually ambiguous detections jointly
+(JCBB), and lets a landmark inform the biases only after a static birth test
+(LOG L29, L30). It needs only odometry, its σ and the platform's bias priors,
 so it can run as a front-end component; it is not yet inside `AvatarAgent`.
 
 ## 6. Extension points (where parallel work plugs in)
@@ -202,7 +203,7 @@ so it can run as a front-end component; it is not yet inside `AvatarAgent`.
 | GTSAM port (T-B2-01) | Mirror `FactorGraph` API. Shared graph vectors in `testdata/` |
 | ROS 2 node (T-F*, T-S3-01) | Wrap `AvatarAgent`: feed `KeyframeData`; publish `EncodedPacket` |
 | New scenario (T-S4-*) | Add a builder in `sim/scenarios.py` + `SCENARIOS` registry |
-| Association inside the agent | `AvatarAgent.on_keyframe` keys landmarks by `Detection.part_index`; the EKF tracker (T-F3-02) would run beside it and supply the ids. Frame-level joint pairing: T-F3-03 |
+| Association inside the agent | `AvatarAgent.on_keyframe` keys landmarks by `Detection.part_index`; the EKF tracker (T-F3-02) would run beside it and supply the ids. Frame-level joint pairing is in the tracker (T-F3-03); a fixed-lag version for sparse sensors: T-F3-04 |
 | DAVE / PX4 / Clearpath rigs (T-S2-02/03) | Replace the sensor specs in `tier2/sdf.py` (`GZ_SENSORS`) and the recorder's pose driver; the front-end and dataset code do not change |
 
 ## 7. Performance (v0, 4-core container)

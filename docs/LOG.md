@@ -5,6 +5,77 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-09-30 (later): joint pairing and validation on fresh seeds (Claude)
+
+Branch `wp/T-F3-03-joint-association`; `harbor_fleet`, 600 s, M64; **simulation**.
+**Seed sets redefined:** seeds 0-19 are now the development set (seeds 10-19 informed
+T-F3-03, so they are no longer held out) and seeds 20-29 the held-out set, recorded
+after the design was fixed and used once. `paper/data/tier2.csv` (seeds 0-19) and
+`tier2_heldout.csv` (20-29) record commit `0135c61` (clean) and replace the files of
+L29; the ablation figures below replace the 10-seed ones of L28.
+
+### L30. Pairing a frame's ambiguous detections jointly: G1 9/10 on fresh seeds (T-F3-03)
+
+L29 left two failures on the then-held-out seeds. One was BlueROV2 1 on seed 12
+(3.13 m, **no wrong tracks**, but 324 detections dropped as ambiguous between
+landmarks 5.9 m apart, the pile spacing): with a pose σ of a metre, a single
+detection cannot tell adjacent piles apart, but the relative geometry of the piles
+in one frame is known to centimetres. `EkfTracker` now pairs the individually
+ambiguous detections of a keyframe **jointly**: branch and bound over the joint
+likelihood under the full state covariance (JCBB), "new landmark" as one option
+per detection, accepted when the best pairing beats the runner-up by 3 nats
+(`joint_pairing`, `joint_margin_ll`). Two unit tests: an irregular row is
+resolved, a perfectly regular row stays a tie.
+
+| Perception | Dev G1 (20 seeds) | Dev wrong | Dev team ATE [m] | Held-out G1 (10 seeds) | Held-out wrong | Held-out team ATE [m] |
+|---|---|---|---|---|---|---|
+| Tier 1 | 20/20 | 1/200 | 0.133 ± 0.015 | 10/10 | 0/100 | 0.133 ± 0.023 |
+| Tier 2, ground-truth tracks | 20/20 | 1/184 | 0.235 ± 0.020 | 10/10 | 0/94 | 0.238 ± 0.030 |
+| Tier 2, NN tracker | 10/20 | 44/167 | 2.221 ± 0.645 | 6/10 | 16/91 | 3.727 ± 4.122 |
+| **Tier 2, EKF tracker + joint pairing** | **19/20** | 8/181 | 0.352 ± 0.200 | **9/10** | 6/92 | 0.304 ± 0.154 |
+
+Development seeds only (20 seeds): registration 5/20 (71/152 wrong, 19/20 merged);
+NN on the BlueROV2s alone 9/20 (36/167); NN on the Husky and Tarot alone 16/20 (16/185).
+
+```
+make -C experiments tier2-record tier2 tables PY=python JOBS=12
+```
+
+**Findings.**
+1. **Joint pairing fixes what it targets.** BlueROV2 1 on seed 12: 3.13 m →
+   0.28 m, drops 349 → 41, no wrong track. On seeds 0-9 nothing changes (the
+   frames it acts on do not occur, or agree with the single-detection decisions:
+   0.417 m, 1/89, G1 10/10 before and after); on seeds 10-19, G1 8/10 → 9/10, team ATE
+   0.531 → 0.286 m, wrong alignments 8/92 → 7/92.
+2. **Fresh seeds confirm it.** Seeds 20-29, nothing tuned on them: G1 9/10 (NN
+   tracker 6/10, ground-truth tracks 10/10), team ATE 0.304 m against 0.238 m with
+   ground-truth tracks. The Husky (0.16 m), BlueROV2 0 (0.11 m) and BlueROV2 1
+   (0.17 m) are at their ground-truth-track values; the Tarot's mean is 0.32 m
+   (median 0.16 m, one run at 1.71 m).
+3. **The remaining failure is the UAV, every time**: seed 19 (development) and
+   seed 21 (held-out) each have one run in which the UAV alone is at 1.6-1.7 m and
+   most alignments involving it are wrong (6 of 9 on seed 21). Its filter is
+   **consistent**: with ground-truth association the NEES (2 dof) is 0-8 on both seeds
+   (ideal 2), and its honest position σ is about 2 m between the rare fixes its
+   sparse depth camera gives, while the true error reaches 6-8 m (heading error of
+   9-11° after about 120 m). At keyframe 104 of seed 19 a detection of a pile on the
+   opposite row lay 2.8 m from another pile's landmark in the filter's frame
+   (σ_y = 1.8 m, yaw σ = 4.6°), was matched with a comfortable margin over "new", and
+   moved the pose by 2.3 m; the heading error reached 17° by keyframe 296. One
+   detection per keyframe leaves nothing to pair jointly. Not a bug: a Bayesian
+   tracker at that uncertainty will sometimes take a new pile for a mapped one.
+4. **Acceptance of T-F3-02 / T-F3-03** (G1 >= 9/10, at most one wrong alignment):
+   G1 is met on the held-out seeds (9/10) and on the development seeds (19/20);
+   the wrong-alignment target is not (6/92 held-out, 8/181 development), and all of
+   them involve the UAV.
+
+**Caveats.** One scenario and one sonar proxy (ADR-0007); 30 seeds; the failing UAV
+runs are 2 of 30; the ekf tracker uses the platform's bias priors (datasheet values);
+Tier 2 keeps Tier-1 odometry. Seeds 20-29 have now been looked at (per-seed
+breakdown, UAV diagnosis); a further change needs seeds 30-39.
+
+---
+
 ## 2026-09-30: EKF-SLAM tracker for Tier 2 (Claude)
 
 Branch `wp/T-F3-02-agent-association`; `harbor_fleet`, 600 s, M64; all **simulation**

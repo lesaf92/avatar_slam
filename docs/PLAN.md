@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v1.3 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v1.4 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -221,7 +221,7 @@ separated by `‖` can run **in parallel** by different agents.
 |---|---|---|---|
 | **M0** | 2026-10-05 | Foundation: rules, plan, v0 sim + backbone + codec, CI | CI green; `avatar.cli compare` runs |
 | **M1** | 2026-10-31 | Backbone v1 in the fast sim: robust association (X2), VoI scheduler (C2), gateway (C3); first ablations. Gazebo world spawns all 4 domains (S2) | H1/H2 trends visible in the fast sim |
-| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28, L29):** passes 10/10 seeds on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy). With a realistic tracker (an EKF-SLAM over the agent's own estimate): 10/10 on the development seeds and 8/10 on 10 fresh seeds (the dead-reckoning NN tracker: 6/10 and 4/10). Repeat on DAVE sonar images (T-S2-05) before calling it |
+| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28-L30):** passes on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy): 30 of 30 seeds. With a realistic front-end (an EKF-SLAM tracker over the agent's own estimate, with joint pairing): 19/20 development seeds and 9/10 fresh seeds (the dead-reckoning NN tracker: 10/20 and 6/10). Repeat on DAVE sonar images (T-S2-05) before calling it |
 | **M2** | 2026-12-20 | ROS 2 end-to-end (front-ends → backbone → comm emulator); baselines on air/ground and underwater subsets | Full experiment matrix runs unattended |
 | **M3** | 2027-02-10 | Paper A: experiments + real-data validation + draft | Internal review passed |
 | **M4** | ≈ 2027-03-01 | **Paper A submission** (RA-L + IROS 2027 option; verify the deadline) + arXiv | Submitted |
@@ -265,7 +265,7 @@ and M6 moves to ≈ 2027-06, with the neural layer scoped down.
 | R9 | UUV heading drift near steel piles (compass) | H | M | Model it in sim (yaw bias); cross-medium constraints; report it as a motivating result | X |
 | R10 | D435i-only UAV contributes few landmarks (≤ 6 m depth) | H | L | Stand-off inspection paths; optional light LiDAR (D6) | S |
 | R4 | Perceptual aliasing in regular pile grids yields wrong alignments | M | H | PCM/GNC + object-graph matching (X2); the Aliasing scenario as a gate | X |
-| R11 | **Intra-agent** association fails when the pose uncertainty approaches the spacing of similar landmarks (Tier 2: BlueROV2 drift 8-10 m vs. 8 m between pier rows), and the errors are persistent, unlike the random switches GNC absorbs in Tier 1 | M | H | Joint-covariance EKF tracker (T-F3-02, done: held-out G1 4/10 → 8/10); frame-level joint pairing (T-F3-03) for the two residual failure modes; structured errors in Tier 1 (T-S1-09) | F, X |
+| R11 | **Intra-agent** association fails when the pose uncertainty approaches the spacing of similar landmarks (Tier 2: BlueROV2 drift 8-10 m vs. 8 m between pier rows), and the errors are persistent, unlike the random switches GNC absorbs in Tier 1 | M | H | Joint-covariance EKF tracker with joint pairing (T-F3-02/03, done: fresh-seed G1 6/10 → 9/10); the UAV's sparse-fix aliasing (T-F3-04) is the residual; structured errors in Tier 1 (T-S1-09) | F, X |
 | R12 | Tier-2 host lacks DAVE, PX4 and Clearpath (no root, no Docker), so Tier-2 results rest on proxies | H | M | Docker image on a machine with root (T-I1-03, T-S2-05); label Tier-2 results as kinematic rigs and sonar proxy everywhere | I, S |
 | R5 | Neural layer scope creep delays Paper A | H | M | Neural layer is Paper B only; gate G2 | N |
 | R6 | Multi-agent development drifts (contracts break) | M | M | ADRs, golden vectors, CI on every PR, TASKS.md ownership | I |
@@ -316,6 +316,9 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 
 ## 10. Changelog
 
+- **v1.4 (2026-09-30).** T-F3-03: joint pairing of ambiguous detections; fresh-seed
+  G1 9/10 (LOG L30). Development seeds are now 0-19, held-out 20-29. New task T-F3-04
+  (UAV aliasing).
 - **v1.3 (2026-09-30).** T-F3-02: a joint-covariance EKF-SLAM tracker replaces the
   dead-reckoning-frame association in Tier 2 (development seeds G1 10/10, fresh seeds
   8/10; LOG L29). R11 downgraded from H to M likelihood. New task T-F3-03. The 20

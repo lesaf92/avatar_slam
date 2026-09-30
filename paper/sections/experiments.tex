@@ -109,13 +109,14 @@ runs (\heldTwoNNWrong{} wrong alignments held-out), because a BlueROV2's raw dri
 comparable to the spacing of similar piles; registering each keyframe to the track map first is
 worse (G1 in \tierTwoRegGOne{} development runs). An extended Kalman filter over the robot's own
 pose, its odometry biases, and the landmark positions, with their joint covariance, gates
-detections against its own estimate and lets a landmark inform the biases only after it has proved
-static. It reaches G1 in \tierTwoEKFGOne{} development runs (\tierTwoEKFWrong{} wrong
-alignments) and \heldTwoEKFGOne{} held-out runs (\heldTwoEKFWrong{} wrong), with a held-out
-team ATE of \heldTwoEKFAvatar\,m against \heldTwoAvatar\,m for ground-truth tracks. The gap to
-the development seeds is real: the two failing held-out runs are a robot whose pose
-uncertainty is of the order of the pile spacing, so no single detection tells adjacent piles
-apart (Sec.~\ref{sec:discussion}). The failure is mostly underwater with the simpler tracker
+detections against its own estimate, pairs the ambiguous detections of one keyframe jointly, and
+lets a landmark inform the biases only after it has proved static. It reaches G1 in
+\tierTwoEKFGOne{} development runs (\tierTwoEKFWrong{} wrong alignments) and \heldTwoEKFGOne{}
+held-out runs (\heldTwoEKFWrong{} wrong), with a held-out team ATE of \heldTwoEKFAvatar\,m
+against \heldTwoAvatar\,m for ground-truth tracks. The runs in which it fails involve the
+Tarot: its depth camera sees a pile for a few keyframes at a time, so between fixes its pose
+uncertainty is of the order of the pile spacing, and a new pile is occasionally taken for a mapped
+one (Sec.~\ref{sec:discussion}). The failure is mostly underwater with the simpler tracker
 (Table~\ref{tab:tier2agents}): with it on the BlueROV2s alone G1 holds in \tierTwoNNUuvGOne{}
 development runs, on the Husky and Tarot alone in \tierTwoNNLandGOne{}.
 
@@ -138,7 +139,7 @@ development runs, on the Husky and Tarot alone in \tierTwoNNLandGOne{}.
 \begin{table}[t]
   \centering
   \caption{As Table~\ref{tab:tier2} on ten held-out seeds, recorded after every design decision
-  (the tracker parameters, in particular, were fixed on the development seeds).}
+  and used once (the tracker parameters, in particular, were fixed on the development seeds).}
   \label{tab:tier2held}
   \scriptsize
   \setlength{\tabcolsep}{3pt}
