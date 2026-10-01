@@ -66,10 +66,11 @@ toolkit, an RTX 4070 (8 GB) and 330 GB of free disk. What was found there, on
   commit and the ROS `noble` repositories, which keep changing).
 - Recording the sonar takes 138 s per seed on the RTX 4070 (two sonars, 601 keyframes), and
   77 MB per seed.
-- **First result (LOG L34, development seeds):** on the sonar images the team merges in 2/20
-  runs even with ground-truth ids (proxy 20/20). The decision stands: the point of using DAVE's
-  sonar was to find out whether the proxy overstated feasibility, and it did. The status stays
-  Proposed until the PI has read that result.
+- **Results (LOG L34-L35, development seeds):** after two pipeline defects were fixed, G1 on
+  the sonar images holds in 18/20 runs with ground-truth ids (proxy 20/20) and in 6/20 with the
+  EKF tracker. A sonar image measures no diameter, so the wire format now says that a footprint
+  of 0 x 0 means "not measured". Sonar recordings are not bit-reproducible; the stored ones are
+  the reference data. The status stays Proposed until the PI has read these results.
 
 ## Alternatives considered
 - *Move Tier 2 to Lyrical / Jetty now*: DAVE's current target, published Docker images,

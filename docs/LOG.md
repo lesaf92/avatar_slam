@@ -5,6 +5,90 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-01 (luiz-predator-neo): why the team did not merge on sonar images (Claude)
+
+Branch `wp/T-I1-03-docker-tier2`; task T-F2-06; development seeds 0-19 only; **simulation**.
+`paper/data/tier2_sonar.csv` records commit `58d11da`; the controls are
+`results/sonar_diag_assoc.jsonl`, `results/sonar_diag_cand.jsonl` and
+`results/sonar_diag_reasons_v2.jsonl` (`experiments/sonar_diagnostics.py`).
+
+### L35. Two causes, both fixed: a tie in the association's candidate ranking and stale sonar frames; with ground-truth ids G1 is 18/20 on sonar images
+
+L34 left the cause open. Two were found.
+
+**1. The association ranked candidates by a size the sonar cannot measure.**
+`candidate_pairs` keeps, for each own landmark, the 12 remote landmarks most similar in
+footprint. Every sonar landmark carried the same nominal footprint (0.76 m), so the ranking was a
+tie and dropped true partners at random. Controls (`sonar_diagnostics.py assoc`, ground-truth
+ids, stale recordings of L34):
+
+| Variant | Merged | G1 | Wrong |
+|---|---|---|---|
+| as in L34 | 2/20 | 2/20 | 3/85 |
+| sonar landmarks get the **true** pile footprint | 20/20 | 18/20 | 1/185 |
+| footprint ratio limit 1.5 -> 3 | 3/20 | 3/20 | 3/119 |
+| no class or descriptor check | 2/20 | 2/20 | 3/81 |
+| 30 (or 60) candidates per landmark instead of 12 | 16/20 | 14/20 | 2/122 |
+
+A first look at the true alignment (seed 3): it had 8 or more inliers in 11 % of the sonar
+attempts (proxy 38 %) and none of those was accepted. Fix (487748b, 58d11da): a footprint of
+0 x 0 means "not measured" (wire format v0 §3); such pairs are neither size-checked nor ranked
+by size (all kept); the agent averages a footprint only over the observations that measured it;
+the sonar front-end reports 0 x 0; and both codecs send a *measured* footprint that would round
+to 0 x 0 with its larger axis as one LSB, so no measured footprint changes meaning. A first
+version without that last rule changed proxy results (a measured footprint below 0.125 m was
+read as unmeasured; e.g. the development EKF mean team ATE 2.31 -> 0.84 m); it was not
+committed as data. Golden vectors are unchanged; 11/11 C++ tests and 170 Python tests pass.
+
+**2. Half of the sonar recordings were one keyframe stale.** With ground-truth ids the solo ATE
+of one BlueROV2 stayed near 0.40 m in 10 of 20 seeds (proxy 0.07-0.11 m). Its detections had a
+constant range bias of +0.50 m (seed 13: IQR +0.35..+0.62), the distance travelled per keyframe;
+against the *previous* keyframe's pose the bias was +0.04 m. At 500 Hz the sonar rendered on the
+first or the second of the two 1 ms iterations depending on its phase, and the first one renders
+the old pose. At 1000 Hz with both iterations stepped together, the slow CUDA frame made the
+sensors system skip frames. The driver now steps one iteration at a time, waits for its frame,
+and keeps the second (`SONAR_UPDATE_RATE_HZ = 1000`, two frames per keyframe; 265 s per seed).
+All 20 development seeds were re-recorded (with this code, from a copy of the tree, while the
+paper data were regenerated). Range bias after the fix: +0.03 and -0.03 m (seed 13).
+
+**Correction to L34 item 2.** The recordings are **not** bit-reproducible on the harbour world:
+two recordings of seed 13 differ in 537 and 49 of 601 frames (mean 11 and 2.6 codes, about 5 and
+1.2 dB, where they differ), although both are geometrically right (bias +0.02/+0.03 m, 1 % of
+keyframes biased by more than 0.3 m in each). The three-frame smoke test was bit-identical; the
+cause in the large world is not known. The estimator gives the same outcome on both (ground-truth
+ids: frame errors 0.24/0.61 m against 0.22/0.56 m; EKF: the same failure). The stored recordings
+are the reference data.
+
+**Result (development seeds, `make -C experiments tier2-sonar`, commit 58d11da):**
+
+| Perception | Merged | G1 | Wrong alignments |
+|---|---|---|---|
+| proxy, ground-truth ids (T2) | 20/20 | 20/20 | 1/179 |
+| **sonar images, ground-truth ids (T2s)** | **20/20** | **18/20** | 4/178 |
+| sonar, EKF tracker (T2sekf) | 17/20 | 6/20 | 37/158 |
+| sonar, nearest-neighbour tracker (T2snn) | 12/20 | 2/20 | 71/134 |
+
+Alignment attempts on sonar data: accepted 39 % (L34: 26 %; proxy 49 %), ambiguous 35 % (proxy
+14 %), median inliers 9 (as the proxy). The two T2s failures: seed 8 (a 23 m wrong alignment,
+the few-inlier flip of L33, T-F3-05) and seed 10 (1.01 m, at the gate).
+
+**What it means.** With correct intra-agent identities, cross-medium association works on DAVE's
+sonar images about as well as on the proxy (G1 18/20 against 20/20): L34's negative result was
+two defects in the pipeline, not a property of sonar data. What does not work yet is the
+realistic front-end on top: the EKF tracker, tuned on the proxy, makes catastrophic wrong
+alignments on sonar data (G1 6/20; several 17-55 m frame errors; two seeds with 118-179
+wrong-track events on one BlueROV2). That is the next task (T-F3-06). The held-out seeds 20-39
+and the LiDAR fleet are still not recorded with the sonar.
+
+Reproduce:
+```
+make -C experiments tier2-record-sonar          # 265 s per seed; or several in parallel
+make -C experiments tier2-sonar JOBS=28
+python experiments/sonar_diagnostics.py assoc --jobs 24   # item 1 ran on the recordings of L34, since replaced
+```
+
+---
+
 ## 2026-09-30 (luiz-predator-neo, later): DAVE's multibeam sonar (Claude)
 
 Branch `wp/T-I1-03-docker-tier2`; container `avatar-dave` on the RTX 4070; **simulation**.

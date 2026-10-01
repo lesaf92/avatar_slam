@@ -157,8 +157,9 @@ Things that are easy to trip on:
 - The sonar image topic (`.../sonar_image`) is a colour-mapped picture; the data is
   `.../sonar_image_raw` (`marine_acoustic_msgs/ProjectedSonarImage`, float32 dB, ranges by
   beams), and its header stamp is 0.
-- `blazingSonarImage` seeds the speckle with `time(NULL)`; `Dockerfile.dave` patches it to a
-  fixed seed plus a frame counter so that a recording is reproducible (L34).
+- `blazingSonarImage` seeds the speckle with `time(NULL)`; `Dockerfile.dave` patches it to the
+  simulation time plus the sensor name. Recordings of the harbour are still not bit-reproducible
+  (L35): the stored recordings are the reference data.
 
 ## Sonar images (DAVE), task T-S2-05
 
@@ -167,17 +168,19 @@ The BlueROV2 rigs can carry DAVE's CUDA multibeam sonar instead of the ray-cast 
 `avatar-dave` image:
 
 ```
-make -C experiments tier2-record-sonar    # <run>/sonar.npz per development seed (77 MB, 138 s)
+make -C experiments tier2-record-sonar    # <run>/sonar.npz per development seed (77 MB, 265 s)
 make -C experiments tier2-sonar sonar-diagnostics   # tiers T2s, T2snn, T2sekf; the controls
 ```
 - **Acoustic world** (`avatar.tier2.sdf.sonar_world_sdf`): only what is below the waterline
   (structures clipped at z = 0, the quay face, the seabed), because DAVE has no water surface.
 - **One frame per sonar per keyframe**: `record_sonar.py` writes a plan; `sonar_driver.py`
   (system Python of the image: rclpy and gz.transport13, NumPy 1.x, so it only does I/O) sets the
-  rig poses, steps two 1 ms iterations and waits for the frames. Frames are matched by order (the
-  header stamps are not simulation time). The world is first stepped to a fixed simulation time,
-  and the speckle seed of DAVE is patched to `time + sensor name` (`docker/patch_dave_seed.py`),
-  so a recording is reproducible.
+  rig poses, then steps two single 1 ms iterations (the sonars run at 1000 Hz), waits for each
+  frame and keeps the second, which is after the pose update (at 500 Hz, or with both iterations
+  stepped together, frames were one keyframe stale or skipped: LOG L35). Frames are matched by
+  order (the header stamps are not simulation time). The world is first stepped to a fixed
+  simulation time; the speckle seed is `time + sensor name` (`docker/patch_dave_seed.py`), but
+  recordings of the harbour are not bit-reproducible (L35).
 - **Images**: `<agent>/<sensor>` (keyframes, 940 range rows of 3.2 cm, 129 beams) as uint8 dB
   in [-20, 100], with `.../range_m` and `.../azimuth_rad`. `sonar_smoke/` is the first check.
 - **DAVE quirks that cost time**: the vertical ray angles of the SDF are illuminated at twice
@@ -185,4 +188,6 @@ make -C experiments tier2-sonar sonar-diagnostics   # tiers T2s, T2snn, T2sekf; 
   domain each (set by `record_sonar.py`), because containers on one docker network hear each
   other's topics; run `rclpy` scripts with `/usr/bin/python3`, the analysis with the venv.
 - Detector: `avatar.tier2.sonar_image` (tests in `test_sonar_image.py`), tiers with a `+sonar`
-  suffix in `tier2_study.py`. **Result on the development seeds: 2/20 teams merge (LOG L34).**
+  suffix in `tier2_study.py`. A sonar detection reports a footprint of 0 x 0, "not measured"
+  (wire format v0 §3). **Result on the development seeds (LOG L35): G1 18/20 with ground-truth
+  ids, 6/20 with the EKF tracker.**
