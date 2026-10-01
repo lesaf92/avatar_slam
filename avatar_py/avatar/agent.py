@@ -99,6 +99,7 @@ class LandmarkMeta:
     n_obs: int = 0
     class_votes: Counter = field(default_factory=Counter)
     extent_sum: FloatArray = field(default_factory=lambda: np.zeros(3))
+    n_footprint: int = 0  # observations that measured the footprint (extent x/y > 0)
     desc_sum: FloatArray | None = None
     n_desc: int = 0
     first_k: int = -1  # first and last own keyframe that observed this part
@@ -109,7 +110,12 @@ class LandmarkMeta:
         self.flags |= int(modality)
         if cls:
             self.class_votes[cls] += 1
-        self.extent_sum += extent
+        # A footprint of 0 means "not measured" (an imaging sonar sees no diameter, wire
+        # format v0 §3): it must not pull the mean towards zero.
+        self.extent_sum[2] += extent[2]
+        if extent[0] > 0.0 or extent[1] > 0.0:
+            self.extent_sum[:2] += extent[:2]
+            self.n_footprint += 1
         if desc.size and np.linalg.norm(desc) > 1e-9:
             self.desc_sum = desc.copy() if self.desc_sum is None else self.desc_sum + desc
             self.n_desc += 1
@@ -120,7 +126,9 @@ class LandmarkMeta:
 
     @property
     def extent(self) -> FloatArray:
-        return self.extent_sum / max(self.n_obs, 1)
+        out = self.extent_sum / max(self.n_obs, 1)
+        out[:2] = self.extent_sum[:2] / max(self.n_footprint, 1)
+        return out
 
     def descriptor(self, dim: int) -> FloatArray:
         if self.desc_sum is None or dim == 0:

@@ -11,7 +11,10 @@ share of wrong accepted alignments (> 2 m or 5 degrees):
 * ``noise``:     the proxy's detections with independent noise added to the BlueROV2s';
 * ``snap``:      sonar detections moved to the true centre (+ 0.1 m) and / or without the
                  unmatched (spurious) ones;
-* ``rules``:     the sonar detector without its rejection rules and / or with a lower threshold.
+* ``rules``:     the sonar detector without its rejection rules and / or with a lower threshold;
+* ``assoc``:     the association's pair checks on sonar landmarks: true pile footprint, a looser
+                 footprint ratio, no class / descriptor check, more candidates per landmark (the
+                 default keeps the 12 most similar in footprint).
 
 Ground truth is used only to build the controls, never by the estimator.
 
@@ -54,6 +57,7 @@ STUDIES: dict[str, list[str]] = {
     "noise": ["0.1", "0.2"],
     "snap": ["snap", "drop_spurious", "snap_drop"],
     "rules": ["default", "norules", "norules_thr12", "thr12"],
+    "assoc": ["truefp", "ratio3", "noclass", "all", "cand30", "cand60"],
 }
 
 
@@ -142,6 +146,39 @@ def run_variant(job: tuple[str, int, str, str]) -> dict:
         names = {a.agent_id: a.name for a in scenario.agents}
         rng = np.random.default_rng(seed + 991)
         log: list = []
+        if study == "assoc":
+            agents = dict(sim.agents)
+            for aid, ad in sim.agents.items():
+                if ad.config.role != "slam" or not names[aid].startswith("uuv"):
+                    continue
+                kfs = []
+                for kf in ad.keyframes:
+                    dets = []
+                    for d in kf.detections:
+                        if variant in ("truefp", "all") and d.true_part_index >= 0:
+                            ext = d.extent.copy()
+                            ext[:2] = scenario.world.parts[d.true_part_index].extent[:2]
+                            d = dataclasses.replace(d, extent=ext)
+                        if variant in ("noclass", "all"):
+                            d = dataclasses.replace(
+                                d, class_id=0, descriptor=np.zeros_like(d.descriptor)
+                            )
+                        dets.append(d)
+                    kfs.append(dataclasses.replace(kf, detections=dets))
+                agents[aid] = dataclasses.replace(ad, keyframes=kfs)
+            sim = dataclasses.replace(sim, agents=agents)
+        if study == "assoc" and variant.startswith("cand"):
+            params = dataclasses.replace(
+                params,
+                association=dataclasses.replace(
+                    params.association, max_candidates_per_landmark=int(variant[4:])
+                ),
+            )
+        if study == "assoc" and variant in ("ratio3", "all"):
+            params = dataclasses.replace(
+                params,
+                association=dataclasses.replace(params.association, footprint_ratio_max=3.0),
+            )
         if study in ("noise", "snap"):
             agents = dict(sim.agents)
             for aid, ad in sim.agents.items():

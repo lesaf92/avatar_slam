@@ -241,12 +241,11 @@ def segment(
     """
     if spec.kind == "sonar_image":
         assert isinstance(data, SonarImage)
-        # The image cannot measure a diameter: the footprint is the nominal one of a pile, which
-        # is also what the association compares (footprint_ratio_max), and the error of the
-        # centre goes into the covariance (centre_sigma_m, in detections_for_agent).
-        d0 = 2.0 * params.sonar_image.radius_prior_m
+        # The image cannot measure a diameter: the footprint is 0, "not measured" (wire format
+        # v0 §3), so the association neither checks nor ranks by size (docs/LOG.md L35). The
+        # error of the centre goes into the covariance (centre_sigma_m, detections_for_agent).
         return [
-            Cluster(np.array([b.x, b.y, 0.0]), np.array([d0, d0]), 0.05, b.range_m, False, False)
+            Cluster(np.array([b.x, b.y, 0.0]), np.zeros(2), 0.05, b.range_m, False, False)
             for b in detect_blobs(data, params.sonar_image)
         ]
     d = np.asarray(data, dtype=np.float64).copy()

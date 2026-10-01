@@ -79,7 +79,11 @@ compute `v = value / lsb` in IEEE-754 binary64, then
 formula, not a library `round`, because `floor(|v| + 0.5)` and `std::round`
 differ for `|v| = 0.49999999999999994`. Unsigned fields then saturate:
 `q = min(255, q)`. Descriptor values use `v = clip(value, -1, 1) * 127`.
-Negative σ or extents are invalid.
+Negative σ or extents are invalid. **A footprint of 0** (`extent_x = extent_y = 0`) means
+"not measured", for example by an imaging sonar, which sees a face but no diameter: receivers
+must not compare footprints for such a record (`avatar.frontend.association`). A part smaller
+than 0.125 m across therefore also reads as unmeasured, which only loses a size check. The
+bytes are unchanged; this is a rule for the receiver (docs/LOG.md L35).
 
 Example: an empty digest from agent 3 (domain `SURFACE`), `seq = 42`,
 `stamp_ms = 1000` encodes as `a7 01 03 00 2a 00 e8 03 00 00 02 00 00 e9 62`.

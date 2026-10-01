@@ -93,3 +93,36 @@ def test_class_gating_blocks_incompatible_pairs(rng):
     mine = make_set(np.arange(10), pos, np.ones(10, bool), classes=np.full(10, 1))
     remote = make_set(np.arange(10), pos, np.ones(10, bool), classes=np.full(10, 2))
     assert align(mine, remote, AssociationParams()) is None
+
+
+def test_unmeasured_footprint_is_neither_checked_nor_ranked() -> None:
+    """Footprint 0 = not measured (wire format v0 §3): every pair is a candidate, none cut."""
+    from avatar.frontend.association import candidate_pairs
+
+    n_remote = 30  # more than max_candidates_per_landmark
+    mine = make_set([0], [[0.0, 0.0, 0.0]], np.array([True]), [[0.8, 0.8, 2.0]])
+    rem = np.column_stack(
+        [np.arange(n_remote, dtype=float), np.zeros(n_remote), np.zeros(n_remote)]
+    )
+    unknown = make_set(np.arange(n_remote), rem, np.zeros(n_remote, bool), np.zeros((n_remote, 3)))
+    params = AssociationParams()
+    ia, _, cross = candidate_pairs(mine, unknown, params)
+    assert len(ia) == n_remote and cross.all()
+    # with measured sizes the ratio check and the ranking apply as before
+    sizes = np.column_stack([np.linspace(0.3, 3.0, n_remote)] * 2 + [np.ones(n_remote)])
+    known = make_set(np.arange(n_remote), rem, np.zeros(n_remote, bool), sizes)
+    ia, _, _ = candidate_pairs(mine, known, params)
+    assert 0 < len(ia) <= params.max_candidates_per_landmark
+
+
+def test_landmark_meta_ignores_unmeasured_footprints() -> None:
+    from avatar.agent import LandmarkMeta
+    from avatar.types import Medium
+
+    m = LandmarkMeta(1, Medium.BELOW, 0)
+    m.update(LandmarkFlags.SONAR, 0, np.array([0.0, 0.0, 0.05]), np.zeros(0))
+    assert np.allclose(m.extent[:2], 0.0)  # never measured: still "not measured"
+    m.update(LandmarkFlags.CAMERA, 0, np.array([0.6, 0.6, 1.0]), np.zeros(0))
+    m.update(LandmarkFlags.SONAR, 0, np.array([0.0, 0.0, 0.05]), np.zeros(0))
+    assert np.allclose(m.extent[:2], 0.6)  # the sonar's zeros do not pull it down
+    assert np.isclose(m.extent[2], (0.05 + 1.0 + 0.05) / 3)

@@ -129,10 +129,15 @@ def candidate_pairs(
     cb = remote.class_ids[None, :]
     ok &= (ca == 0) | (cb == 0) | (ca == cb)
 
+    # A footprint of 0 is "not measured" (wire format v0 §3): no size check for such pairs,
+    # and no ranking by size either (below), which would drop true pairs at random.
+    known = (mine.extents[:, :2].max(axis=1) > 0)[:, None] & (
+        remote.extents[:, :2].max(axis=1) > 0
+    )[None, :]
     fa = np.sort(np.maximum(mine.extents[:, :2], 0.25), axis=1)
     fb = np.sort(np.maximum(remote.extents[:, :2], 0.25), axis=1)
     ratio = np.maximum(fa[:, None, :] / fb[None, :, :], fb[None, :, :] / fa[:, None, :])
-    ok &= ratio.max(axis=2) <= params.footprint_ratio_max
+    ok &= ~known | (ratio.max(axis=2) <= params.footprint_ratio_max)
 
     ha = np.maximum(mine.extents[:, 2], 0.25)[:, None]
     hb = np.maximum(remote.extents[:, 2], 0.25)[None, :]
@@ -146,12 +151,13 @@ def candidate_pairs(
         cos = (da @ db.T) / np.maximum(na[:, None] * nb[None, :], 1e-12)
         ok &= ~both | (cos >= params.descriptor_min_cos)
 
-    # Keep the most similar remote candidates per own landmark (bounded graph size).
+    # Keep the most similar remote candidates per own landmark (bounded graph size). Pairs
+    # without a size to compare are all kept: their order would be arbitrary.
     dissim = np.log(ratio.max(axis=2)) + np.where(same, 0.0, 0.05)
-    dissim = np.where(ok, dissim, np.inf)
+    dissim = np.where(ok & known, dissim, np.inf)
     k = min(params.max_candidates_per_landmark, dissim.shape[1])
     keep = np.argsort(dissim, axis=1)[:, :k]
-    mask = np.zeros_like(ok)
+    mask = ~known
     np.put_along_axis(mask, keep, True, axis=1)
     ok &= mask
     ia, ib = np.nonzero(ok)
