@@ -111,7 +111,10 @@ def test_segment_turns_a_sonar_image_into_clusters() -> None:
         FrontEndParams(),
         np.random.default_rng(0),
     )
-    assert c.one_sided and abs(c.p_body[2]) < 1e-9 and c.range_m > 8.5
+    # nominal pile diameter (the image cannot measure one), elevation unobserved
+    d0 = 2 * FrontEndParams().sonar_image.radius_prior_m
+    assert not c.one_sided and abs(c.p_body[2]) < 1e-9 and c.range_m > 8.5
+    assert np.allclose(c.footprint, [d0, d0])
 
 
 def test_dave_sonar_image_size() -> None:

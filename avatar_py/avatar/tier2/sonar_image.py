@@ -96,6 +96,7 @@ class SonarImageParams:
     edge_db: float = 3.0
     max_lead_m: float = 1.5
     radius_prior_m: float = 0.38
+    centre_sigma_m: float = 0.2  # error of the centre estimate, added to the sensor model's sigma
 
 
 @dataclass(frozen=True)

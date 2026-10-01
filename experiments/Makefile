@@ -9,7 +9,7 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data all-data tables server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar
+.PHONY: paper-data all-data tables server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
 
 paper-data: server cycle bandwidth drift realism tables
 
@@ -75,6 +75,25 @@ tier2-heldout:
 tier2-lidar:
 	$(PY) tier2_study.py --runs $(T2LIDARRUNS) --seeds $(T2LIDAR) --jobs $(JOBS) \
 		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_uavlidar.csv
+
+# DAVE's multibeam sonar on the development seeds (T-S2-05, ADR-0008, LOG L34). The recording
+# is a second pass over `tier2-record`'s runs in the avatar-dave image (docker/, gazebo/README.md);
+# the study needs no Gazebo. Diagnostics: why the team does not merge on the sonar images.
+tier2-record-sonar:
+	for s in $(T2DEV); do \
+		AVATAR_TIER2_IMAGE=avatar-dave ../docker/tier2.sh python experiments/gazebo/record_sonar.py \
+			--run-dir results/tier2/harbor_fleet_seed$$s; \
+	done
+
+tier2-sonar:
+	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(T2DEV) --jobs $(JOBS) \
+		--tiers T2 T2s T2snn T2sekf --out $(DATA)/tier2_sonar.csv
+
+sonar-diagnostics:
+	for st in reasons ambiguity noise snap rules; do \
+		$(PY) sonar_diagnostics.py $$st --runs $(T2RUNS) --seeds $(T2DEV) --jobs $(JOBS) \
+			--out ../results/sonar_diag_$$st.jsonl; \
+	done
 
 tables:
 	$(PY) make_paper_tables.py

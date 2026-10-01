@@ -241,17 +241,12 @@ def segment(
     """
     if spec.kind == "sonar_image":
         assert isinstance(data, SonarImage)
+        # The image cannot measure a diameter: the footprint is the nominal one of a pile, which
+        # is also what the association compares (footprint_ratio_max), and the error of the
+        # centre goes into the covariance (centre_sigma_m, in detections_for_agent).
+        d0 = 2.0 * params.sonar_image.radius_prior_m
         return [
-            Cluster(
-                np.array([b.x, b.y, 0.0]),  # elevation unobserved, as for the proxy
-                np.array(
-                    [max(b.cross_range_m, b.along_range_m), min(b.cross_range_m, b.along_range_m)]
-                ),
-                0.05,
-                b.range_m,
-                True,
-                False,
-            )
+            Cluster(np.array([b.x, b.y, 0.0]), np.array([d0, d0]), 0.05, b.range_m, False, False)
             for b in detect_blobs(data, params.sonar_image)
         ]
     d = np.asarray(data, dtype=np.float64).copy()
@@ -600,6 +595,8 @@ def detections_for_agent(
                     continue
                 stats["clusters"] += 1
                 sig = sensor.sigmas(c.range_m).copy()
+                if spec.kind == "sonar_image":
+                    sig[:2] = np.hypot(sig[:2], params.sonar_image.centre_sigma_m)
                 if c.one_sided:
                     sig[:2] += params.one_sided_sigma_frac * float(c.footprint[0])
                 if c.z_truncated and spec.kind != "sonar":
