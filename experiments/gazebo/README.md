@@ -159,3 +159,30 @@ Things that are easy to trip on:
   beams), and its header stamp is 0.
 - `blazingSonarImage` seeds the speckle with `time(NULL)`; `Dockerfile.dave` patches it to a
   fixed seed plus a frame counter so that a recording is reproducible (L34).
+
+## Sonar images (DAVE), task T-S2-05
+
+The BlueROV2 rigs can carry DAVE's CUDA multibeam sonar instead of the ray-cast proxy
+(ADR-0008, LOG L34). It is recorded in a second pass over an existing recording, in the
+`avatar-dave` image:
+
+```
+make -C experiments tier2-record-sonar    # <run>/sonar.npz per development seed (77 MB, 138 s)
+make -C experiments tier2-sonar sonar-diagnostics   # tiers T2s, T2snn, T2sekf; the controls
+```
+- **Acoustic world** (`avatar.tier2.sdf.sonar_world_sdf`): only what is below the waterline
+  (structures clipped at z = 0, the quay face, the seabed), because DAVE has no water surface.
+- **One frame per sonar per keyframe**: `record_sonar.py` writes a plan; `sonar_driver.py`
+  (system Python of the image: rclpy and gz.transport13, NumPy 1.x, so it only does I/O) sets the
+  rig poses, steps two 1 ms iterations and waits for the frames. Frames are matched by order (the
+  header stamps are not simulation time). The world is first stepped to a fixed simulation time,
+  and the speckle seed of DAVE is patched to `time + sensor name` (`docker/patch_dave_seed.py`),
+  so a recording is reproducible.
+- **Images**: `<agent>/<sensor>` (keyframes, 940 range rows of 3.2 cm, 129 beams) as uint8 dB
+  in [-20, 100], with `.../range_m` and `.../azimuth_rad`. `sonar_smoke/` is the first check.
+- **DAVE quirks that cost time**: the vertical ray angles of the SDF are illuminated at twice
+  their value (the SDF holds a quarter of the FOV on each side); parallel recordings need one ROS
+  domain each (set by `record_sonar.py`), because containers on one docker network hear each
+  other's topics; run `rclpy` scripts with `/usr/bin/python3`, the analysis with the venv.
+- Detector: `avatar.tier2.sonar_image` (tests in `test_sonar_image.py`), tiers with a `+sonar`
+  suffix in `tier2_study.py`. **Result on the development seeds: 2/20 teams merge (LOG L34).**

@@ -8,46 +8,117 @@ Newest entries first. Every result gives the command that reproduces it.
 ## 2026-09-30 (luiz-predator-neo, later): DAVE's multibeam sonar (Claude)
 
 Branch `wp/T-I1-03-docker-tier2`; container `avatar-dave` on the RTX 4070; **simulation**.
+Development seeds 0-19 only; the held-out seeds 20-39 and the LiDAR fleet have **not** been
+recorded with the sonar, so they stay clean for the detector as it is frozen.
+`paper/data/tier2_sonar.csv` records its commit; the controls are `results/sonar_diag_*.jsonl`.
 
-### L34. DAVE's multibeam sonar runs headless in a container, with deterministic speckle (T-S2-05, step 1)
+### L34. DAVE's multibeam sonar runs in the harbour; on its images the team does not merge (T-S2-05)
 
 Setup: `docker/Dockerfile.dave` on top of `avatar-tier2`: CUDA 12.6 toolkit and DAVE
 (`IOES-Lab/dave`) at `d2121a5b4457361e60106aaa029b0a448977d70e` (2026-09-08, the last ROS 2
 Jazzy / Gazebo Harmonic commit; the next one moves DAVE to Lyrical / Jetty), building
 `dave_interfaces`, `multibeam_sonar_system` (which builds the CUDA sensor `multibeam_sonar`)
-and `dave_multibeam_sonar_demo` for `sm_89`. Test world
-`experiments/gazebo/sonar_smoke/world.sdf`: DAVE's BlueView P900 configuration (512 beams over
-65 degrees each side, 300 rays over 6 degrees each side, 900 kHz, 10 m) at 3 m depth, a
-1 x 1 x 2 m box with its face 5.5 m ahead and a cylinder of radius 0.3 m at (8, -2.5) m.
-The Dockerfile needed two fixes that the log shows: the package is called
-`dave_multibeam_sonar_demo`, and the venv of `avatar-tier2` had to leave `PATH` for colcon.
+and `dave_multibeam_sonar_demo` for `sm_89`. The BlueROV2 rigs get the Gemini 720s of
+`docs/hardware.md` (720 kHz, 90 degrees, 128 beams, 8 mm range resolution, 30 m; the 20 degree
+vertical aperture is unverified) in an **acoustic world**: only what is below the waterline
+(structures clipped at z = 0, the quay face, the seabed), because DAVE has no water surface and
+sound does not travel in air. A second pass over an existing recording
+(`experiments/gazebo/record_sonar.py`, `sonar_driver.py`) steps the world one keyframe at a
+time (`set_pose`, two 1 ms iterations, one frame per sonar) and stores each image as uint8 dB
+(940 range rows of 3.2 cm by 129 beams; four raw rows averaged in dB) in `<run>/sonar.npz`.
+Cost: 138 s per seed with two sonars and 601 keyframes on the RTX 4070 (143 s each with four
+in parallel), 77 MB.
 
-**Findings.**
-1. **It works.** The plugin loads, uses the GPU and publishes: ROS 2 `.../sonar_image`
-   (a colour-mapped `bgr8` picture), `.../sonar_image_raw` (`ProjectedSonarImage`:
-   float32 dB, 399 range bins of 2.5 cm by 513 beams of 0.25 degrees) and `.../normal_image`,
-   and gz-transport `.../point_cloud`.
-2. **The geometry is right.** Box face: peak 77.7 dB at 5.52 m (true 5.50 m). Cylinder: peak
-   69.9 dB at 8.10 m and -17.0 degrees (true 8.08 m, -17.4 degrees). The noise floor near the
-   axis is 28-35 dB at every range and the median of the image is -9 dB, so a global
-   threshold yields one huge blob; the front-end needs a local background estimate (CFAR).
-3. **Speckle was not reproducible, and is now.** With `blazingSonarImage` the seed is
-   `time(NULL)`; `Dockerfile.dave` patches it to `1234 + frame counter`. Two independent
-   runs of three stepped frames are bit-identical, and the frames differ from each other
-   (mean difference 3.8-4.4 dB), so each frame has fresh speckle. This holds if the frames
-   are counted the same way in every run: one sonar update per keyframe, to be arranged
-   in the recorder.
-4. **Time stamps are not usable**: the header stamp was 0 in one run and wall-clock time in
-   another, never simulation time. Frames have to be matched to keyframes by order.
-5. **Not yet tested:** time per frame; the Gemini 720s geometry (120 degrees by 20 degrees,
-   tens of metres); several sonars in one world; the rig integration. DAVE's speckle
-   amplitude is attached to the ray index, not to the surface point, so it does not stay
-   fixed on an object as the sonar moves: another difference from real data to report.
+**What DAVE's sonar does, measured.**
+1. **It works.** Headless, on the GPU, ROS 2 `.../sonar_image_raw` (`ProjectedSonarImage`,
+   float32 dB) and gz-transport `.../point_cloud`. A box face at 5.50 m gives a peak at 5.52 m,
+   a cylinder at 8.08 m and -17.4 degrees one at 8.10 m and -17.0 (`sonar_smoke`, PASS).
+2. **Speckle was not reproducible, and is now.** With `blazingSonarImage` the seed is
+   `time(NULL)`. `docker/patch_dave_seed.py` makes it the simulation time in ms plus a hash of
+   the sensor name, and the driver steps to a fixed simulation time before keyframe 0 (ROS
+   discovery makes the first frames go unheard). Two runs are bit-identical; consecutive frames
+   differ (mean 3.8-4.4 dB). Header stamps are 0 or wall-clock: frames are matched by order.
+3. **DAVE illuminates twice the vertical ray angles written in the SDF.** Found through a ring
+   of clutter at 23.4 m in every frame: a flat seabed 8 m below the sonar gives its first echo at
+   23-24 m with rays of +-10 degrees, at 12 m with +-20 degrees and beyond 30 m with +-6
+   degrees, that is, at 8 m / sin(2 x angle) (predicted 23.4, 12.4, 38.5 m). At 4 m altitude:
+   +-5 degrees gives 23-23.5 m (predicted 23.0), +-10 degrees 11.5-12 m (predicted 11.7). The SDF
+   therefore holds a quarter of the vertical FOV on each side. Before the fix a frame had 17
+   false detections; after it 3 (same detector). The azimuth angles are taken as written.
+4. **What an image looks like** (seed 0, the piles in the fan). The median pile echo is 41-43 dB
+   above the row-median noise floor at every range; the 10th percentile falls from 39 dB within
+   14 m to 20 dB at 14-20 m and 3 dB beyond 20 m (occlusion, side lobes of a stronger echo).
+   Around every strong echo there are arcs of constant range across the fan (azimuth side
+   lobes); a hull or the quay gives a chain of glints along its face; the echo of a cylinder
+   trails a few tenths of a metre behind its face (0.5 m for a pile of radius 0.53 m). Speckle
+   and the side lobes are what the proxy did not have.
+5. **Parallel recordings need separate ROS domains.** Containers on one docker network heard
+   each other's sonar topics (same names) through DDS multicast: 4 of 4 parallel runs failed
+   with inflated frame counts. `record_sonar.py` sets a ROS domain per run directory, on localhost.
 
-Reproduce: `docker build -f docker/Dockerfile.tier2 -t avatar-tier2 .`, `docker build -f
-docker/Dockerfile.dave --build-arg CUDA_ARCH=89 -t avatar-dave .`, then
-`AVATAR_TIER2_IMAGE=avatar-dave docker/tier2.sh bash experiments/gazebo/sonar_smoke/run.sh`
-(prints PASS).
+**The detector** (`avatar/tier2/sonar_image.py`, task T-F2-03 v1; 9 unit tests): floor = median
+over the beams of each range row; candidates = peaks more than 20 dB above it (non-maximum
+suppression 0.6 m by 4 beams); rejected as a side lobe (a stronger echo more than 12 dB above at
+the same range), as extended (the -6 dB region longer than 2.5 m), for low local contrast (the
+90th percentile of the surroundings within 15 dB), or as part of a chain (two comparable peaks
+within 3 m, unless the peak stands 6 dB above every neighbour); the face range is the leading edge
+3 dB below the peak, the azimuth the power-weighted centroid; the centre is one nominal radius
+(0.38 m) behind the face, a nominal pile footprint is reported (the image cannot measure a
+diameter: the echo's range extent has correlation -0.10 with the radius), and 0.2 m centre error
+goes into the covariance. Each rule and value was chosen on seeds 0 and 19 (development) against
+the ground truth. On those seeds (204 frames): 2.2 pile detections per frame, 1.2 false ones (0.56
+of them hull, quay or pipeline echoes), 55 % of the piles in the fan found (seed 0: 23, 63, 82
+and 50 % at 0-8, 8-14, 14-20 and 20-29 m), face range error median +0.01 m (robust sd 0.15 m;
+seed 0), cross-range error sd 0.12 m (seed 0), position error median 0.24 m, 6 ms per frame.
+
+**Gate G1 on the sonar images (development seeds 0-19; `make -C experiments tier2-sonar`).**
+
+| Perception | Merged | G1 | Wrong alignments |
+|---|---|---|---|
+| proxy, ground-truth ids (T2) | 20/20 | 20/20 | 1/179 |
+| **sonar images, ground-truth ids (T2s)** | **2/20** | **2/20** | 3/85 |
+| sonar, nearest-neighbour tracker (T2snn) | 1/20 | 0/20 | 37/83 |
+| sonar, EKF tracker (T2sekf) | 1/20 | 0/20 | 19/93 |
+
+**Findings** (controls: `make -C experiments sonar-diagnostics`, ground-truth ids, 20 seeds).
+6. **With DAVE's sonar images the team does not merge, even with ground-truth ids.** The
+   proxy's 20/20 overstated feasibility (R2 confirmed in direction). The UUVs' own SLAM is fine
+   (solo ATE 0.10-0.11 m on seed 0, as with the proxy); what is missing is the link between a
+   BlueROV2 and the UAV or UGV, which the team frame needs.
+7. **The back end refuses the alignments as ambiguous.** Over all attempts: accepted 49 %
+   (proxy) against 26 % (sonar); ambiguous 14 % against 40 %; too few inliers 23 % against 24 %;
+   median inliers of an accepted alignment 9 against 7. Relaxing the ambiguity ratio (0.8 by
+   default) on the sonar data: 0.9 gives 9/20 merged, G1 4/20, wrong 9/113; 0.95 gives 11/20,
+   7/20, 10/116. The test does real work (wrong alignments triple) and even relaxed G1 is 7/20.
+8. **Not position accuracy, spurious detections or the covariance.** The proxy's detections with
+   independent 0.1 or 0.2 m noise on the UUVs still merge 20/20 (G1 19/20 and 18/20, wrong 1/179
+   and 1/181). Sonar detections with the unmatched ones removed: 2/20 merged; with the matched ones
+   moved to the true centre plus 0.1 m noise: 4/20 merged, G1 3/20; both: 4/20 and 3/20. On seed 0
+   the centre error in the covariance from 0.05 to 0.3 m changes nothing.
+9. **Nor, as far as tried, a more permissive detector.** Without the four rejection rules:
+   1/20 merged (wrong 3/93); without them and with a 12 dB threshold: 1/20, G1 0/20; with the
+   12 dB threshold alone: 2/20 (same as the default). So the hypothesis I held while writing this
+   (too few shared piles seen at a time) is **not supported by this lever**; what differs from the
+   proxy is not pinned down. Candidates not yet tested: which piles are detected when (side
+   lobes hide weaker ones: a point-spread-function subtraction would test it), the association's
+   size and class checks on sonar landmarks, and the time at which shared landmarks accumulate.
+10. **Trackers on top are worse** (wrong alignments 37/83 and 19/93): they were tuned on the
+    proxy and see the wall glints and side-lobe clutter; not analysed further here.
+
+**Caveats (what this is not).** DAVE's speckle amplitude is attached to the ray index, not to the
+surface point; one sonar model with DAVE's default source level and gain (the detection range is
+not calibrated to a real Gemini); no water surface, multipath or bottom reverberation
+variability; the vertical aperture is unverified; the detector is a first design tuned on
+two of the development seeds; the held-out seeds and the LiDAR fleet are not recorded yet. The
+result is therefore "G1 is not met by this sonar, this detector and this back end", not
+"cross-medium association fails on sonar".
+
+Reproduce (in the `avatar-dave` image; the recordings of `results/tier2` are `make tier2-record`):
+```
+docker build -f docker/Dockerfile.tier2 -t avatar-tier2 . && docker build -f docker/Dockerfile.dave --build-arg CUDA_ARCH=89 -t avatar-dave .
+make -C experiments tier2-record-sonar          # about 2 min per seed; one at a time, or four in parallel
+make -C experiments tier2-sonar sonar-diagnostics JOBS=24
+```
 
 ---
 

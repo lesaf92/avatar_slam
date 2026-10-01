@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v1.7 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v1.8 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -227,7 +227,7 @@ separated by `‖` can run **in parallel** by different agents.
 |---|---|---|---|
 | **M0** | 2026-10-05 | Foundation: rules, plan, v0 sim + backbone + codec, CI | CI green; `avatar.cli compare` runs |
 | **M1** | 2026-10-31 | Backbone v1 in the fast sim: robust association (X2), VoI scheduler (C2), gateway (C3); first ablations. Gazebo world spawns all 4 domains (S2) | H1/H2 trends visible in the fast sim |
-| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28-L33, pinned environment):** passes on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy): 40 of 40 seeds (development 0-19, held-out 20-39). With a realistic front-end (an EKF-SLAM tracker over the agent's own estimate, with joint pairing): 18/20 development and 18/20 held-out seeds (the dead-reckoning NN tracker: 8/20 and 11/20); with a UAV LiDAR, 30/30. A 20-seed count moves by about two runs with the NumPy version, and two of the failures are a wrong few-inlier alignment (T-F3-05). Repeat on DAVE sonar images (T-S2-05) before calling it |
+| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28-L33, pinned environment):** passes on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy): 40 of 40 seeds (development 0-19, held-out 20-39). With a realistic front-end (an EKF-SLAM tracker over the agent's own estimate, with joint pairing): 18/20 development and 18/20 held-out seeds (the dead-reckoning NN tracker: 8/20 and 11/20); with a UAV LiDAR, 30/30. A 20-seed count moves by about two runs with the NumPy version, and two of the failures are a wrong few-inlier alignment (T-F3-05). **Repeated on DAVE's sonar images (T-S2-05, LOG L34, development seeds): with the first detector the team merges in 2/20 runs even with ground-truth intra-agent ids (proxy 20/20); the cause is open (T-F2-06). Not met; the re-scope clause below is a PI decision** |
 | **M2** | 2026-12-20 | ROS 2 end-to-end (front-ends → backbone → comm emulator); baselines on air/ground and underwater subsets | Full experiment matrix runs unattended |
 | **M3** | 2027-02-10 | Paper A: experiments + real-data validation + draft | Internal review passed |
 | **M4** | ≈ 2027-03-01 | **Paper A submission** (RA-L + IROS 2027 option; verify the deadline) + arXiv | Submitted |
@@ -265,7 +265,7 @@ and M6 moves to ≈ 2027-06, with the neural layer scoped down.
 | ID | Risk | L | I | Mitigation | Owner WP |
 |---|---|---|---|---|---|
 | R1 | *Above and Below*'s authors extend to decentralized / air agents first | M | H | Move fast (Paper A by 2027-03). Put the weight on C3 (medium-aware comm) + the UAV↔AUV link. Post an arXiv preprint at submission | R |
-| R2 | Simulated sonar too idealized for cross-medium association | M | H | Use DAVE's physics-based multibeam; validate on real sonar data (E4); report the sim-to-real gap honestly. **Now concrete:** Tier 2 v0 uses a ray-cast proxy (no speckle, multipath, shadows; ADR-0007), so G1 on Tier 2 is necessary, not sufficient | S, X |
+| R2 | Simulated sonar too idealized for cross-medium association | H | H | Use DAVE's physics-based multibeam; validate on real sonar data (E4); report the sim-to-real gap honestly. **Now concrete:** Tier 2 v0 uses a ray-cast proxy (no speckle, multipath, shadows; ADR-0007), so G1 on Tier 2 is necessary, not sufficient. **Realised in part (LOG L34):** on DAVE's sonar images the same estimator merges 2/20 teams against 20/20 on the proxy (development seeds) | S, X |
 | R3 | No real multi-domain field experiment | M | M | Reference fleet exists (ADR-0006). Still needed: modems, UGPS, RTK and a site (T-H1-*). Fall back to real single-medium datasets; label sim vs. real | E |
 | R8 | 64 bps acoustic too slow to connect the team within one BlueROV2 battery | M | H | Token buckets + descriptor stripping (done), VoI scheduler (T-C2-01), SeaTrac X150 upgrade path, longer exchange periods under water | C |
 | R9 | UUV heading drift near steel piles (compass) | H | M | Model it in sim (yaw bias); cross-medium constraints; report it as a motivating result | X |
@@ -323,6 +323,7 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 
 ## 10. Changelog
 
+- **v1.8 (2026-09-30).** DAVE's sonar in Tier 2 (LOG L34, ADR-0008): the recording pass, the sonar-image detector, and the first repetition of G1 on its images: not met on the development seeds (2/20 teams merge with ground-truth ids). R2 raised to H likelihood; new task T-F2-06; the re-scope clause of G1 is left to the PI.
 - **v1.7 (2026-09-30).** Host moved to `luiz-predator-neo`: D12 and T-I1-06 resolved, T-I1-03 and T-S2-05 in progress. ADR-0008 (proposed): Tier 2 records in Docker and adds DAVE's multibeam sonar. Paper data regenerated in a pinned environment (LOG L33): Tier 1 unchanged, EKF G1 18/20 on both seed sets, a few-inlier alignment failure (new task T-F3-05) and a realism study on 20 seeds (T-S1-10). DAVE's sonar runs headless and deterministically (LOG L34).
 - **v1.6 (2026-09-30).** Host blocker made explicit: more disk space and Docker access
   (T-I1-06, D12) before the DAVE / PX4 / Clearpath work (T-I1-03, T-S2-05) can start.

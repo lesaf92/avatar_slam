@@ -40,13 +40,16 @@ toolkit, an RTX 4070 (8 GB) and 330 GB of free disk. What was found there, on
    (`docker/Dockerfile.dave`: CUDA 12.6 toolkit, compute capability 89, only the sonar
    packages) with one patch: the speckle seed of a "blazing" image, `time(NULL)`, becomes a
    fixed seed plus a frame counter, so that a recording is reproducible (LOG L34).
-3. **Rigs stay kinematic** (ADR-0007 item 1). The sonar becomes a rig sensor of the two
-   BlueROV2 rigs with the Gemini 720s geometry, next to the ray-cast proxy, so the two can
-   be compared on the same recording. The sonar image is recorded through a small ROS 2
-   client synchronised with the paused stepping (the recorder itself stays
-   gz-transport only).
-4. **A sonar-image front-end** (range-azimuth intensity image → CFAR detection → blobs →
-   landmark parts) replaces the proxy's cluster step for the DAVE sonar (T-F2-05).
+3. **Rigs stay kinematic** (ADR-0007 item 1). The sonar becomes a sensor of the two
+   BlueROV2 rigs with the Gemini 720s parameters of `docs/hardware.md`, next to the ray-cast
+   proxy, so the two can be compared on the same recording. It is recorded in a **second
+   pass** over an existing recording (`record_sonar.py`), in an **acoustic world** (only what
+   is below the waterline: DAVE has no water surface), one frame per keyframe through a small
+   ROS 2 client (the C++ recorder stays gz-transport only). DAVE illuminates twice the vertical
+   ray angles of the SDF; the SDF is written accordingly (LOG L34).
+4. **A sonar-image front-end** (range-azimuth intensity image → peaks against a per-range noise
+   floor → landmark parts, `avatar.tier2.sonar_image`) replaces the proxy's cluster step for
+   the DAVE sonar (T-F2-03 v1).
 5. Results are labelled "Tier 2 (Gazebo, kinematic rigs, DAVE sonar)". The proxy results
    stay available and labelled.
 6. **PX4 and Clearpath vehicles stay deferred** (remainder of T-S2-02): vehicle dynamics
@@ -61,7 +64,12 @@ toolkit, an RTX 4070 (8 GB) and 330 GB of free disk. What was found there, on
   Lyrical / Jetty (Ubuntu 26.04, gz-transport14): a new ADR superseding ADR-0001, and the
   recorder to port. Risk: bit rot of the pinned stack (the image is built from the pinned
   commit and the ROS `noble` repositories, which keep changing).
-- Recording gets slower (CUDA sonar at every keyframe); measured in the LOG when known.
+- Recording the sonar takes 138 s per seed on the RTX 4070 (two sonars, 601 keyframes), and
+  77 MB per seed.
+- **First result (LOG L34, development seeds):** on the sonar images the team merges in 2/20
+  runs even with ground-truth ids (proxy 20/20). The decision stands: the point of using DAVE's
+  sonar was to find out whether the proxy overstated feasibility, and it did. The status stays
+  Proposed until the PI has read that result.
 
 ## Alternatives considered
 - *Move Tier 2 to Lyrical / Jetty now*: DAVE's current target, published Docker images,
