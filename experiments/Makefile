@@ -66,7 +66,7 @@ tier2-record-lidar:
 
 tier2:
 	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(T2DEV) --jobs $(JOBS) \
-		--out $(DATA)/tier2.csv
+		--tiers T1 T2 T2nn T2reg T2ekf T2nn-uuv T2nn-land --out $(DATA)/tier2.csv
 
 tier2-heldout:
 	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(HELDOUT) --jobs $(JOBS) \

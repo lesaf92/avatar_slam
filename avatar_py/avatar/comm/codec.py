@@ -148,6 +148,12 @@ def _encode_record(r: LandmarkRecord, dim: int) -> bytes:
         raise CodecError("class_id or flags out of range")
     x, y, z = (_quant_signed16(v, POS_LSB_M, "position") for v in r.position)
     ex, ey, ez = (_quant_unsigned8(v, EXTENT_LSB_M, "extent") for v in r.extent)
+    # A footprint of 0 x 0 means "not measured" (spec §3): a measured one is sent as one LSB.
+    if ex == 0 and ey == 0 and max(r.extent[0], r.extent[1]) > 0.0:
+        if r.extent[0] >= r.extent[1]:
+            ex = 1
+        else:
+            ey = 1
     head = struct.pack(
         "<HhhhBBBBBBBB",
         r.landmark_id,
