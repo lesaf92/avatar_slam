@@ -7,9 +7,9 @@ Started by ``record_sonar.py``, which writes the plan (ADR-0008, docs/LOG.md L34
 
     /usr/bin/python3 sonar_driver.py plan.json out.npz
 
-Per keyframe: ``set_pose`` of every rig, two 1 ms iterations (the sonars run at 500 Hz, so
-each renders exactly once, at the second iteration, after the pose update), then wait for
-one ``ProjectedSonarImage`` per sonar. An image is stored as uint8: rows averaged in dB in
+Per keyframe: ``set_pose`` of every rig, then two single 1 ms iterations, each followed by
+its frame (the sonars run at 1000 Hz); the second frame, strictly after the pose update, is
+kept (docs/LOG.md L35). An image is stored as uint8: rows averaged in dB in
 groups of ``pool`` (arithmetic only), mapped from [db_min, db_max] to 0..255.
 """
 
@@ -122,6 +122,7 @@ def main(plan_path: str, out_path: str) -> None:
     print(f"[sonar_driver] warm-up: {calls} steps of 2 ms, frames heard {base}", flush=True)
 
     n_kf = len(poses)
+    fpk = int(plan.get("frames_per_keyframe", 1))
     out = {
         s["key"]: np.zeros((n_kf, s["raw_bins"] // plan["pool"], s["beams"]), np.uint8)
         for s in sensors
@@ -132,10 +133,14 @@ def main(plan_path: str, out_path: str) -> None:
         for r, name in enumerate(rigs):
             if not set_pose(gz, world, name, poses[k][r]):
                 raise SystemExit(f"set_pose failed for {name} at keyframe {k}")
-        if not step(gz, world, 2):
-            raise SystemExit(f"step failed at keyframe {k}")
-        target = {key: base[key] + k + 1 for key in base}
-        wait_frames(target, float(plan["timeout_s"]))
+        # One iteration at a time, each frame awaited before the next step: run back to back,
+        # a slow CUDA frame makes the sensors system skip the next one. The last frame (of the
+        # second iteration) is strictly after the pose update.
+        for it in range(fpk):
+            if not step(gz, world, 1):
+                raise SystemExit(f"step failed at keyframe {k}")
+            target = {key: base[key] + fpk * k + it + 1 for key in base}
+            wait_frames(target, float(plan["timeout_s"]))
         spin(0.02)  # a second frame for this keyframe would show up here
         for s in sensors:
             if ros.count[s["key"]] != target[s["key"]]:

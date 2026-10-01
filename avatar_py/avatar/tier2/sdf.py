@@ -257,7 +257,11 @@ def world_sdf(scenario: Scenario, initial_poses: dict[str, np.ndarray], world_na
 SOUND_SPEED_M_S = 1500.0
 SONAR_DB_MIN = -20.0  # dB mapped to 0 in a recorded sonar image (uint8)
 SONAR_DB_MAX = 100.0  # dB mapped to 255
-SONAR_UPDATE_RATE_HZ = 500.0  # one frame per two 1 ms iterations, that is, per keyframe
+# A frame at every 1 ms iteration; the recorder keeps the one of the second iteration, which is
+# strictly after the pose update. At 500 Hz the frame fell on the first or the second iteration
+# depending on the sensor's phase, and was one keyframe stale in half of the recordings (LOG L35).
+SONAR_UPDATE_RATE_HZ = 1000.0
+SONAR_FRAMES_PER_KEYFRAME = 2
 SONAR_RANGE_POOL = 4  # range bins averaged (in power) into one stored bin
 
 
