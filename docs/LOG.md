@@ -52,6 +52,37 @@ development seeds only. The held-out evaluation runs once on new seeds 40-59 (re
 not looked at before this entry was committed): thresholds 0 and 8, all seven perceptions,
 `python experiments/alignment_acceptance_study.py --seeds 40 ... 59 --weak 0 8`.
 
+**Held-out evaluation, new seeds 40-59** (recorded for it on 2026-10-02 with the container route,
+reference fleet and UAV-LiDAR fleet, sonar for the reference fleet; run once after the entry above
+was committed, `alignment_acceptance_study.py --seeds 40 ... 59 --weak 0 8`, rows in
+`results/alignment_acceptance_heldout.jsonl`). G1 (merged), threshold 0 -> 8:
+
+| Perception | 0 | 8 | Wrong used, 0 -> 8 (UGV-UAV) |
+|---|---|---|---|
+| Tier 1 | 20 (20) | 20 (20) | 0/40 -> 0/40 |
+| proxy, ground-truth ids | 15 (19) | 15 (19) | 4/35 -> 4/34 |
+| proxy, EKF | 15 (17) | **16** (17) | 4/32 -> 4/32 |
+| sonar, ground-truth ids | 13 (18) | 13 (18) | 3/31 -> 3/30 |
+| sonar, EKF | 9 (17) | 9 (16) | 7/27 -> 4/24 |
+| UAV-LiDAR fleet, ground-truth ids | 16 (20) | 16 (20) | 1/40 -> 1/40 |
+| UAV-LiDAR fleet, EKF | 13 (19) | 13 (19) | 6/39 -> 6/39 |
+
+5. **The rule holds up on fresh seeds**: no regression anywhere, one more proxy-EKF run passes
+   G1, and it is kept as the default (`confirm_weak_inliers = 8`).
+6. **The fresh seeds are harder than all earlier ones, independently of the rule.** With
+   ground-truth ids on the proxy G1 holds in 15/20 (seeds 0-19: 20/20; 20-39: 20/20); the LiDAR
+   fleet with the EKF in 13/20 (seeds 0-19 and 30-39: 30/30). The recordings are not the cause: a
+   new recording of seed 21 with today's container is bit-identical to the stored one for all
+   five sensors. The proxy failures: seeds 40 and 41 involve UGV-UAV alignments of 7 inliers
+   shifted by 2-5 m (UAV frame error 1.10 and 1.98 m; in seed 41 both directions agree with each
+   other, so no 2-cycle test can see it), seeds 45 and 56 are marginal (a BlueROV2 at 1.12 and
+   1.04 m), and seed 58 does not merge (one BlueROV2 missing, UAV at 1.73 m). Over
+   all 60 seeds G1 with ground-truth ids is 55/60 (92 %), not "every run". PLAN G1 is updated;
+   the paper still reports seeds 0-39 only, and adding seeds 40-59 to it is left to the PI
+   (`make tier2-heldout2 tier2-lidar-heldout2` writes the data).
+7. Correction to item 3 above: "many alignments have no reverse estimate" is an interpretation of
+   the lost merges, not a measurement.
+
 ---
 
 ## 2026-10-02 (luiz-predator-neo): the EKF tracker on sonar images (Claude)

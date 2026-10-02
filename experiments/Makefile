@@ -9,7 +9,7 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data all-data tables server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
+.PHONY: paper-data all-data tables tier2-heldout2 tier2-lidar-heldout2 server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
 
 paper-data: server cycle bandwidth drift realism tables
 
@@ -48,6 +48,8 @@ T2LIDARRUNS ?= ../results/tier2_uavlidar
 JOBS        ?= 4
 T2DEV       ?= $(shell seq 0 19)
 HELDOUT     ?= $(shell seq 20 39)
+# Seeds 40-59: a second held-out set, recorded for T-F3-05 and evaluated once (LOG L37).
+HELDOUT2    ?= $(shell seq 40 59)
 T2LIDAR     ?= $(shell seq 0 19) $(shell seq 30 39)
 
 tier2-record:
@@ -71,6 +73,14 @@ tier2:
 tier2-heldout:
 	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(HELDOUT) --jobs $(JOBS) \
 		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_heldout.csv
+
+tier2-heldout2:
+	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(HELDOUT2) --jobs $(JOBS) \
+		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_heldout2.csv
+
+tier2-lidar-heldout2:
+	$(PY) tier2_study.py --runs $(T2LIDARRUNS) --seeds $(HELDOUT2) --jobs $(JOBS) \
+		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_uavlidar_heldout2.csv
 
 tier2-lidar:
 	$(PY) tier2_study.py --runs $(T2LIDARRUNS) --seeds $(T2LIDAR) --jobs $(JOBS) \

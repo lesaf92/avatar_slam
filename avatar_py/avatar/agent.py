@@ -98,8 +98,9 @@ class AvatarParams:
     # used only when the other direction of the same pair agrees with it (the 2-cycle test of
     # the cycle check); weak own estimates are still advertised, so that the neighbour can
     # confirm them. 0 disables. Few-inlier alignments can be aliased, and a leaf of the frame
-    # graph has no cycle that would expose them (LOG L33, L36, L37; T-F3-05).
-    confirm_weak_inliers: int = 0
+    # graph has no cycle that would expose them (LOG L33, L36, L37; T-F3-05). 8 is the value of
+    # AssociationParams.min_inliers_cross_only; chosen on seeds 0-19, held out on 40-59 (L37).
+    confirm_weak_inliers: int = 8
     align_confirm_xy_m: float = 1.0
     align_confirm_yaw_rad: float = 0.035
 
