@@ -68,7 +68,7 @@ was committed, `alignment_acceptance_study.py --seeds 40 ... 59 --weak 0 8`, row
 | UAV-LiDAR fleet, EKF | 13 (19) | 13 (19) | 6/39 -> 6/39 |
 
 5. **The rule holds up on fresh seeds**: no regression anywhere, one more proxy-EKF run passes
-   G1, and it is kept as the default (`confirm_weak_inliers = 8`).
+   G1 (the default is decided below: item 8 and after).
 6. **The fresh seeds are harder than all earlier ones, independently of the rule.** With
    ground-truth ids on the proxy G1 holds in 15/20 (seeds 0-19: 20/20; 20-39: 20/20); the LiDAR
    fleet with the EKF in 13/20 (seeds 0-19 and 30-39: 30/30). The recordings are not the cause: a
@@ -82,6 +82,35 @@ was committed, `alignment_acceptance_study.py --seeds 40 ... 59 --weak 0 8`, row
    (`make tier2-heldout2 tier2-lidar-heldout2` writes the data).
 7. Correction to item 3 above: "many alignments have no reverse estimate" is an interpretation of
    the lost merges, not a measurement.
+
+**Revision: the "confirm" policy delays merges in Tier 1.** Regenerating the paper data with it
+(threshold 8; not committed) left Tier-1 G1 unchanged but slowed merging: the bandwidth sweep's
+time to a common frame grew from 100-130 s to 120-160 s at 256-1024 bit/s and one scheduler
+merged 7/10 instead of 8/10 runs at 32 bit/s; the server comparison at 1 kbit/s 90 -> 110 s. The
+task asks for no regression in Tier 1, so "confirm" is not the default (`confirm_weak_inliers = 0`).
+
+8. **A second policy, "veto"** (`confirm_weak_policy = "veto"`): a weak estimate is used unless
+   the reverse estimate of the pair exists and disagrees; then neither is used. It does not wait.
+   The reverse is looked up among all estimates, also one the cycle check rejected, which with
+   equal support keeps an arbitrary one of two conflicting directions (seed 8). Development seeds,
+   thresholds 6, 8 and 13 alike: proxy EKF G1 18 -> 19/20 (seed 8), sonar ground-truth ids
+   18 -> 19/20, every other perception and every merge unchanged; median time to merge 0-20 s
+   later (`alignment_acceptance_study.py --weak 6 8 13 --policy veto`, commit `cace54f`, rows in
+   `results/alignment_acceptance_dev_veto.jsonl`).
+9. **Tier 1 with "veto", threshold 8** (`make server cycle bandwidth drift realism
+   DATA=../results/veto_t1` with that default, tables made from them): the server, bandwidth,
+   drift and cycle-check tables are identical to the committed ones. The realism table changes in
+   its no-kernel and Huber columns only, mostly for the better (default preset 15 % switches +
+   1.0 clutter, Huber 0.76 -> 0.54 m; exploration 5 % + 0.5, no kernel 2.25 -> 1.46 m), with one
+   cell worse (exploration, 15 % + 1.0, Huber: 0.75 m with 3/3 merged -> 0.64 m with 2/3); the
+   GNC-TLS column the paper relies on is unchanged.
+
+**Choice, before a second held-out evaluation:** policy "veto", threshold 8. Seeds 40-59 have been
+looked at (above), so the evaluation runs once on new seeds 60-79 (both fleets and the sonar,
+recorded on 2026-10-02 for it): `alignment_acceptance_study.py --seeds 60 ... 79 --weak 0 8
+--policy veto`. (Some of the sonar passes ran while a temporary default was in the working tree,
+so their `meta.json` label reads `cace54f-dirty`; the range-data recordings read `836b644`;
+recording does not use the estimator.)
 
 ---
 
