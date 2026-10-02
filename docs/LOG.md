@@ -5,6 +5,55 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-02 (luiz-predator-neo, later): few-inlier alignment acceptance (Claude)
+
+Branch `wp/T-F3-05-alignment-acceptance`; task T-F3-05; **simulation**. Development seeds 0-19:
+`python experiments/alignment_acceptance_study.py --jobs 28` at commit `822f2c5` (rows in
+`results/alignment_acceptance_dev.jsonl`). Held-out: new seeds 40-59 (below).
+
+### L37. Weak frame estimates need the other direction of the pair: fixes the 4-5 inlier flips, not the sonar-EKF failures
+
+**Rule** (`AvatarParams.confirm_weak_inliers`): a frame estimate with fewer inliers than the
+threshold (own, received, or about this agent) is used only when the other direction of the same
+pair exists and agrees (the 2-cycle test of the cycle check); weak own estimates are still
+advertised so that the neighbour can confirm them. Wrong alignments below count only those used.
+
+Development seeds 0-19, G1 (merged) by threshold (0 = off):
+
+| Perception | 0 | 6 | **8** | 10 | 13 |
+|---|---|---|---|---|---|
+| Tier 1 | 20 (20) | 20 (20) | 20 (20) | 20 (20) | 20 (20) |
+| proxy, ground-truth ids | 20 (20) | 20 (20) | 20 (20) | 19 (19) | 13 (13) |
+| proxy, EKF | 18 (20) | 19 (20) | **19 (19)** | 17 (17) | 8 (8) |
+| sonar, ground-truth ids | 18 (20) | 19 (20) | **19 (20)** | 18 (19) | 15 (15) |
+| sonar, EKF | 6 (17) | 6 (17) | 6 (17) | 5 (8) | 4 (4) |
+| UAV-LiDAR fleet, ground-truth ids | 20 (20) | 20 (20) | 20 (20) | 20 (20) | 16 (16) |
+| UAV-LiDAR fleet, EKF | 20 (20) | 20 (20) | 20 (20) | 20 (20) | 15 (15) |
+
+Wrong alignments used at threshold 8 against 0: proxy EKF UGV-UAV 1/34 against 3/38 (cross 4/96
+both); sonar ground-truth ids cross 0/98 against 1/97; sonar EKF cross 21/78 against 21/79. The
+median time to merge grows by 0-20 s at 8 (60-200 s at 13).
+
+**Findings (development).**
+1. **The 180-degree flips of L33 are fixed.** Seed 8 (proxy EKF): `ugv_0 <- uav_0` (4 inliers,
+   wrong) and `uav_0 <- ugv_0` (4 inliers, right) disagree, so neither is used; the team merges
+   through the BlueROV2s and G1 passes (team ATE 39.6 -> 0.27 m).
+2. **No regression at 6 or 8**: Tier 1, ground-truth ids and the LiDAR fleet keep every merge;
+   at 8 one proxy-EKF run merges no more (G1 unchanged, 19/20).
+3. **Higher thresholds cost merges.** Many alignments have no reverse estimate (one agent aligns
+   the pair, the other does not), so requiring one for 10-12 inliers leaves teams split.
+4. **The sonar-EKF failures are not fixed** (6/20 at every threshold that keeps merges; wrong
+   cross alignments 21/78 at 8): their wrong alignments have 8-11 inliers, above the threshold, and
+   need better maps (T-F3-06: clutter landmarks) rather than this rule.
+
+**Choice, before the held-out evaluation:** threshold **8**, the value of `min_inliers_cross_only`
+(an alignment that would not pass the cross-only test needs its reverse); chosen on the
+development seeds only. The held-out evaluation runs once on new seeds 40-59 (recorded for it,
+not looked at before this entry was committed): thresholds 0 and 8, all seven perceptions,
+`python experiments/alignment_acceptance_study.py --seeds 40 ... 59 --weak 0 8`.
+
+---
+
 ## 2026-10-02 (luiz-predator-neo): the EKF tracker on sonar images (Claude)
 
 Branch `wp/T-F3-06-ekf-sonar`; task T-F3-06; development seeds 0-19 only (sonar recordings of
