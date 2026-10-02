@@ -281,6 +281,8 @@ def run_decentralized(
         "decode_errors": sum(ag.decode_errors for ag in agents.values()),
         "first_alignment_s": first_align,
         "vetoed_alignments": sum(len(ag.vetoed) for ag in agents.values()),
+        # own alignments not used: vetoed by the cycle check or weak and unconfirmed (T-F3-05)
+        "unused_alignments": {i: sorted(ag.vetoed | ag.unconfirmed) for i, ag in agents.items()},
         # Error of every accepted pairwise alignment vs ground truth (diagnostic).
         "alignment_errors": {
             i: {

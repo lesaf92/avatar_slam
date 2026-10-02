@@ -32,6 +32,7 @@ from avatar.frontend.frame_consistency import (
     CycleGate,
     FrameEdge,
     consistent_subset,
+    is_consistent,
     optimize_frame_graph,
 )
 from avatar.geometry import compose, transform_points, wrap_angle
@@ -93,6 +94,12 @@ class AvatarParams:
     # stable (docs/LOG.md L36). An attempt that agrees with the adopted alignment is taken at
     # once; a failed attempt does not reset the count.
     align_confirm: int = 1
+    # A frame estimate with fewer inliers than this (own, received, or about this agent) is
+    # used only when the other direction of the same pair agrees with it (the 2-cycle test of
+    # the cycle check); weak own estimates are still advertised, so that the neighbour can
+    # confirm them. 0 disables. Few-inlier alignments can be aliased, and a leaf of the frame
+    # graph has no cycle that would expose them (LOG L33, L36, L37; T-F3-05).
+    confirm_weak_inliers: int = 0
     align_confirm_xy_m: float = 1.0
     align_confirm_yaw_rad: float = 0.035
 
@@ -195,6 +202,7 @@ class AvatarAgent:
         # Neighbours' estimates of T_j_from_self: evidence for the cycle check only.
         self.frames_about_me: dict[int, FrameEstimate] = {}
         self.vetoed: set[int] = set()  # own alignments rejected by the cycle check
+        self.unconfirmed: set[int] = set()  # own weak alignments the neighbour has not confirmed
         self.rejected_frames: set[tuple[int, int]] = set()  # received ones rejected
         self.rejected_about_me: set[int] = set()
         self.seq = 0
@@ -419,7 +427,14 @@ class AvatarAgent:
     def build_alignment_messages(self, t: float) -> list[bytes]:
         """``FRAME_ALIGNMENT`` packets for every neighbour this agent has aligned."""
         out = []
-        for (a, b), fe in self.frames.items():
+        frames = dict(self.frames)
+        for s in self.unconfirmed:  # advertised, so that the neighbour can confirm it
+            al = self.alignments[s]
+            frames[(self.id, s)] = FrameEstimate(
+                al.T_mine_from_remote, al.sigma_xy_m, al.sigma_z_m, al.sigma_yaw_rad,
+                al.n_inliers, source=self.id,
+            )  # fmt: skip
+        for (a, b), fe in frames.items():
             if a != self.id or fe.source != self.id:
                 continue
             msg = codec.FrameAlignment(
@@ -617,6 +632,7 @@ class AvatarAgent:
         new evidence makes the estimate consistent again.
         """
         self.vetoed, self.rejected_frames, self.rejected_about_me = set(), set(), set()
+        self.unconfirmed = set()
         if not self.params.cycle_check:
             return
         own = {
@@ -640,7 +656,30 @@ class AvatarAgent:
         self.vetoed = {s for s, e in own.items() if id(e) in bad}
         self.rejected_frames = {k for k, e in received.items() if id(e) in bad}
         self.rejected_about_me = {j for j, e in about_me.items() if id(e) in bad}
-        for s in self.vetoed:
+        weak = self.params.confirm_weak_inliers
+        if weak > 0:
+            usable = [
+                *(e for s, e in own.items() if s not in self.vetoed),
+                *(e for k, e in received.items() if k not in self.rejected_frames),
+                *(e for j, e in about_me.items() if j not in self.rejected_about_me),
+            ]
+            by_pair = {(e.a, e.b): e for e in usable}
+
+            def confirmed(e: FrameEdge) -> bool:
+                rev = by_pair.get((e.b, e.a))
+                return rev is not None and is_consistent(e, [(rev, False)], self.params.cycle_gate)
+
+            self.unconfirmed = {
+                s for s, e in own.items()
+                if s not in self.vetoed and e.n_inliers < weak and not confirmed(e)
+            }  # fmt: skip
+            self.rejected_frames |= {
+                k for k, e in received.items() if e.n_inliers < weak and not confirmed(e)
+            }
+            self.rejected_about_me |= {
+                j for j, e in about_me.items() if e.n_inliers < weak and not confirmed(e)
+            }
+        for s in self.vetoed | self.unconfirmed:
             self.frames.pop((self.id, s), None)
 
     def consistent_frames(self) -> dict[tuple[int, int], FrameEstimate]:
@@ -680,7 +719,7 @@ class AvatarAgent:
             fused.add_scalar_prior(self._bias_key, float(self.local.value(self._bias_key)[0]), 1e-7)
         frame_keys = []
         for sender, pairs in self.alignment_ids.items():
-            if sender in self.vetoed:
+            if sender in self.vetoed or sender in self.unconfirmed:
                 continue
             fkey = ("T", sender)
             init = self.alignments[sender].T_mine_from_remote
