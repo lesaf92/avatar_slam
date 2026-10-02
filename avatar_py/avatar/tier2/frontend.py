@@ -135,6 +135,10 @@ class FrontEndParams:
     # ambiguous too (2 161 tracks for 48 parts on the UGV, docs/LOG.md L28).
     track_on_ambiguity: str = "drop"
     ekf: EkfTrackerParams = field(default_factory=EkfTrackerParams)
+    # Tracker parameters of an agent whose sensors include a sonar image (None: ``ekf``).
+    # The birth test that rejects clutter on the proxy passes the glints of the quay and the
+    # hulls on sonar images, whose centre error is much larger (docs/LOG.md L36, T-F3-06).
+    ekf_sonar: EkfTrackerParams | None = None
     # Sonar images (spec kind "sonar_image", DAVE's multibeam sonar, ADR-0008)
     sonar_image: SonarImageParams = field(default_factory=SonarImageParams)
     # Semantic oracle: max distance [m] from a detection to a GT part's surface
@@ -561,9 +565,10 @@ def detections_for_agent(
     part_classes = [p.class_name for p in world.parts]
     tracker = Tracker(id_offset, params)
     noise = agent_data.config.odometry_noise
+    sonar = any(spec.kind == "sonar_image" for spec in specs.values())
     ekf = EkfTracker(
         id_offset,
-        params.ekf,
+        params.ekf_sonar if sonar and params.ekf_sonar is not None else params.ekf,
         PlatformPrior(
             noise.yaw_bias_std_rad_per_m if heading_bias_modelled(agent_data.config) else 0.0,
             noise.scale_bias_std,

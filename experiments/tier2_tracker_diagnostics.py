@@ -14,6 +14,8 @@ For one recorded run, prints per SLAM agent:
 
     python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed0
     python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed1 --sweep
+    python experiments/tier2_tracker_diagnostics.py results/tier2/harbor_fleet_seed5 --mode ekf \
+        --sonar sonar        # the BlueROV2s' DAVE sonar images (T-F3-06)
 """
 
 from __future__ import annotations
@@ -93,14 +95,14 @@ def track_report(agent, world) -> dict:
     }
 
 
-def _sweep_one(args: tuple[str, str, dict]) -> tuple[str, dict, dict]:
-    run_dir, mode, overrides = args
+def _sweep_one(args: tuple[str, str, dict, str | None]) -> tuple[str, dict, dict]:
+    run_dir, mode, overrides, sonar = args
     params = AvatarParams()
     if mode == "ekf":
         fe = FrontEndParams(tracking=mode, ekf=EkfTrackerParams(**overrides))
     else:
         fe = FrontEndParams(tracking=mode, **overrides)
-    scenario, sim, stats = build_tier2_sim(run_dir, params, fe, cache=False)
+    scenario, sim, stats = build_tier2_sim(run_dir, params, fe, cache=False, sonar=sonar)
     seed = int(load_meta(run_dir)["seed"])
     m = run_independent(scenario, sim, params, seed).metrics
     names = {i: a.config.name for i, a in sim.agents.items() if a.config.role == "slam"}
@@ -118,12 +120,15 @@ def main() -> None:
     ap.add_argument("--floors", type=float, nargs="+", default=[0.3, 0.6, 1.0])
     ap.add_argument("--odom-scales", type=float, nargs="+", default=[1.5, 3.0])
     ap.add_argument("--margins", type=float, nargs="+", default=[6.0, 12.0])
+    ap.add_argument("--sonar", default=None, help="sonar recording of the run (<run>/<name>.npz)")
     args = ap.parse_args()
 
     _, sim, stats = build_tier2_sim(
-        args.run_dir, AvatarParams(), FrontEndParams(tracking=args.mode)
+        args.run_dir, AvatarParams(), FrontEndParams(tracking=args.mode), sonar=args.sonar
     )
-    print(f"{args.run_dir}, tracker '{args.mode}'")
+    print(
+        f"{args.run_dir}, tracker '{args.mode}'" + (f", sonar '{args.sonar}'" if args.sonar else "")
+    )
     for ad in sim.agents.values():
         if ad.config.role != "slam":
             continue
@@ -156,7 +161,8 @@ def main() -> None:
                 for d in (0.02, 0.01, 0.005, 0.0)
             ]
         with ProcessPoolExecutor(max_workers=args.jobs) as ex:
-            results = list(ex.map(_sweep_one, [(args.run_dir, args.mode, g) for g in grid]))
+            jobs = [(args.run_dir, args.mode, g, args.sonar) for g in grid]
+            results = list(ex.map(_sweep_one, jobs))
         print("\nsingle-agent ATE [m] by tracker setting:")
         for label, ate, wrong in results:
             cells = "  ".join(f"{n} {a:.2f}" for n, a in ate.items())

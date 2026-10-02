@@ -34,7 +34,7 @@ from avatar.frontend.frame_consistency import (
     consistent_subset,
     optimize_frame_graph,
 )
-from avatar.geometry import compose, transform_points
+from avatar.geometry import compose, transform_points, wrap_angle
 from avatar.semantics import normalize
 from avatar.sim.agents import AgentConfig, heading_bias_modelled
 from avatar.sim.measurements import KeyframeData
@@ -87,6 +87,14 @@ class AvatarParams:
     frame_link_inflation: float = 2.0
     align_window_min_landmarks: int = 6
     cycle_gate: CycleGate = field(default_factory=CycleGate)
+    # A new pairwise alignment is adopted only when this many consecutive attempts for the
+    # same neighbour agree on it (within the two tolerances below); 1 adopts it at once. An
+    # aliased hypothesis with few inliers tends to jump between attempts, the true one is
+    # stable (docs/LOG.md L36). An attempt that agrees with the adopted alignment is taken at
+    # once; a failed attempt does not reset the count.
+    align_confirm: int = 1
+    align_confirm_xy_m: float = 1.0
+    align_confirm_yaw_rad: float = 0.035
 
 
 @dataclass
@@ -181,6 +189,7 @@ class AvatarAgent:
         self.inbox_domain: dict[int, int] = {}
         self._dirty: set[int] = set()
         self.alignments: dict[int, Alignment] = {}
+        self._pending: dict[int, tuple[FloatArray, int]] = {}  # candidate T, agreeing attempts
         self.alignment_ids: dict[int, list[tuple[int, int, bool]]] = {}
         self.frames: dict[tuple[int, int], FrameEstimate] = {}
         # Neighbours' estimates of T_j_from_self: evidence for the cycle check only.
@@ -530,6 +539,14 @@ class AvatarAgent:
             if res is None:
                 continue
             old = self.alignments.get(sender)
+            if self.params.align_confirm > 1:
+                T = res.T_mine_from_remote
+                prev = self._pending.get(sender)
+                count = prev[1] + 1 if prev is not None and self._agrees(prev[0], T) else 1
+                self._pending[sender] = (T, count)
+                adopted = old is not None and self._agrees(old.T_mine_from_remote, T)
+                if count < self.params.align_confirm and not adopted:
+                    continue
             if self.params.align_window_kf > 0:
                 # windows of a drifting map legitimately disagree on the frame by
                 # metres; keep whichever pairing links more parts
@@ -543,6 +560,13 @@ class AvatarAgent:
             self.alignment_ids[sender] = ids
         self._dirty.clear()
         self.check_cycles()
+
+    def _agrees(self, a: FloatArray, b: FloatArray) -> bool:
+        """Whether two estimates of ``T_mine_from_remote`` are the same hypothesis."""
+        return bool(
+            np.hypot(a[0] - b[0], a[1] - b[1]) <= self.params.align_confirm_xy_m
+            and abs(wrap_angle(a[3] - b[3])) <= self.params.align_confirm_yaw_rad
+        )
 
     def _windowed_alignment(self, remote, remote_ids, full, full_ids):
         """Align sliding windows of own keyframes and merge their landmark pairs.
