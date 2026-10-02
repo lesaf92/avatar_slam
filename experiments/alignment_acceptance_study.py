@@ -53,11 +53,13 @@ def _kind(a: str, b: str) -> str:
     return "above" if "uuv" not in a + b else "cross"
 
 
-def run_one(job: tuple[int, int, int, str]) -> dict:
-    seed, ci, weak, results = job
+def run_one(job: tuple[int, int, int, str, str]) -> dict:
+    seed, ci, weak, results, policy = job
     label, runs, tracking, sonar = CONFIGS[ci]
     run = Path(results) / runs / f"harbor_fleet_seed{seed}"
-    params = dataclasses.replace(AvatarParams(), confirm_weak_inliers=weak)
+    params = dataclasses.replace(
+        AvatarParams(), confirm_weak_inliers=weak, confirm_weak_policy=policy
+    )
     if tracking is None:
         meta = load_meta(run)
         scenario, sim = make_sim(
@@ -108,13 +110,19 @@ def main() -> None:
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(20)))
     ap.add_argument("--weak", type=int, nargs="+", default=[0, 6, 8, 10, 13])
     ap.add_argument("--configs", nargs="+", default=[c[0] for c in CONFIGS])
+    ap.add_argument("--policy", default="confirm", choices=["confirm", "veto"])
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--out", default=None, help="JSON lines of every run")
     args = ap.parse_args()
     cis = [i for i, c in enumerate(CONFIGS) if c[0] in args.configs]
     with ProcessPoolExecutor(max_workers=args.jobs) as ex:
         list(ex.map(_build, [(s, ci, args.results) for ci in cis for s in args.seeds]))
-        jobs = [(s, ci, w, args.results) for ci in cis for w in args.weak for s in args.seeds]
+        jobs = [
+            (s, ci, w, args.results, args.policy)
+            for ci in cis
+            for w in args.weak
+            for s in args.seeds
+        ]
         rows = list(ex.map(run_one, jobs))
     if args.out:
         Path(args.out).write_text("\n".join(json.dumps(r) for r in rows) + "\n")

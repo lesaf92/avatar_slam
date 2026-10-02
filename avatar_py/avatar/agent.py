@@ -98,9 +98,11 @@ class AvatarParams:
     # used only when the other direction of the same pair agrees with it (the 2-cycle test of
     # the cycle check); weak own estimates are still advertised, so that the neighbour can
     # confirm them. 0 disables. Few-inlier alignments can be aliased, and a leaf of the frame
-    # graph has no cycle that would expose them (LOG L33, L36, L37; T-F3-05). 8 is the value of
-    # AssociationParams.min_inliers_cross_only; chosen on seeds 0-19, held out on 40-59 (L37).
-    confirm_weak_inliers: int = 8
+    # graph has no cycle that would expose them (LOG L33, L36, L37; T-F3-05). Policy "confirm"
+    # waits for the reverse estimate (it delays merges in Tier 1, L37, so it is off by default);
+    # "veto" uses a weak estimate unless the reverse exists and disagrees.
+    confirm_weak_inliers: int = 0
+    confirm_weak_policy: str = "confirm"
     align_confirm_xy_m: float = 1.0
     align_confirm_yaw_rad: float = 0.035
 
@@ -668,7 +670,9 @@ class AvatarAgent:
 
             def confirmed(e: FrameEdge) -> bool:
                 rev = by_pair.get((e.b, e.a))
-                return rev is not None and is_consistent(e, [(rev, False)], self.params.cycle_gate)
+                if rev is None:  # no reverse: "veto" uses it, "confirm" waits
+                    return self.params.confirm_weak_policy == "veto"
+                return is_consistent(e, [(rev, False)], self.params.cycle_gate)
 
             self.unconfirmed = {
                 s for s, e in own.items()
