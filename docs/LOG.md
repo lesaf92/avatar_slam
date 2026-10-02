@@ -5,6 +5,71 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-02 (luiz-predator-neo): the EKF tracker on sonar images (Claude)
+
+Branch `wp/T-F3-06-ekf-sonar`; task T-F3-06; development seeds 0-19 only (sonar recordings of
+L35); **simulation**. Commands: `python experiments/sonar_tracker_study.py {alignments,clutter,
+birth,confirm,tracks,minlen} --jobs 28` at commit `b33409c` (per-run rows in
+`results/sonar_tracker_*.jsonl`);
+`experiments/tier2_tracker_diagnostics.py <run> --mode ekf --sonar sonar`.
+
+### L36. On sonar images the EKF tracker turns quay and hull echoes into landmarks, and few-inlier cross-medium alignments go wrong; three remedies fail
+
+With ground-truth ids G1 holds in 18/20 runs on sonar images (L35); with the EKF tracker in 6/20.
+Accepted alignments by type (wrong / accepted):
+
+| Perception | Merged | G1 | Cross (BlueROV2 with UGV/UAV) | BlueROV2 pair | UGV-UAV |
+|---|---|---|---|---|---|
+| proxy, ground-truth ids | 20/20 | 20/20 | 0/100 | 0/40 | 1/39 |
+| proxy, EKF | 20/20 | 18/20 | 4/96 | 0/40 | 3/38 |
+| sonar, ground-truth ids | 20/20 | 18/20 | 3/99 | 0/40 | 1/39 |
+| **sonar, EKF** | 17/20 | **6/20** | **22/80** | **13/40** | 2/38 |
+
+Cross alignments of sonar-EKF by inliers: 8-9: 14/23 wrong, 10-12: 7/23, 13 or more: 1/34 (proxy
+EKF: 1/18, 3/38, 0/40). The runs that fail G1 have frame errors of 2-55 m
+(`paper/data/tier2_sonar.csv`, tier T2sekf).
+
+**Findings.**
+1. **The pile tracks are mostly good** (`tracks`): 971 tracks of at least four detections on real
+   piles over 40 BlueROV2-runs (24 per run), centre error median 0.08 m; 31 piles split into more
+   than one track and 47 tracks (5 %) mix in more than 10 % of another part's detections (the
+   pile-spacing confusions of `tier2_tracker_diagnostics.py`, 5-6 m apart).
+2. **Clutter becomes landmarks.** 1431 clutter tracks, 36 per BlueROV2 and run (the EKF keeps 83
+   and 61 tracks per BlueROV2 on sonar, 28 and 36 on the proxy: medians in `paper/data/tier2*.csv`);
+   61 % lie on the quay face and 38 % on hulls: real echoes of extended surfaces (specular glints
+   that slide along the face; spread 0.49 m against 0.24 m for piles, elongation 3.6 against 1.8),
+   short-lived (median 7 detections against 43 for piles).
+   The EKF's static-birth test confirms 49 and 43 landmarks per BlueROV2 and rejects 1 and 1
+   (proxy: confirms 23 and 27, rejects 18 and 34; medians, same files):
+   with the sonar's 0.24 m detection sigma, which includes the 0.2 m centre error that is mostly a
+   per-pile constant, a sliding glint passes. Removing the BlueROV2s' unmatched detections after
+   tracking (a ground-truth control): BlueROV2-pair wrong alignments 13 -> 4/38, cross 22 -> 15/87,
+   G1 6 -> 8/20.
+3. **Without clutter, the tracker's maps still mislead few-inlier cross alignments.** With the
+   unmatched detections removed, ground-truth ids are unchanged (18/20, cross 3/99), but the EKF
+   keeps 15/87 wrong cross alignments: its split and impure pile tracks and its dropped detections
+   are enough. The fatal ones have 8-11 inliers, where the acceptance rule (`min_inliers_cross_only`
+   = 8) admits them. The cycle check cannot catch them: the UGV is a leaf, and `consistent_subset`
+   keeps the first of two conflicting directions of a pair in order of inliers, so with equal
+   support (L33, seed 8: 4 and 4) the wrong one can win.
+
+**Negative results (remedies that do not work).**
+- *Birth test for sonar agents* (`FrontEndParams.ekf_sonar`): 8 or 12 confirming frames, chi2 gate
+  5.99, no floor, and combinations: G1 4-8/20; the best halves the clutter tracks (72 -> 37/run).
+- *A minimum track length before release* (`minlen`, 8-24 detections, a post-hoc control): G1 7, 5,
+  7 and 9/20; at 24 it removes 84 % of the clutter detections and 6 % of the pile ones, and the
+  BlueROV2-pair wrong alignments fall from 13 to 1/36, but cross ones stay at 13/74.
+- *Alignment confirmation* (`align_confirm` 2 or 3 agreeing attempts): sonar-EKF G1 8 and 7/20
+  (wrong 11/58 and 9/48 cross); it costs merges everywhere (sonar, ground-truth ids: 18 -> 14/20).
+  Wrong alignments persist across attempts; they are not random flips.
+
+**Consequence.** Two levers remain: the acceptance of cross-medium alignments with few inliers
+(T-F3-05), which imperfect maps expose, and clutter from extended surfaces, best rejected before
+it becomes a landmark (the chain rule of L34 catches only frames with several glints). T-F3-06
+waits for T-F3-05, which is next.
+
+---
+
 ## 2026-10-01 (luiz-predator-neo): why the team did not merge on sonar images (Claude)
 
 Branch `wp/T-I1-03-docker-tier2`; task T-F2-06; development seeds 0-19 only; **simulation**.
