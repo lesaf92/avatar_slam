@@ -667,11 +667,17 @@ class AvatarAgent:
                 *(e for j, e in about_me.items() if j not in self.rejected_about_me),
             ]
             by_pair = {(e.a, e.b): e for e in usable}
+            # the veto looks at every reverse, also one the cycle check rejected: with equal
+            # support the check keeps an arbitrary one of two conflicting directions (L33, seed 8)
+            any_pair = {
+                (e.a, e.b): e for e in (*own.values(), *received.values(), *about_me.values())
+            }
+            veto = self.params.confirm_weak_policy == "veto"
 
             def confirmed(e: FrameEdge) -> bool:
-                rev = by_pair.get((e.b, e.a))
-                if rev is None:  # no reverse: "veto" uses it, "confirm" waits
-                    return self.params.confirm_weak_policy == "veto"
+                rev = (any_pair if veto else by_pair).get((e.b, e.a))
+                if rev is None:  # no reverse: "veto" uses the estimate, "confirm" waits
+                    return veto
                 return is_consistent(e, [(rev, False)], self.params.cycle_gate)
 
             self.unconfirmed = {
