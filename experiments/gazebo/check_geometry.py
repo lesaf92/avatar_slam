@@ -102,9 +102,7 @@ def main() -> int:
             print(f"{key:28s} {0:9d}")
             continue
         off = float(np.mean(d > 0.2))
-        print(
-            f"{key:28s} {len(d):9d} {np.median(d):11.4f} {np.percentile(d, 95):8.4f} {off:7.1%}"
-        )
+        print(f"{key:28s} {len(d):9d} {np.median(d):11.4f} {np.percentile(d, 95):8.4f} {off:7.1%}")
         if off > MAX_OFF[spec.kind]:
             failed.append(key)
     if failed:
