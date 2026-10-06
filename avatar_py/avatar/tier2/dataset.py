@@ -75,8 +75,9 @@ def build_tier2_sim(
         meta["scenario"], int(meta["seed"]), float(meta["duration_s"]), params,
         **meta["scenario_args"],
     )  # fmt: skip
-    # Cache key: parameters, the source the detections depend on (a code change invalidates it)
-    # and the NumPy/SciPy versions (random-number streams and solvers differ, LOG L33).
+    # Cache key: parameters, the source the detections depend on (a code change invalidates it),
+    # the NumPy/SciPy versions (random-number streams and solvers differ, LOG L33) and the
+    # recordings themselves (a re-recorded run must not reuse old detections, L39).
     src = b"".join(p.read_bytes() for p in frontend_sources())
     key = (
         repr(fe_params)
@@ -84,9 +85,10 @@ def build_tier2_sim(
         + f"|np{np.__version__}|sp{scipy.__version__}"
     )
     sonar_file = run / f"{sonar}.npz" if sonar else None
-    if sonar_file is not None:
-        st = sonar_file.stat()
-        key += f"|{sonar}:{st.st_size}:{st.st_mtime_ns}"
+    for name, f in (("raw", run / "raw.npz"), (sonar, sonar_file)):
+        if f is not None:
+            st = f.stat()
+            key += f"|{name}:{st.st_size}:{st.st_mtime_ns}"
     cache_file = run / f"detections_{fe_params.tracking}{'_' + sonar if sonar else ''}.pkl"
     cached = None
     if cache and cache_file.exists():

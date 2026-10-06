@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import json
+import os
+import pickle
 import xml.etree.ElementTree as ET
 
 import numpy as np
@@ -229,7 +231,11 @@ def test_build_tier2_sim_keeps_tier1_odometry(tmp_path):
             if ad.config.role == "slam":
                 assert kf2.detections == []  # no returns -> no detections
     assert stats["ugv_0"]["clusters"] == 0
-    assert (tmp_path / "detections_oracle.pkl").exists()
+    cache = tmp_path / "detections_oracle.pkl"
+    key0 = pickle.loads(cache.read_bytes())["key"]
+    os.utime(tmp_path / "raw.npz", ns=(1, 1))  # a re-recording replaces raw.npz
+    build_tier2_sim(tmp_path, params)
+    assert pickle.loads(cache.read_bytes())["key"] != key0
 
 
 def test_detection_cache_key_covers_frontend_imports():
