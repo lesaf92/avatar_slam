@@ -231,6 +231,7 @@ def harbor_fleet(
     paths: dict[str, dict] | None = None,
     frontend_errors: dict | None = None,
     acoustic_bps: float | None = None,
+    uav_lidar: bool = False,
 ) -> Scenario:
     """Harbour world with the PI's **reference fleet** (ADR-0006, docs/hardware.md).
 
@@ -239,6 +240,9 @@ def harbor_fleet(
     * ``uav_0``: Tarot 680 hexacopter + Cube, D435i pitched 30° down (≤ 6 m
       useful depth), barometer, Wi-Fi mesh. It circles pier A's pile rows at a
       2.5 m stand-off, 3 m up (the D435i sees nothing useful beyond ~6 m).
+      ``uav_lidar=True`` adds a VLP-16-class LiDAR (stand-in for the optional
+      Livox-class unit of decision D6, docs/hardware.md), which sees many piles
+      per keyframe (LOG L31).
     * ``uuv_k``: BlueROV2, Micron Gemini 720s imaging sonar + low-light camera +
       Bar30 depth, DVL A50 dead reckoning. SLAM traffic goes **only** over the
       acoustic modem (the tether is for safety/logging, never for SLAM data).
@@ -284,8 +288,8 @@ def harbor_fleet(
 
     agents = [
         agent(0, "ugv_0", Domain.GROUND, ("vlp16", "d435i"), (RF,), odometry=odo["husky_lio"]),
-        agent(1, "uav_0", Domain.AERIAL, ("d435i_down30",), (RF,), absolute_z="baro",
-              odometry=odo["tarot_vio"]),
+        agent(1, "uav_0", Domain.AERIAL, ("d435i_down30", *(("vlp16",) if uav_lidar else ())),
+              (RF,), absolute_z="baro", odometry=odo["tarot_vio"]),
     ]  # fmt: skip
     for k in range(n_uuv):
         agents.append(

@@ -35,3 +35,7 @@ __pycache__/
 .idea/
 *.swp
 .DS_Store
+experiments/gazebo/build/
+
+# created by DAVE's sonar plugin in its working directory
+debug_timings.txt

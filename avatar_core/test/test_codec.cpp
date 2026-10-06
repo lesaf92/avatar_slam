@@ -134,3 +134,21 @@ TEST(Codec, MaxRecordsFitsMtu) {
     }
   }
 }
+
+TEST(Codec, MeasuredFootprintIsNeverSentAsUnmeasured) {
+  // 0 x 0 means "not measured" (spec §3); a tiny measured footprint is sent as one LSB.
+  auto roundtrip = [](double x, double y) {
+    LandmarkDigest d;
+    LandmarkRecord r;
+    r.extent = {x, y, 1.0};
+    r.flags = 1;
+    r.n_obs = 1;
+    d.records.push_back(r);
+    const auto out = std::get<LandmarkDigest>(avatar::comm::decode(avatar::comm::encode(d)));
+    return std::array<double, 2>{out.records[0].extent[0], out.records[0].extent[1]};
+  };
+  EXPECT_EQ(roundtrip(0.05, 0.02), (std::array<double, 2>{0.25, 0.0}));
+  EXPECT_EQ(roundtrip(0.02, 0.1), (std::array<double, 2>{0.0, 0.25}));
+  EXPECT_EQ(roundtrip(0.0, 0.0), (std::array<double, 2>{0.0, 0.0}));
+  EXPECT_EQ(roundtrip(0.6, 0.1), (std::array<double, 2>{0.5, 0.0}));
+}

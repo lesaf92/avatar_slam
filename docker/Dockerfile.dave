@@ -1,0 +1,57 @@
+# DAVE multibeam sonar on top of the Tier-2 recording image (tasks T-I1-03, T-S2-05).
+#
+#   docker build -f docker/Dockerfile.tier2 -t avatar-tier2 .
+#   docker build -f docker/Dockerfile.dave  -t avatar-dave  .
+#   docker/tier2.sh ...           # AVATAR_TIER2_IMAGE=avatar-dave to use this image
+#
+# DAVE (IOES-Lab/dave) moved to ROS 2 Lyrical / Gazebo Jetty on 2026-09-09; this pins the
+# last Jazzy / Harmonic commit (its parent of ec1db10), which has the CUDA multibeam sonar
+# (ray-based, point scattering, speckle and reverberation). The sonar needs an NVIDIA GPU
+# with CUDA; CUDA_ARCH is the compute capability (89: RTX 40 series, 86: RTX 30 series).
+FROM avatar-tier2
+
+ARG DEBIAN_FRONTEND=noninteractive
+ARG CUDA_ARCH=89
+ARG DAVE_REF=d2121a5b4457361e60106aaa029b0a448977d70e
+
+USER root
+RUN apt-get update && apt-get install -y --no-install-recommends wget gnupg ca-certificates \
+    && wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2404/x86_64/cuda-keyring_1.1-1_all.deb \
+    && dpkg -i cuda-keyring_1.1-1_all.deb && rm cuda-keyring_1.1-1_all.deb \
+    && apt-get update && apt-get install -y --no-install-recommends cuda-toolkit-12-6 \
+    && rm -rf /var/lib/apt/lists/*
+ENV PATH=/usr/local/cuda-12.6/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda-12.6/lib64
+
+# ROS packages the sonar needs (the rest of DAVE is not built).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        python3-colcon-common-extensions python3-rosdep python3-vcstool \
+        ros-jazzy-marine-acoustic-msgs ros-jazzy-pcl-conversions ros-jazzy-cv-bridge \
+        ros-jazzy-image-transport libopencv-dev libpcl-dev protobuf-compiler libprotobuf-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# DAVE at the pinned commit, only the packages the sonar depends on.
+RUN mkdir -p /opt/dave_ws/src && cd /opt/dave_ws/src \
+    && git clone -q https://github.com/IOES-Lab/dave.git && cd dave && git checkout -q ${DAVE_REF}
+# With `blazingSonarImage` the speckle seed is time(NULL): recordings could not be reproduced.
+# The patch seeds it from the simulation time and the sensor name (docs/LOG.md L34).
+COPY docker/patch_dave_seed.py /tmp/patch_dave_seed.py
+RUN python3 /tmp/patch_dave_seed.py \
+    /opt/dave_ws/src/dave/gazebo/dave_gz_multibeam_sonar/multibeam_sonar
+WORKDIR /opt/dave_ws
+# multibeam_sonar_system builds multibeam_sonar (the CUDA sensor) as a subdirectory, and skips
+# it without a message if CUDA is not found, so the build is checked for the libraries.
+# The venv of avatar-tier2 is taken off PATH: ament needs the system Python (catkin_pkg, empy).
+RUN export PATH="$(printf %s "$PATH" | sed "s#/opt/venv/bin:##")" && . /opt/ros/jazzy/setup.sh && colcon build --symlink-install \
+        --packages-select dave_interfaces multibeam_sonar_system dave_multibeam_sonar_demo \
+        --cmake-args -DCUDA_ARCHITECTURE=${CUDA_ARCH} -DCMAKE_BUILD_TYPE=Release \
+    && find install -name 'libmultibeam_sonar*.so' | tee /tmp/sonar_libs.txt \
+    && test "$(wc -l < /tmp/sonar_libs.txt)" -ge 2 \
+    && ldd $(find install -name libmultibeam_sonar.so | head -1) | grep -E 'cudart|cufft|cublas'
+
+ENV DAVE_WS=/opt/dave_ws
+WORKDIR /work
+# Source the workspace in every command (the container runs as the host user, HOME=/tmp).
+RUN printf '#!/bin/bash\nsource /opt/ros/jazzy/setup.bash\nsource /opt/dave_ws/install/setup.bash\nexec "$@"\n' \
+        > /usr/local/bin/dave-entry && chmod +x /usr/local/bin/dave-entry
+ENTRYPOINT ["/usr/local/bin/dave-entry"]

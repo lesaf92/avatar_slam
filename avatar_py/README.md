@@ -15,10 +15,12 @@ pytest avatar_py/tests -q
 | `avatar.semantics` | Class vocabulary (wire contract) and simulated open-vocabulary descriptors |
 | `avatar.sim` | Tier-1 simulator: world and landmark parts, agents and trajectories, sensors, measurement generation, scenarios |
 | `avatar.comm` | Channel models (RF, acoustic), broadcast network, wire codec v0, gateway relay, VoI digest scheduler |
-| `avatar.backend.graph` | Sparse 4-DoF factor graph: LM, Huber, marginal covariances (Schur complement) |
+| `avatar.backend.graph` | Sparse 4-DoF factor graph: LM, Huber and graduated non-convexity (GNC-TLS) kernels, marginal covariances (Schur complement) |
 | `avatar.frontend.association` | Cross-medium association and robust 4-DoF alignment |
+| `avatar.frontend.ekf_tracker` | EKF-SLAM landmark tracker (pose, odometry biases, landmarks, joint covariance) for intra-agent association; used by the Tier-2 front-end |
 | `avatar.frontend.frame_consistency` | Team frame-graph cycle check (vetoes alignments that break a cycle) |
 | `avatar.baselines` | *A&B*-style centralized server with every uplink byte counted |
+| `avatar.tier2` | Tier 2 (Gazebo, ADR-0007): SDF world and rig sensors from a scenario (`sdf`), ray geometry (`rays`), geometric front-end from ranges to detections with a per-agent tracker (`frontend`), Tier-2 `SimData` that keeps Tier-1 odometry (`dataset`). Runs without Gazebo on recorded `raw.npz` files |
 | `avatar.agent` | `AvatarAgent`: local and fused graphs, digests, inbox, alignments |
 | `avatar.eval.metrics` | ATE, team ATE, frame chaining, frame error |
 | `avatar.runner` | `independent` / `decentralized` / `centralized` / `server` modes on shared measurements |

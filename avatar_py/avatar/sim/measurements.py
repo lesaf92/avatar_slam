@@ -84,15 +84,31 @@ class FrontEndErrors:
         measured position stays that of the true part.
     id_switch_radius_m
         Radius [m] for identity switches.
+    id_split_prob, id_split_gap_kf
+        Identity **splits** (fragmentation): when a sensor sees a part again after at least
+        ``id_split_gap_kf`` keyframes without seeing it, the front-end gives it a new,
+        never-used identity with probability ``id_split_prob`` (a true revisit is missed,
+        the loop is not closed) and keeps it until the next such revisit; otherwise it
+        re-associates it correctly. The measured position is the part's. This is the
+        failure that cost the Tier-2 trackers their loop closures (LOG L29).
+    id_switch_persist_kf
+        0: every switch lasts one detection (independent errors). ``n > 0``: a switch
+        starts a **burst**: the same part keeps the same wrong identity, for the same
+        sensor, for the next ``n`` keyframes, as a tracker that confuses two piles does
+        (LOG L28). ``id_switch_prob`` is then the onset probability per detection, so
+        the long-run fraction of wrong attributions is about ``p n / (1 + p n)``.
     """
 
     clutter_per_kf: float = 0.0
     id_switch_prob: float = 0.0
     id_switch_radius_m: float = 10.0
+    id_switch_persist_kf: int = 0
+    id_split_prob: float = 0.0
+    id_split_gap_kf: int = 30
 
     @property
     def active(self) -> bool:
-        return self.clutter_per_kf > 0.0 or self.id_switch_prob > 0.0
+        return self.clutter_per_kf > 0.0 or self.id_switch_prob > 0.0 or self.id_split_prob > 0.0
 
 
 def apply_frontend_errors(
@@ -103,24 +119,48 @@ def apply_frontend_errors(
     rng: np.random.Generator,
     next_clutter_id: int,
     descriptor_dim: int,
+    state: dict | None = None,
+    k: int = 0,
 ) -> tuple[list[Detection], int]:
     """Identity switches and clutter for one sensor's detections at one keyframe.
 
     Clutter gets part indices ``>= len(world.parts)`` (``next_clutter_id``
-    onwards, never reused). Returns the new detections and the next free id.
+    onwards, never reused). ``state`` (one dict per agent) and the keyframe index ``k``
+    carry the bursts of ``errors.id_switch_persist_kf``. Returns the new detections and
+    the next free id.
     """
     out = []
     pos = world.part_positions
     media = world.part_media
+    persist = errors.id_switch_persist_kf > 0 and state is not None
     for d in dets:
-        if errors.id_switch_prob > 0 and rng.random() < errors.id_switch_prob:
+        wrong = None
+        key = (sensor.name, d.part_index)
+        if errors.id_split_prob > 0 and state is not None:
+            alias, last_k = state.get(("split", *key), (None, None))
+            if last_k is not None and k - last_k >= errors.id_split_gap_kf:  # a revisit
+                alias = None
+                if rng.random() < errors.id_split_prob:
+                    alias = next_clutter_id
+                    next_clutter_id += 1
+            state[("split", *key)] = (alias, k)
+            if alias is not None:
+                d = dataclasses.replace(d, part_index=alias, true_part_index=d.part_index)
+                out.append(d)
+                continue
+        if persist and key in state and state[key][1] > k:
+            wrong = state[key][0]  # a burst is running
+        elif errors.id_switch_prob > 0 and rng.random() < errors.id_switch_prob:
             dist = np.linalg.norm(pos - pos[d.part_index], axis=1)
             cand = np.flatnonzero(
                 (media == int(d.medium)) & (dist <= errors.id_switch_radius_m) & (dist > 0)
             )
             if len(cand):
                 wrong = int(rng.choice(cand))
-                d = dataclasses.replace(d, part_index=wrong, true_part_index=d.part_index)
+                if persist:
+                    state[key] = (wrong, k + errors.id_switch_persist_kf)
+        if wrong is not None:
+            d = dataclasses.replace(d, part_index=wrong, true_part_index=d.part_index)
         out.append(d)
     n = int(rng.poisson(errors.clutter_per_kf)) if errors.clutter_per_kf > 0 else 0
     for _ in range(n):
@@ -200,6 +240,7 @@ def generate_measurements(
         )
         sensors = [SENSOR_LIBRARY[name] for name in cfg.sensors]
         kfs: list[KeyframeData] = []
+        err_state: dict = {}  # bursts of identity switches of this agent
         for k, t in enumerate(times):
             odom = odom_sig = None
             if k > 0:
@@ -223,8 +264,9 @@ def generate_measurements(
                 )
                 if errors is not None and sensor.can_operate(float(gt[k, 2])):
                     sd, next_clutter = apply_frontend_errors(
-                        sd, sensor, world, errors, frontend_rng, next_clutter, descriptor_dim
-                    )
+                        sd, sensor, world, errors, frontend_rng, next_clutter, descriptor_dim,
+                        err_state, k,
+                    )  # fmt: skip
                 dets.extend(sd)
             abs_z = abs_sig = None
             if cfg.absolute_z is not None:

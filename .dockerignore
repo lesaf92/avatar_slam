@@ -1,0 +1,10 @@
+# Build context of docker/Dockerfile.tier2: only avatar_py/requirements-lock.txt is copied.
+.git
+results
+paper
+viz
+**/__pycache__
+**/*.pkl
+**/*.npz
+avatar_py/.pytest_cache
+.ruff_cache

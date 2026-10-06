@@ -1,5 +1,7 @@
 """Front-end error model (T-S1-04): clutter, identity switches, robust observations."""
 
+from itertools import pairwise
+
 import numpy as np
 
 from avatar.agent import AvatarParams
@@ -69,3 +71,92 @@ def test_robust_kernel_contains_association_errors():
     a = run_centralized(sc, sim, plain, 0).metrics["ate_team_m"]
     b = run_centralized(sc, clean, plain, 0).metrics["ate_team_m"]
     assert a == b
+
+
+def test_persistent_switches_come_in_bursts_at_the_stated_rate():
+    """With id_switch_persist_kf = n a part keeps its wrong identity (per sensor) for n
+    keyframes; the share of wrong attributions is close to p n / (1 + p n)."""
+    params = AvatarParams()
+    p, n = 0.01, 20
+    _, sim = make_sim(
+        "harbor_fleet", 2, 300.0, params,
+        frontend_errors={"id_switch_prob": p, "id_switch_persist_kf": n},
+    )  # fmt: skip
+    # bursts: for one agent and part, runs of identical wrong identity
+    wrong_by_part: dict = {}
+    total = wrong_total = 0
+    for a in sim.agents.values():
+        if a.config.role != "slam":
+            continue
+        for k, kf in enumerate(a.keyframes):
+            for d in kf.detections:
+                if d.true_part_index is None:
+                    total += 1
+                    continue
+                wrong_total += 1
+                total += 1
+                wrong_by_part.setdefault((a.config.agent_id, d.true_part_index), []).append(
+                    (k, d.part_index)
+                )
+    assert wrong_total > 0
+    runs = []
+    for seq in wrong_by_part.values():
+        run = 1
+        for (k0, w0), (k1, w1) in pairwise(seq):
+            if k1 - k0 <= 2 and w0 == w1:
+                run += 1
+            else:
+                runs.append(run)
+                run = 1
+        runs.append(run)
+    assert max(runs) >= n // 2  # long runs of one wrong identity
+    assert 0.3 * p * n / (1 + p * n) < wrong_total / total < 3.0 * p * n / (1 + p * n)
+
+
+def test_persistence_off_keeps_the_independent_model_bit_for_bit():
+    params = AvatarParams()
+    kw = {"id_switch_prob": 0.1, "clutter_per_kf": 0.5}
+    _, a = make_sim("harbor_fleet", 5, 60.0, params, frontend_errors=kw)
+    _, b = make_sim(
+        "harbor_fleet", 5, 60.0, params, frontend_errors={**kw, "id_switch_persist_kf": 0}
+    )
+    for i in a.agents:
+        for ka, kb in zip(a.agents[i].keyframes, b.agents[i].keyframes, strict=True):
+            assert [d.part_index for d in ka.detections] == [d.part_index for d in kb.detections]
+
+
+def test_splits_give_revisited_parts_a_new_identity_and_keep_it():
+    params = AvatarParams()
+    _, sim = make_sim(
+        "harbor_fleet", 4, 400.0, params,
+        frontend_errors={"id_split_prob": 1.0, "id_split_gap_kf": 20},
+    )  # fmt: skip
+    n_parts = len(sim.world.parts)
+    checked = 0
+    for a in sim.agents.values():
+        if a.config.role != "slam":
+            continue
+        seen: dict = {}
+        for k, kf in enumerate(a.keyframes):
+            for d in kf.detections:
+                true = d.part_index if d.true_part_index is None else d.true_part_index
+                key = (int(d.modality), true)  # the state is kept per sensor and part
+                if key in seen and k - seen[key][0] >= 20:
+                    assert d.part_index >= n_parts and d.true_part_index == true  # split
+                    checked += 1
+                elif key in seen:
+                    assert d.part_index == seen[key][1]  # same identity between revisits
+                seen[key] = (k, d.part_index)
+    assert checked > 0
+
+
+def test_splits_off_leave_measurements_and_ids_unchanged():
+    params = AvatarParams()
+    _, a = make_sim("harbor_fleet", 4, 60.0, params, frontend_errors={"clutter_per_kf": 0.5})
+    _, b = make_sim(
+        "harbor_fleet", 4, 60.0, params,
+        frontend_errors={"clutter_per_kf": 0.5, "id_split_prob": 0.0},
+    )  # fmt: skip
+    for i in a.agents:
+        for ka, kb in zip(a.agents[i].keyframes, b.agents[i].keyframes, strict=True):
+            assert [d.part_index for d in ka.detections] == [d.part_index for d in kb.detections]

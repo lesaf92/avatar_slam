@@ -32,9 +32,10 @@ from avatar.frontend.frame_consistency import (
     CycleGate,
     FrameEdge,
     consistent_subset,
+    is_consistent,
     optimize_frame_graph,
 )
-from avatar.geometry import compose, transform_points
+from avatar.geometry import compose, transform_points, wrap_angle
 from avatar.semantics import normalize
 from avatar.sim.agents import AgentConfig, heading_bias_modelled
 from avatar.sim.measurements import KeyframeData
@@ -87,6 +88,23 @@ class AvatarParams:
     frame_link_inflation: float = 2.0
     align_window_min_landmarks: int = 6
     cycle_gate: CycleGate = field(default_factory=CycleGate)
+    # A new pairwise alignment is adopted only when this many consecutive attempts for the
+    # same neighbour agree on it (within the two tolerances below); 1 adopts it at once. An
+    # aliased hypothesis with few inliers tends to jump between attempts, the true one is
+    # stable (docs/LOG.md L36). An attempt that agrees with the adopted alignment is taken at
+    # once; a failed attempt does not reset the count.
+    align_confirm: int = 1
+    # A frame estimate with fewer inliers than this (own, received, or about this agent) is
+    # used only when the other direction of the same pair agrees with it (the 2-cycle test of
+    # the cycle check); weak own estimates are still advertised, so that the neighbour can
+    # confirm them. 0 disables. Few-inlier alignments can be aliased, and a leaf of the frame
+    # graph has no cycle that would expose them (LOG L33, L36, L37; T-F3-05). Policy "confirm"
+    # waits for the reverse estimate (it delays merges in Tier 1, L37, so it is off by default);
+    # "veto" uses a weak estimate unless the reverse exists and disagrees.
+    confirm_weak_inliers: int = 0
+    confirm_weak_policy: str = "confirm"
+    align_confirm_xy_m: float = 1.0
+    align_confirm_yaw_rad: float = 0.035
 
 
 @dataclass
@@ -99,6 +117,7 @@ class LandmarkMeta:
     n_obs: int = 0
     class_votes: Counter = field(default_factory=Counter)
     extent_sum: FloatArray = field(default_factory=lambda: np.zeros(3))
+    n_footprint: int = 0  # observations that measured the footprint (extent x/y > 0)
     desc_sum: FloatArray | None = None
     n_desc: int = 0
     first_k: int = -1  # first and last own keyframe that observed this part
@@ -109,7 +128,12 @@ class LandmarkMeta:
         self.flags |= int(modality)
         if cls:
             self.class_votes[cls] += 1
-        self.extent_sum += extent
+        # A footprint of 0 means "not measured" (an imaging sonar sees no diameter, wire
+        # format v0 §3): it must not pull the mean towards zero.
+        self.extent_sum[2] += extent[2]
+        if extent[0] > 0.0 or extent[1] > 0.0:
+            self.extent_sum[:2] += extent[:2]
+            self.n_footprint += 1
         if desc.size and np.linalg.norm(desc) > 1e-9:
             self.desc_sum = desc.copy() if self.desc_sum is None else self.desc_sum + desc
             self.n_desc += 1
@@ -120,7 +144,9 @@ class LandmarkMeta:
 
     @property
     def extent(self) -> FloatArray:
-        return self.extent_sum / max(self.n_obs, 1)
+        out = self.extent_sum / max(self.n_obs, 1)
+        out[:2] = self.extent_sum[:2] / max(self.n_footprint, 1)
+        return out
 
     def descriptor(self, dim: int) -> FloatArray:
         if self.desc_sum is None or dim == 0:
@@ -173,11 +199,13 @@ class AvatarAgent:
         self.inbox_domain: dict[int, int] = {}
         self._dirty: set[int] = set()
         self.alignments: dict[int, Alignment] = {}
+        self._pending: dict[int, tuple[FloatArray, int]] = {}  # candidate T, agreeing attempts
         self.alignment_ids: dict[int, list[tuple[int, int, bool]]] = {}
         self.frames: dict[tuple[int, int], FrameEstimate] = {}
         # Neighbours' estimates of T_j_from_self: evidence for the cycle check only.
         self.frames_about_me: dict[int, FrameEstimate] = {}
         self.vetoed: set[int] = set()  # own alignments rejected by the cycle check
+        self.unconfirmed: set[int] = set()  # own weak alignments the neighbour has not confirmed
         self.rejected_frames: set[tuple[int, int]] = set()  # received ones rejected
         self.rejected_about_me: set[int] = set()
         self.seq = 0
@@ -243,11 +271,14 @@ class AvatarAgent:
                 self.local.add_variable(lkey, VarType.POINT3, transform_points(pose, det.p_body))
                 self.meta[lid] = LandmarkMeta(lid, det.medium, int(medium_flag(det.medium)))
                 n_parts = len(self._part_object_ids)
-                obj = (  # clutter (index beyond the world's parts) belongs to no structure
-                    int(self._part_object_ids[det.part_index])
-                    if 0 <= det.part_index < n_parts
-                    else -1 - det.part_index
-                )
+                if det.object_key is not None:  # front-end tracker (Tier 2)
+                    obj = -(1 << 40) - int(det.object_key)
+                else:  # clutter (index beyond the world's parts) belongs to no structure
+                    obj = (
+                        int(self._part_object_ids[det.part_index])
+                        if 0 <= det.part_index < n_parts
+                        else -1 - det.part_index
+                    )
                 parts = self._object_parts.setdefault(obj, {})
                 parts[det.medium] = lid
                 if len(parts) == 2:  # both parts of one structure seen by this agent
@@ -399,7 +430,14 @@ class AvatarAgent:
     def build_alignment_messages(self, t: float) -> list[bytes]:
         """``FRAME_ALIGNMENT`` packets for every neighbour this agent has aligned."""
         out = []
-        for (a, b), fe in self.frames.items():
+        frames = dict(self.frames)
+        for s in self.unconfirmed:  # advertised, so that the neighbour can confirm it
+            al = self.alignments[s]
+            frames[(self.id, s)] = FrameEstimate(
+                al.T_mine_from_remote, al.sigma_xy_m, al.sigma_z_m, al.sigma_yaw_rad,
+                al.n_inliers, source=self.id,
+            )  # fmt: skip
+        for (a, b), fe in frames.items():
             if a != self.id or fe.source != self.id:
                 continue
             msg = codec.FrameAlignment(
@@ -519,6 +557,14 @@ class AvatarAgent:
             if res is None:
                 continue
             old = self.alignments.get(sender)
+            if self.params.align_confirm > 1:
+                T = res.T_mine_from_remote
+                prev = self._pending.get(sender)
+                count = prev[1] + 1 if prev is not None and self._agrees(prev[0], T) else 1
+                self._pending[sender] = (T, count)
+                adopted = old is not None and self._agrees(old.T_mine_from_remote, T)
+                if count < self.params.align_confirm and not adopted:
+                    continue
             if self.params.align_window_kf > 0:
                 # windows of a drifting map legitimately disagree on the frame by
                 # metres; keep whichever pairing links more parts
@@ -532,6 +578,13 @@ class AvatarAgent:
             self.alignment_ids[sender] = ids
         self._dirty.clear()
         self.check_cycles()
+
+    def _agrees(self, a: FloatArray, b: FloatArray) -> bool:
+        """Whether two estimates of ``T_mine_from_remote`` are the same hypothesis."""
+        return bool(
+            np.hypot(a[0] - b[0], a[1] - b[1]) <= self.params.align_confirm_xy_m
+            and abs(wrap_angle(a[3] - b[3])) <= self.params.align_confirm_yaw_rad
+        )
 
     def _windowed_alignment(self, remote, remote_ids, full, full_ids):
         """Align sliding windows of own keyframes and merge their landmark pairs.
@@ -582,6 +635,7 @@ class AvatarAgent:
         new evidence makes the estimate consistent again.
         """
         self.vetoed, self.rejected_frames, self.rejected_about_me = set(), set(), set()
+        self.unconfirmed = set()
         if not self.params.cycle_check:
             return
         own = {
@@ -605,7 +659,38 @@ class AvatarAgent:
         self.vetoed = {s for s, e in own.items() if id(e) in bad}
         self.rejected_frames = {k for k, e in received.items() if id(e) in bad}
         self.rejected_about_me = {j for j, e in about_me.items() if id(e) in bad}
-        for s in self.vetoed:
+        weak = self.params.confirm_weak_inliers
+        if weak > 0:
+            usable = [
+                *(e for s, e in own.items() if s not in self.vetoed),
+                *(e for k, e in received.items() if k not in self.rejected_frames),
+                *(e for j, e in about_me.items() if j not in self.rejected_about_me),
+            ]
+            by_pair = {(e.a, e.b): e for e in usable}
+            # the veto looks at every reverse, also one the cycle check rejected: with equal
+            # support the check keeps an arbitrary one of two conflicting directions (L33, seed 8)
+            any_pair = {
+                (e.a, e.b): e for e in (*own.values(), *received.values(), *about_me.values())
+            }
+            veto = self.params.confirm_weak_policy == "veto"
+
+            def confirmed(e: FrameEdge) -> bool:
+                rev = (any_pair if veto else by_pair).get((e.b, e.a))
+                if rev is None:  # no reverse: "veto" uses the estimate, "confirm" waits
+                    return veto
+                return is_consistent(e, [(rev, False)], self.params.cycle_gate)
+
+            self.unconfirmed = {
+                s for s, e in own.items()
+                if s not in self.vetoed and e.n_inliers < weak and not confirmed(e)
+            }  # fmt: skip
+            self.rejected_frames |= {
+                k for k, e in received.items() if e.n_inliers < weak and not confirmed(e)
+            }
+            self.rejected_about_me |= {
+                j for j, e in about_me.items() if e.n_inliers < weak and not confirmed(e)
+            }
+        for s in self.vetoed | self.unconfirmed:
             self.frames.pop((self.id, s), None)
 
     def consistent_frames(self) -> dict[tuple[int, int], FrameEstimate]:
@@ -645,7 +730,7 @@ class AvatarAgent:
             fused.add_scalar_prior(self._bias_key, float(self.local.value(self._bias_key)[0]), 1e-7)
         frame_keys = []
         for sender, pairs in self.alignment_ids.items():
-            if sender in self.vetoed:
+            if sender in self.vetoed or sender in self.unconfirmed:
                 continue
             fkey = ("T", sender)
             init = self.alignments[sender].T_mine_from_remote

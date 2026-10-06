@@ -13,13 +13,14 @@ search on 2026-09-28 (open the PDF before quoting it in the paper) ·
 | Role | Platform | Required sensors (PI) | Also on board | Sim name |
 |---|---|---|---|---|
 | UGV (anchor) | Clearpath **Husky A200** | Velodyne **VLP-16** Puck, Intel RealSense **D435i** | wheel odometry, IMU; RTK-GNSS for ground truth | `ugv_0` |
-| UAV | **Tarot 680 Pro** hexacopter | RealSense **D435i**, **Cube** flight controller (PX4) | Cube IMU and barometer; GNSS (Here-class) for ground truth | `uav_0` |
+| UAV | **Tarot 680 Pro** hexacopter | RealSense **D435i**, Pixhawk **Cube** (hex) flight controller (PX4), **Jetson Nano** companion computer; Velodyne **VLP-16** added (D6, 2026-10-06) | Cube IMU and barometer; GNSS (Here-class) for ground truth | `uav_0` |
 | UUV | Blue Robotics **BlueROV2** | Water Linked **DVL A50**, Tritech **Micron Gemini 720s** | Bar30 depth, IMU/compass, low-light camera, acoustic modem (§3) | `uuv_k` |
 | Surface gateway | quay-side mast or buoy (new) | none (relay only) | topside acoustic modem, Wi-Fi mesh radio, GNSS, UGPS topside | `gw_0` |
 | USV (optional) | Blue Robotics **BlueBoat** | D435i above, Micron Gemini below | GNSS, acoustic modem | `usv_0` |
 
 *Assumptions:* "BlueHOV2" is read as **BlueROV2**, and "Pixkawk Hex Cube" as the
-Hex/ProfiCNC **Cube** (e.g. Cube Orange) running PX4. Both platforms are
+Hex/ProfiCNC **Cube** (e.g. Cube Orange) running PX4 (the PI confirmed a Pixhawk Hex Cube on
+2026-10-06; the exact Cube model is still to be recorded). Both platforms are
 "commonly used" choices, as the PI allowed.
 
 ### Platform facts used by the simulator
@@ -52,6 +53,14 @@ The simulator uses speeds below these maxima: UGV 1.0 m/s, UAV 1.0 m/s, BlueROV2
    3 m altitude. Along the centre line between rows it saw 5 objects in 120 s.
    A light LiDAR (a Livox Mid-360 class unit) would make the UAV a first-class
    mapper. This is an optional upgrade (UNVERIFIED specs; decision D6).
+   **Simulation evidence (docs/LOG.md L31):** with a VLP-16-class LiDAR next to the
+   D435i the Tarot's own SLAM error is 0.10 m in all 30 runs (camera only: one run in
+   ten above 1.5 m) and the team's association stays right (G1 30/30). Check payload
+   and endurance before buying.
+   **Decided (PI, 2026-10-06): a VLP-16 on the Tarot** (D6). It weighs about 0.83 kg
+   (sheet, verify), inside the 1.5–2.5 kg payload together with the D435i and the Jetson
+   Nano, at a cost in flight time; the Nano's software and compute budget is risk R13
+   (T-H1-05). The simulated LiDAR fleet becomes the reference fleet through T-S4-05.
 2. **The UGV carries the team frame.** VLP-16 LIO is the most stable estimator
    in the team, so `ugv_0` is the anchor.
 3. **Heading is the UUV's weak point.** DVL velocity is good, but heading comes

@@ -116,3 +116,17 @@ def test_golden_vectors(repo_root):
             )
         assert codec.encode(msg).hex() == v["hex"], v["name"]
         codec.decode(bytes.fromhex(v["hex"]))  # must decode cleanly
+
+
+def test_measured_footprint_is_never_sent_as_unmeasured():
+    """0 x 0 means "not measured" (spec §3); a tiny measured footprint is sent as one LSB."""
+
+    def roundtrip(ext):
+        rec = codec.LandmarkRecord(1, (0.0, 0.0, 0.0), 0.1, 0.1, ext, 0, 1, 1, ())
+        msg = codec.LandmarkDigest(1, 0, 0, 0, 0, (rec,))
+        return codec.decode(codec.encode(msg)).records[0].extent[:2]
+
+    assert roundtrip((0.05, 0.02, 1.0)) == (0.25, 0.0)
+    assert roundtrip((0.02, 0.1, 1.0)) == (0.0, 0.25)
+    assert roundtrip((0.0, 0.0, 1.0)) == (0.0, 0.0)
+    assert roundtrip((0.6, 0.1, 1.0)) == (0.5, 0.0)

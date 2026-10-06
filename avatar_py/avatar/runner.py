@@ -281,6 +281,25 @@ def run_decentralized(
         "decode_errors": sum(ag.decode_errors for ag in agents.values()),
         "first_alignment_s": first_align,
         "vetoed_alignments": sum(len(ag.vetoed) for ag in agents.values()),
+        # own alignments not used: vetoed by the cycle check or weak and unconfirmed (T-F3-05)
+        "unused_alignments": {i: sorted(ag.vetoed | ag.unconfirmed) for i, ag in agents.items()},
+        # Error of every accepted pairwise alignment vs ground truth (diagnostic).
+        "alignment_errors": {
+            i: {
+                j: dict(
+                    zip(
+                        ("xy_m", "yaw_rad"),
+                        frame_error(
+                            a.T_mine_from_remote,
+                            compose(inverse(_gt_frames(sim)[i]), _gt_frames(sim)[j]),
+                        ),
+                        strict=True,
+                    )
+                )
+                for j, a in ag.alignments.items()
+            }
+            for i, ag in agents.items()
+        },
         "team_connected_s": team_connected_s,
         "gateways": {g: dict(gw.stats) for g, gw in gateways.items()},
     }
@@ -298,9 +317,19 @@ def run_decentralized(
     )
 
 
-def run_centralized(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
-    """Oracle: one graph, ground-truth association, unlimited communication."""
+def run_centralized(
+    scenario: Scenario, sim: SimData, params: AvatarParams, seed: int, robust: bool = False
+) -> RunResult:
+    """Oracle: one graph, ground-truth association, unlimited communication.
+
+    ``robust`` applies the agents' landmark-observation kernel (GNC-TLS,
+    ``params.point_obs_gnc``) in the oracle too. Tier-1 detections of a true part
+    have no gross errors, so the default stays off there; Tier-2 detections of a
+    true part can still be off by up to the labelling radius (partial views).
+    """
     g = FactorGraph()
+    if robust and params.point_obs_gnc is not None:
+        g.set_kernel("point_obs", "gnc", params.point_obs_gnc)
     gt_frames = _gt_frames(sim)
     anchor = scenario.anchor_id
     parts = sim.world.parts

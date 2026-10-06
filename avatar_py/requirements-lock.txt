@@ -1,0 +1,11 @@
+# Pinned Python environment of the paper data (LOG L33). Results depend on the NumPy/SciPy versions
+# (random-number streams), so regenerate paper/data with these. Install: pip install -r avatar_py/requirements-lock.txt -e avatar_py
+iniconfig==2.3.0
+numpy==2.5.3
+packaging==26.3
+pluggy==1.6.0
+Pygments==2.21.0
+pytest==9.1.1
+PyYAML==6.0.3
+ruff==0.15.8
+scipy==1.18.1

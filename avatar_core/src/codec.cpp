@@ -1,6 +1,7 @@
 #include "avatar/comm/codec.hpp"
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <cstring>
 #include <limits>
@@ -157,7 +158,13 @@ Bytes encode(const LandmarkDigest& msg) {
     for (double v : r.position) w.i16(quantSigned16(v, kPosLsbM, "position"));
     w.u8(quantUnsigned8(r.sigma_xy, kSigmaLsbM, "sigma_xy"));
     w.u8(quantUnsigned8(r.sigma_z, kSigmaLsbM, "sigma_z"));
-    for (double v : r.extent) w.u8(quantUnsigned8(v, kExtentLsbM, "extent"));
+    std::array<std::uint8_t, 3> ext{};
+    for (int i = 0; i < 3; ++i) ext[i] = quantUnsigned8(r.extent[i], kExtentLsbM, "extent");
+    // A footprint of 0 x 0 means "not measured" (spec §3): a measured one is sent as one LSB.
+    if (ext[0] == 0 && ext[1] == 0 && std::max(r.extent[0], r.extent[1]) > 0.0) {
+      ext[r.extent[0] >= r.extent[1] ? 0 : 1] = 1;
+    }
+    for (auto e : ext) w.u8(e);
     w.u8(r.class_id);
     w.u8(r.flags);
     w.u8(saturateU8(r.n_obs));

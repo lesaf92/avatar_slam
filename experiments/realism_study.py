@@ -34,6 +34,15 @@ LEVELS = {
     "none": {},
     "low": {"id_switch_prob": 0.05, "clutter_per_kf": 0.5},
     "high": {"id_switch_prob": 0.15, "clutter_per_kf": 1.0},
+    # Persistent errors (LOG L32): a switch lasts a burst of 25 keyframes, as a tracker that
+    # confuses two piles does (L28). Onsets chosen so the share of wrong attributions
+    # matches "low" (4.3 %) and "high" (13.1 %): 4.7 % and about 13 %.
+    "burst_low": {"id_switch_prob": 0.003, "id_switch_persist_kf": 25, "clutter_per_kf": 0.5},
+    "burst_high": {"id_switch_prob": 0.010, "id_switch_persist_kf": 25, "clutter_per_kf": 1.0},
+    # Identity splits: a part seen again after 30 keyframes gets a new identity, so the
+    # revisit closes no loop (LOG L29, L32): for half of the revisits, or for all of them.
+    "split_half": {"id_split_prob": 0.5, "id_split_gap_kf": 30},
+    "split_all": {"id_split_prob": 1.0, "id_split_gap_kf": 30},
 }
 
 
