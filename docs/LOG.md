@@ -71,9 +71,16 @@ at `7a10f5f` (`results/heldout_gap2_{ref,lidar,sonar}.jsonl`). Seed blocks:
    LiDAR-fleet recordings: they are void. The paper data (seeds 0-39, recorded on the old host)
    are not affected: every one of those recordings passes the geometry check.
 
+8. **The veto rule of T-F3-05 on clean held-out seeds** (40-79, threshold 8, `--weak 8 --policy
+   veto` at `7a10f5f`, rows in `results/veto_clean_*.jsonl`, against threshold 0 in
+   `heldout_gap2_*`): it never breaks a run and fixes two (proxy EKF seed 45: 35 -> 36/40; sonar
+   EKF seed 40: 23 -> 24/40); merges, wrong alignments used and every other perception unchanged.
+   With L37 (development seed 8 fixed, Tier 1 unchanged) it is safe but small.
+
 **Recommendation for D13 (PI decides):** report Tier-2 G1 over every clean recording, seeds 0-79
 (development 0-19, held out 20-79), from `heldout_gap2_*`; with ground-truth ids that is 78/80
-(proxy), 68/70 (LiDAR fleet) and 51/60 (sonar).
+(proxy), 68/70 (LiDAR fleet) and 51/60 (sonar). The veto rule (threshold 8) can be made the
+default: no run got worse in any perception or seed set.
 
 ---
 
