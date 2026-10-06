@@ -5,6 +5,80 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-06 (luiz-predator-neo, night): what the EKF's wrong alignments on sonar are made of (Claude)
+
+Branch `wp/T-F3-06-ekf-sonar`; task T-F3-06; development seeds 0-19 only; **simulation**. Defaults
+of D13 (veto rule, threshold 8). Commands at `f7f858e` (outputs in `results/l41/`):
+`experiments/sonar_alignment_anatomy.py {anatomy,history,seeds} [--tracking oracle]
+[--clique-seeds 200]`, `alignment_acceptance_study.py --weak 8 --clique-seeds {40,200,400}`,
+`sonar_tracker_study.py {clutter,minlen,birth,truth} --clique-seeds 200`; at `7b751f2`:
+`sonar_alignment_anatomy.py seeds [--tracking oracle]`, `sonar_tracker_study.py density
+--clique-seeds 200`. All with `--jobs 28`.
+
+### L41. The wrong alignments are a seeding failure of the alignment search; 200 clique seeds take sonar-EKF G1 from 6 to 11 of 20; the rest is BlueROV2 1's tracker
+
+1. **Not clutter.** The 22 wrong cross alignments (BlueROV2 with UGV or UAV) of the sonar-EKF
+   runs are built of real piles matched to the wrong pile: of their inlier pairs 72 % pair two
+   different objects, 4 % involve a clutter landmark, 11 % a split track (right ones: 99 %
+   correct). The receiver gets about the same landmarks as with ground-truth tracks (median 18-19
+   piles, 15 of them its own; 4 clutter), and the same pairs align right with ground-truth tracks.
+2. **Adopted late, not stuck from early on**: at keyframes 360-600; four replaced a right one.
+3. **The true hypothesis is there but never grown.** At the end of the run the true transform
+   is supported as well as the wrong one in several cases (8 against 8, 12 against 11, 13 against
+   9 landmarks within 1 m). Sonar landmarks carry no footprint, so every pair is a candidate:
+   median 934 candidate pairs per cross pair with the EKF's tracks, 386 with ground-truth tracks
+   (where 40 seeds give 80 right alignments and no wrong one). Cliques are grown from the `clique_seeds` = 40 highest-degree candidates; in the denser
+   graph none is a true pair, the true hypothesis is not among the hypotheses, and the ambiguity
+   test has no competitor to see. Re-aligning the final maps of every cross pair (160):
+
+   | clique seeds | 40 | 100 | 200 | 400 | 1000 |
+   |---|---|---|---|---|---|
+   | right | 44 | 52 | 61 | 61 | 60 |
+   | wrong | 11 | 9 | 5 | 4 | 4 |
+   | `align()` median [ms] (at `7b751f2`, idle machine) | 34 | 41 | 56 | 85 | 151 |
+
+4. **Whole runs** (G1, merged; development seeds): 40 / 200 / 400 seeds:
+
+   | Perception | 40 | 200 | 400 |
+   |---|---|---|---|
+   | Tier 1, proxy with ground-truth ids, LiDAR fleet (both) | 20 | 20 | 20 |
+   | proxy, EKF | 19 (20) | 19 (20) | 18 (19) |
+   | sonar, ground-truth ids | 19 (20) | **20** (20) | 20 (20) |
+   | sonar, EKF | 6 (17) | **11** (17) | 11 (17) |
+
+   Sonar-EKF wrong alignments used fall from 35/141 to 13/160. **200 is the choice** (400 loses a
+   proxy-EKF run). It is not made the default yet: it changes every alignment, so it waits for
+   the rest of T-F3-06, one held-out evaluation and one regeneration of the paper data.
+5. **At 200 seeds clutter no longer matters.** Removing every clutter detection with the ground
+   truth: G1 10/20 (L36, at 40 seeds, it gained two runs; the clutter's harm was the candidate
+   graph). Minimum track length 8/12/16/24: 11/7/6/7; the birth-test variants of L36: 5-11/20.
+6. **What is left is BlueROV2 1.** All nine failing runs have BlueROV2 1 off (1.3-30 m) or out of
+   the team; BlueROV2 0 is within the gate in every run. BlueROV2 1 gets half the detections
+   (median 1204 clusters per run against 2650). The EKF given ground-truth identities
+   (`ekf_truth`) reaches G1 15/20 (ground-truth tracks 20/20): association errors cost four runs,
+   the filter five. In the failing seeds the filter, even with ground-truth identities, splits
+   BlueROV2 1's piles (seed 12: 39 tracks for 29 piles; 13: 41 for 30): when its pose is
+   uncertain between sparse fixes, the new-landmark test prefers a duplicate to a match, the
+   duplicates lose the loop closures, and the map drifts.
+7. **The new-landmark test is a trade, not a fix** (`landmark_density_per_m2`; default 0.005):
+
+   | density | 0.005 | 0.002 | 0.001 | 0.0005 |
+   |---|---|---|---|---|
+   | EKF with ground-truth identities | 15 | 18 | 18 | 18 |
+   | EKF | 11 | 10 | 8 | 7 |
+
+   Fewer duplicates help only when identities are known; without them the same setting admits
+   wrong matches. BlueROV2 1, like the camera-only Tarot (L30-L31), sees too few piles per frame
+   to pair them reliably.
+
+**Next (T-F3-06).** Pair detections over a window of keyframes rather than one (the software
+remedy L31 left open for the Tarot), so a sparse sensor gets the joint geometry of several fixes;
+then make 200 clique seeds the default, evaluate once on the held-out seeds and regenerate the
+paper data. The hardware analogue of D6 (a wider or second sonar on that vehicle) is the
+alternative.
+
+---
+
 ## 2026-10-06 (luiz-predator-neo, evening): the paper data under decision D13 (Claude)
 
 Branch `wp/T-E3-03-d13-decisions`; task T-E3-03; **simulation**. The PI accepted L39's
