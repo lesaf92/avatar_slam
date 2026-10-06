@@ -5,6 +5,50 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-06 (luiz-predator-neo): held-out seeds 60-79 for the alignment rule (Claude)
+
+Branch `wp/T-F3-05-alignment-acceptance`; task T-F3-05; **simulation**. The evaluation announced
+at the end of L37 ran on 2026-10-02 (rows in `results/alignment_acceptance_heldout3.jsonl`,
+written after commit `a7ccf76`) and was not written up then. The rows do not record the policy;
+re-running two perceptions with `--policy veto` reproduces all 80 of their rows exactly
+(`alignment_acceptance_study.py --seeds 60 ... 79 --weak 0 8 --policy veto --configs "proxy EKF"
+"sonar GT ids"`, 3 min with 28 jobs), so the file is the veto policy at code `cace54f`.
+
+### L38. The veto rule changes nothing on seeds 60-79; fresh seeds fail G1 more often than seeds 0-39
+
+G1 (merged) by threshold, policy "veto"; wrong alignments used, UGV-UAV / cross / BlueROV2 pair:
+
+| Perception | 0 | 8 | Wrong, 0 | Wrong, 8 |
+|---|---|---|---|---|
+| Tier 1 | 20 (20) | 20 (20) | 0/40, 0/120, 0/40 | 0/40, 0/121, 0/40 |
+| proxy, ground-truth ids | 16 (20) | 16 (20) | 4/40, 1/96, 0/40 | 4/40, 1/96, 0/40 |
+| proxy, EKF | 14 (19) | 14 (19) | 6/37, 4/90, 0/40 | 6/37, 4/91, 0/40 |
+| sonar, ground-truth ids | 14 (18) | 14 (18) | 1/35, 6/78, 0/39 | 2/37, 5/78, 0/39 |
+| sonar, EKF | 10 (16) | 10 (16) | 8/36, 12/69, 15/40 | 6/34, 14/72, 15/40 |
+| UAV-LiDAR fleet, ground-truth ids | 16 (20) | 16 (20) | 1/40, 0/102, 0/40 | same |
+| UAV-LiDAR fleet, EKF | 12 (18) | 12 (18) | 4/36, 5/75, 0/40 | same |
+
+Seeds that fail G1 (both thresholds): proxy ground-truth ids 60, 71, 72, 74; LiDAR fleet
+ground-truth ids 60, 61, 65, 70. Median time to merge is the same at 0 and 8 in every row.
+
+**Findings.**
+1. **The veto rule is neutral on fresh seeds**: identical G1 and merges at 0 and 8 in all seven
+   perceptions. Its measured benefit stays on the development seeds (seed 8, L37 item 8), and it
+   costs nothing in Tier 1 (L37 item 9). It is **not** made the default here
+   (`confirm_weak_inliers = 0` in `AvatarParams`): a rule with no held-out effect does not change
+   the paper data on its own; the choice joins the analysis of item 2 (PI, 2026-10-06: what goes
+   into the paper is decided once that analysis gives meaningful results, PLAN D13).
+2. **Fresh seeds are harder, again.** With ground-truth ids on the proxy G1 holds in 40/40 runs
+   of seeds 0-39 and in 31/40 of seeds 40-79 (15/20 and 16/20); Fisher's exact test p = 0.002.
+   The LiDAR fleet with ground-truth ids: 16/20 on 40-59 and 16/20 on 60-79. Tier 1 holds 80/80.
+   Ground-truth ids take the tracker out, so the gap is in perception geometry, the association
+   and acceptance rules, or the seed's world, not in T-F3-02/03. Two things are not yet
+   comparable: seeds 20-39 were last evaluated at an older commit (`paper/data/tier2_heldout.csv`),
+   and the rules were developed while seeds 0-39 were in view. New task **T-E3-02** finds the
+   cause before any paper number changes.
+
+---
+
 ## 2026-10-02 (luiz-predator-neo, later): few-inlier alignment acceptance (Claude)
 
 Branch `wp/T-F3-05-alignment-acceptance`; task T-F3-05; **simulation**. Development seeds 0-19:
