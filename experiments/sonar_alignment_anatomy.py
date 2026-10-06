@@ -38,7 +38,7 @@ import avatar.agent as agent_module
 import avatar.runner as runner
 from avatar.agent import AvatarParams
 from avatar.eval.metrics import frame_error
-from avatar.frontend.association import align
+from avatar.frontend.association import align, candidate_pairs
 from avatar.geometry import compose, inverse, transform_points
 from avatar.tier2.dataset import build_tier2_sim
 from avatar.tier2.frontend import FrontEndParams
@@ -242,7 +242,8 @@ def seeds(job: tuple[int, argparse.Namespace]) -> list[dict]:
             if j not in agents or not _cross(names[i], names[j]):
                 continue
             remote, _ = ag._remote_landmarks(j)
-            row: dict = dict(seed=seed, i=names[i], j=names[j])
+            n_cand = len(candidate_pairs(mine, remote, base)[0])
+            row: dict = dict(seed=seed, i=names[i], j=names[j], n_candidates=n_cand)
             for s in args.compare_seeds:
                 t0 = time.perf_counter()
                 res = align(mine, remote, dataclasses.replace(base, clique_seeds=s))
@@ -306,6 +307,8 @@ def report(mode: str, rows: list[dict], args: argparse.Namespace) -> None:
                 )
         print(dict(c), "| keyframe the final wrong ones were adopted:", sorted(ks))
     else:
+        n_cand = np.median([r["n_candidates"] for r in rows])
+        print(f"candidate pairs per cross pair: median {n_cand:.0f}")
         for s in args.compare_seeds:
             c = collections.Counter(r[f"s{s}"] for r in rows)
             t = [r[f"t{s}"] for r in rows]
