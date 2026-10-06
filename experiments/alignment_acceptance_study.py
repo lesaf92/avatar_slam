@@ -93,6 +93,7 @@ def run_one(job: tuple[int, int, int, str, str]) -> dict:
         "g1": bool(len(ferr) == n_slam - 1 and max(ferr) < 1.0),
         "wrong": dict(wrong), "merge_s": None if t is None or not np.isfinite(t) else float(t),
         "ate_team_m": float(m["ate_team_m"]),
+        "frame_err_m": {names[i]: float(v["xy_m"]) for i, v in m["frame_error"].items()},
     }  # fmt: skip
 
 
