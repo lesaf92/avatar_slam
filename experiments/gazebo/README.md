@@ -70,15 +70,15 @@ for s in 0 1 2 3 4 5 6 7 8 9; do
   python experiments/gazebo/record.py --seed $s --duration 600 \
       --out results/tier2/harbor_fleet_seed$s
 done
-python experiments/gazebo/check_geometry.py results/tier2/harbor_fleet_seed0
 python experiments/tier2_study.py --runs results/tier2 --out results/tier2_study.csv
 ```
 
 A 600 s, 601-keyframe recording of the reference fleet takes about 20 s on an
 RTX 3050 laptop GPU. `check_geometry.py` projects every return with the
 ground-truth pose and measures its distance to the scene primitives; it caught
-a pose/scan off-by-one in the first recorder (docs/LOG.md L28) and must be run
-on every new recording.
+a pose/scan off-by-one in the first recorder (docs/LOG.md L28) and 22 recordings
+one keyframe late (L39). `record.py` runs it on every recording and keeps
+`raw.npz` only if it passes (otherwise `raw.rejected.npz` and a non-zero exit).
 
 ## Front-end regression test without Gazebo
 

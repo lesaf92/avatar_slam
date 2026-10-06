@@ -10,12 +10,14 @@
 //   float32 (little endian). Scan: gz LaserScan ranges (row-major: vertical, horizontal);
 //   depth: R_FLOAT32 image (row-major). +inf = no return.
 //
-// For each keyframe: set every rig pose (/world/<w>/set_pose), step two physics
-// iterations (/world/<w>/control), and keep, for every sensor, the first message
-// whose sim-time stamp reaches the second iteration. The control service replies
+// For each keyframe: set every rig pose (/world/<w>/set_pose), step kStepsPerKeyframe
+// physics iterations (/world/<w>/control), and keep, for every sensor, the first message
+// whose sim-time stamp reaches the last iteration. The control service replies
 // before the steps are executed, so completion is detected from the stamps (a
 // message counter is not enough: late renders of the previous keyframe would
-// be taken for the new one; docs/LOG.md L28).
+// be taken for the new one; docs/LOG.md L28). A render can show the scene of an
+// earlier iteration than its stamp; with two iterations a stray step left whole
+// recordings one keyframe late with on-schedule stamps (LOG L39), so four are stepped.
 //
 // Build: see experiments/gazebo/Makefile. No ROS dependency (AGENTS.md §3).
 
@@ -29,6 +31,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -42,6 +45,8 @@
 #include <gz/transport/Node.hh>
 
 namespace {
+
+constexpr unsigned int kStepsPerKeyframe = 4;  // see the header comment (LOG L39)
 
 struct Sensor {
   std::string topic;
@@ -145,12 +150,24 @@ int main(int argc, char** argv) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  // Let pending renders arrive, then take the current sim time from the stamps.
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-  int64_t sim_ns = 0;
-  for (auto& s : sensors) {
-    std::lock_guard<std::mutex> lk(s->mu);
-    sim_ns = std::max(sim_ns, s->stamp_ns);
+  // Take the sim time only once the world is quiescent: every sensor at the same stamp,
+  // unchanged for a second. Steps requested above may still be queued (the control service
+  // replies first), and a sim time read while they run is too early.
+  int64_t sim_ns = -1;
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    int64_t lo = INT64_MAX, hi = -1;
+    for (auto& s : sensors) {
+      std::lock_guard<std::mutex> lk(s->mu);
+      lo = std::min(lo, s->stamp_ns);
+      hi = std::max(hi, s->stamp_ns);
+    }
+    if (lo == hi && hi == sim_ns) break;
+    sim_ns = hi;
+    if (elapsed() > 180.0) {
+      std::cerr << "gz_recorder: world not quiescent after 180 s\n";
+      return 1;
+    }
   }
   const int64_t step_ns = 1000000;  // physics step of the generated world (1 ms)
 
@@ -164,6 +181,17 @@ int main(int argc, char** argv) {
   }
   const auto t_rec = std::chrono::steady_clock::now();
   for (size_t k = 0; k < n_kf; ++k) {
+    // Every sensor must sit at the expected sim time before the keyframe's steps. If the world
+    // ran ahead (a step still queued), the renders of the previous keyframe would already meet
+    // the target below and be stored as this keyframe's (LOG L39).
+    for (auto& s : sensors) {
+      std::lock_guard<std::mutex> lk(s->mu);
+      if (s->stamp_ns != sim_ns) {
+        std::cerr << "gz_recorder: " << s->topic << " stamped " << s->stamp_ns
+                  << " ns before keyframe " << k << ", expected " << sim_ns << "\n";
+        return 1;
+      }
+    }
     for (size_t r = 0; r < n_rigs; ++r) {
       const double* p = &poses[(k * n_rigs + r) * 4];
       gz::msgs::Pose req;
@@ -183,12 +211,12 @@ int main(int argc, char** argv) {
         return 1;
       }
     }
-    const int64_t target_ns = sim_ns + 2 * step_ns;
-    if (!Step(node, world, 2)) {
+    const int64_t target_ns = sim_ns + kStepsPerKeyframe * step_ns;
+    if (!Step(node, world, kStepsPerKeyframe)) {
       std::cerr << "gz_recorder: step failed at keyframe " << k << "\n";
       return 1;
     }
-    // The render of the second iteration is strictly after the pose update.
+    // The render of the last iteration is after the pose update, with margin.
     const auto deadline =
         std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_s);
     for (;;) {
@@ -207,6 +235,11 @@ int main(int argc, char** argv) {
     sim_ns = target_ns;
     for (size_t i = 0; i < n_sensors; ++i) {
       std::lock_guard<std::mutex> lk(sensors[i]->mu);
+      if (sensors[i]->stamp_ns != target_ns) {  // the world ran ahead of the plan
+        std::cerr << "gz_recorder: " << sensors[i]->topic << " stamped " << sensors[i]->stamp_ns
+                  << " ns at keyframe " << k << ", expected " << target_ns << "\n";
+        return 1;
+      }
       if (sensors[i]->data.size() != sensors[i]->n_values) {
         std::cerr << "gz_recorder: " << sensors[i]->topic << " has " << sensors[i]->data.size()
                   << " values, expected " << sensors[i]->n_values << "\n";
