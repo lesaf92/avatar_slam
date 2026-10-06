@@ -5,6 +5,53 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-06 (luiz-predator-neo, evening): the paper data under decision D13 (Claude)
+
+Branch `wp/T-E3-03-d13-decisions`; task T-E3-03; **simulation**. The PI accepted L39's
+recommendation (D13): the veto rule (threshold 8) by default, Tier 2 over every clean recording,
+seeds 0-79. New recordings, all through the geometry gate: UAV-LiDAR fleet seeds 20-29; DAVE sonar
+seeds 20-39 (share of sonar detections that match a part 0.69 and 0.76, as on the other seeds).
+Paper data at `1666748` (committed as `e485901`): `make -C experiments server cycle bandwidth drift
+realism tier2 tier2-heldout tier2-lidar tier2-sonar tier2-sonar-heldout tables JOBS=28`. Previous
+paper data: `58d11da`.
+
+### L40. G1 over 80 seeds with the veto rule; what the default changed
+
+G1 passes (development 0-19 / held out 20-79 / all):
+
+| Perception | 0-19 | 20-79 | 0-79 |
+|---|---|---|---|
+| Tier 1 | 20/20 | 60/60 | 80/80 |
+| proxy, ground-truth tracks | 20/20 | 58/60 | 78/80 |
+| proxy, EKF | 19/20 | 55/60 | 74/80 |
+| proxy, NN | 8/20 | 38/60 | 46/80 |
+| UAV-LiDAR fleet, ground-truth tracks | | | 78/80 |
+| UAV-LiDAR fleet, EKF | | | 78/80 |
+| sonar images, ground-truth tracks | 19/20 | 51/60 | 70/80 |
+| sonar images, EKF | 6/20 | 30/60 | 36/80 |
+
+1. **Tier 1**: every table is unchanged except realism, whose no-kernel and Huber columns move as
+   L37 item 9 found (default preset, 15 % + 1.0, Huber 0.76 -> 0.54 m; exploration, 15 % + 1.0,
+   Huber 0.75 m with 3/3 merged -> 0.64 m with 2/3); the GNC-TLS column is unchanged. One server
+   value differs in the 15th digit.
+2. **The default on the development seeds** (`tier2.csv`, every tier against `58d11da`): EKF seed 8
+   fixed (frame error 59.5 -> 0.25 m); sonar with ground-truth tracks seed 8 fixed (18 -> 19/20).
+   Among the diagnostic trackers it stops six wrong merges that already failed G1 (registration
+   seeds 0, 1, 5, NN seed 5, NN on the BlueROV2s seed 8, NN on Husky and Tarot seed 12; frame
+   errors 1.3-46 m before) and **breaks one run**: NN on Husky and Tarot, seed 1, 0.28 -> 60.9 m.
+   L39 item 8 ("never breaks a run") holds for the perceptions the paper relies on, not for that
+   diagnostic tier.
+3. **What still fails.** With ground-truth tracks on the proxy and on the LiDAR fleet: BlueROV2 1
+   just above the gate (1.04-1.13 m; seeds 45, 71 and 46, 57). EKF on the proxy: the Tarot (dev 19,
+   held-out 21 and 65: 8-10 m), BlueROV2 1 (71: 1.14 m, 77: 4.1 m), one run with a robot left out
+   (41); no half-revolution flip remains. Sonar images: wrong alignments with 24-61 m frame errors
+   or a robot left out, and one marginal run (seed 10, 1.01 m) with ground-truth tracks; the clutter
+   landmarks of L36 with the EKF (T-F3-06).
+4. Paper text updated to these data (`03894a5`): the reverse-estimate test in the method, the
+   held-out G1 no longer "every run", the sonar paragraph and two tables, a sixth limitation.
+
+---
+
 ## 2026-10-06 (luiz-predator-neo, later): why fresh seeds failed G1 (Claude)
 
 Branch `wp/T-E3-02-heldout-gap`; task T-E3-02; **simulation**. Before: every perception on every
