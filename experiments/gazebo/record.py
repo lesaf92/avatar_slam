@@ -156,7 +156,8 @@ def main() -> None:
     (out / "meta.json").write_text(json.dumps(meta, indent=1, default=float))
     # A recording whose returns miss the scene (pose/scan timing, LOG L39) is never kept as raw.npz.
     with open(out / "geometry_check.txt", "w") as f:
-        check = subprocess.run([sys.executable, str(HERE / "check_geometry.py"), str(out)], stdout=f)
+        cmd = [sys.executable, str(HERE / "check_geometry.py"), str(out)]
+        check = subprocess.run(cmd, stdout=f)
     if check.returncode != 0:
         (out / "raw.npz").rename(out / "raw.rejected.npz")
         raise SystemExit(f"geometry check failed; see {out / 'geometry_check.txt'}")
