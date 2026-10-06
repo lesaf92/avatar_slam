@@ -22,6 +22,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-P1-01 | Manuscript skeleton + bib with status lines | P0 | – | done | Claude · same | `make -C paper` |
 | T-I1-02 | Get CI green on GitHub (ROS 2 job never run before; fix if red) | P0 | T-I1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | All jobs green on `main` (CI run 5) |
 | T-I1-04 | pre-commit hooks (ruff, clang-format, citation check) | P2 | T-I1-01 | todo | | `pre-commit run -a` passes |
+| T-I1-07 | **Joint project and git hygiene**: absorb `heterogeneous_slam` as a donor (PLAN §10), record the PI's decisions of 2026-10-06, push every task branch, open one PR for the stacked branches | P0 | – | in-progress | Claude · `wp/T-I1-07-joint-project` | All `wp/*` branches on GitHub (done 2026-10-06); PR with CI green; sonar recordings copied off the host (PI: the host has one disk); commit-time automation pending the PI |
 
 ## Milestone M1: backbone v1 in the fast sim (target 2026-10-31)
 
@@ -54,20 +55,22 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-S1-06 | UAV sensing at altitude: a longer-range or nadir sensor option (e.g. downward mapping camera) so the UAV can join the team above ~5 m | P1 | – | todo | | `fleet_heights.yaml` connects (LOG L9) |
 | T-E2-06 | Server baseline fairness: landmark-only uplink and adaptive acoustic stride, swept | P1 | T-E2-05 | todo | | CSV over strides/policies in `paper/data/` |
 | T-S4-01 | Scenario YAML (world, team, links) shared by Tier 1 and Tier 2 | P0 | – | todo | | `harbor.yaml` reproduces current harbour |
-| T-S4-02 | Dam-face, offshore-jacket, aliasing-grid scenarios | P1 | T-S4-01 | todo | | Registered in `SCENARIOS` |
+| T-S4-02 | Dam-face, offshore-jacket, aliasing-grid scenarios (geometry reference: `heterogeneous_slam` worlds, PLAN §10) | P1 | T-S4-01 | todo | | Registered in `SCENARIOS` |
+| T-S4-05 | **Reference fleet follows D6**: the UAV-LiDAR variant (`harbor_fleet(uav_lidar=True)`, D435i + VLP-16 on the Tarot) becomes the main fleet in Tier 1 and Tier 2 | P1 | T-E3-02 | todo | | Default flipped with tests; paper data regenerated only after the PI's D13 decision |
 
 ## Milestone M2: ROS 2 + Gazebo end-to-end (target 2026-12-20)
 
 | ID | Task | Pri | Deps | Status | Owner / branch | Acceptance |
 |---|---|---|---|---|---|---|
 | T-I1-06 | **Host: get more disk space and Docker access** (PI action, decision D12): free ≥ 40 GB on `/` (21 GB free now; `results/` regenerable 1.2 GB, of which 0.77 GB caches) or move Docker's `data-root` to another disk; add the user to group `docker` (`sudo usermod -aG docker luiz`) or install rootless `podman` | P0 | – | done | PI · project moved to `luiz-predator-neo`, 2026-09-30 | `docker run --rm --gpus all nvidia/cuda:12.4.1-base-ubuntu22.04 nvidia-smi` works for the agent user (`sg docker -c '…'`) and `df -h /` shows ≥ 40 GB free. Details in `experiments/gazebo/README.md`. **Met on `luiz-predator-neo`** (RTX 4070, about 300 GB free, user in `docker`; LOG L33, L34) |
-| T-I1-03 | Docker image: `ros:jazzy` + Gazebo Harmonic + DAVE (ros2 branch) + PX4 SITL | P0 | T-I1-06 | in-progress | Claude · `wp/T-I1-03-docker-tier2` | `docker compose up` spawns the empty world. **Done:** `avatar-tier2` (ROS 2 Jazzy, Gazebo Harmonic, the pinned Python; the recorder reproduces the old host's recordings exactly) and `avatar-dave` (+ CUDA 12.6 and DAVE's multibeam sonar at `d2121a5`), `docker/tier2.sh`, `experiments/gazebo/sonar_smoke` (LOG L33, L34). **Not done:** PX4 SITL, Clearpath, `docker compose` |
+| T-I1-03 | Docker image: `ros:jazzy` + Gazebo Harmonic + DAVE (ros2 branch) + PX4 SITL | P0 | T-I1-06 | in-progress | Claude · `wp/T-I1-03-docker-tier2` | `docker compose up` spawns the empty world. **Done:** `avatar-tier2` (ROS 2 Jazzy, Gazebo Harmonic, the pinned Python; the recorder reproduces the old host's recordings exactly) and `avatar-dave` (+ CUDA 12.6 and DAVE's multibeam sonar at `d2121a5`), `docker/tier2.sh`, `experiments/gazebo/sonar_smoke` (LOG L33, L34). **Not done:** PX4 SITL, Clearpath, `docker compose` (start from `heterogeneous_slam/docker/docker-compose.yml`, PLAN §10) |
 | T-S2-01 | Gazebo Harmonic harbour world (piles, hulls, quay, buoys) from scenario YAML | P0 | T-S4-01, T-I1-03 | review | Claude · `wp/T-S2-01-gazebo-tier2` | World loads; GT exported. **v0 (ADR-0007):** built from the Python scenario (`avatar.tier2.sdf`), not YAML, and without the Docker image; both deps stay open |
-| T-S2-02 | Spawn the reference fleet in `unified.launch.py`: Husky (`clearpath_simulator`), PX4 SITL hexacopter (Tarot-like), BlueROV2 (DAVE), static gateway, optional BlueBoat | P0 | T-S2-01 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | All move on scripted paths. **v0 done as kinematic sensor rigs** at the Tier-1 ground-truth pose (ADR-0007). Clearpath, PX4 and DAVE vehicles are **blocked** by T-I1-03 (no root / Docker on the lab machine); tracked as T-S2-05 |
+| T-S2-02 | Spawn the reference fleet in `unified.launch.py`: Husky (`clearpath_simulator`), PX4 SITL hexacopter (Tarot-like), BlueROV2 (DAVE), static gateway, optional BlueBoat | P0 | T-S2-01 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | All move on scripted paths. **v0 done as kinematic sensor rigs** at the Tier-1 ground-truth pose (ADR-0007). Clearpath, PX4 and DAVE vehicles are **blocked** by T-I1-03 (no root / Docker on the lab machine); tracked as T-S2-05. Launch skeleton: `heterogeneous_slam` bringup (PLAN §10) |
 | T-S2-03 | Sensor bridges: VLP-16 (`gpu_lidar`), D435i (`rgbd_camera`), Micron Gemini (DAVE multibeam: 90°, 128 beams, 50 m), DVL A50, Bar30, IMU (`ros_gz_bridge`), NED→ENU at the boundary | P0 | T-S2-02 | in-progress | Claude · `wp/T-S2-01-gazebo-tier2` | Topics per `conventions.md` §7. **v0:** VLP-16, D435i depth and a ray-cast Gemini proxy are recorded over gz-transport (`experiments/gazebo/`, geometry check per recording); no ROS bridge yet, DVL/Bar30/IMU come from the Tier-1 odometry models |
 | T-S2-04 | Evaluate LOTUSim as the Tier-2 host (vs. DAVE) | P2 | – | todo | | ADR if adopted |
 | T-S3-01 | ROS 2 comm emulator (`EncodedPacket` gateway enforcing `avatar.comm` models) | P0 | T-C1-01 | todo | | Same stats as Tier 1 on a replay |
-| T-F1-01 | Odometry adapters → 4-DoF increments with covariance | P0 | T-S2-03 | todo | | – |
+| T-F1-01 | Odometry adapters → 4-DoF increments with covariance (starting values: `heterogeneous_slam` `robot_localization` params, PLAN §10) | P0 | T-S2-03 | todo | | – |
+| T-I1-09 | **ADR-0009: Python (`rclpy`) agent nodes for simulation experiments** (proposed): AGENTS.md §2 puts ROS 2 nodes in C++17, but the agent runtime exists only in Python; a C++ port before M2 would gate G-5 on T-B2-01 | P0 | – | review | Claude · `wp/T-I1-07-joint-project` | PI accepts or rejects ADR-0009 |
 | T-F2-01 | Open-vocabulary camera detector + CLIP-family embeddings node | P1 | T-S2-03 | todo | | – |
 | T-F2-02 | LiDAR object clustering → landmark parts | P0 | T-S2-03 | review | Claude · `wp/T-S2-01-gazebo-tier2` | Geometric front-end (`avatar.tier2.frontend`): medium gating, ground removal, Euclidean clustering, circle fits. Extended objects are dropped by default (hull/container centres are biased 2-4 m from one side, LOG L28) |
 | T-F2-03 | Imaging-sonar object extraction (DRACo2-style) | P0 | T-S2-03 | review | Claude · `wp/T-S2-01-gazebo-tier2` | v0 on the **ray-cast proxy** (range-bearing clusters, elevation discarded); no speckle, multipath or shadows, so not yet a substitute for real or DAVE sonar images (T-S2-05) **v1 on DAVE's sonar images:** `avatar.tier2.sonar_image` (LOG L34; first design, tuned on the development seeds 0 and 19) |
@@ -96,6 +99,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-E2-02 | Kimera-Multi baseline adapter | P1 | M2 | todo | | – |
 | T-E2-03 | SlideSLAM baseline adapter | P1 | M2 | todo | | – |
 | T-E2-04 | DRACo-SLAM2 baseline adapter | P1 | M2 | todo | | Runs on underwater subset |
+| T-E2-07 | Scan-level registration comparator (*A&B*-like: sonar scan ↔ LiDAR waterline slice), to set landmark-level association against scan registration; start from `heterogeneous_slam` `sonar_lidar_icp.cpp` (PLAN §10) | P2 | T-S2-05 | todo | | Same seeds and G1 as Tier 2 |
 | T-E2-05 | *A&B*-style centralized server baseline (estimated association, all bytes counted) | P0 | T-X1-01 | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Mode `server` in `runner.py` (`avatar/baselines/centralized_server.py`); LOG L13 |
 | T-E3-01 | Experiment matrix + `make -C experiments paper-data` | P0 | T-E2-* | todo | | Regenerates every paper number |
 | T-E4-01 | Real-data validation (A&B / DRACo2 data, ARACATI, PI's data) | P0 | T-R1-05 | todo | | At least one real sequence |
@@ -103,6 +107,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-H1-01 | Hardware bring-up, ROS 2 Jazzy drivers per platform: `velodyne`, `realsense2_camera`, PX4 uXRCE-DDS, BlueROV2 (ArduSub + MAVROS/BlueOS), Water Linked DVL, Tritech Gemini SDK | P0 | D6 | todo | | Each sensor publishes per `conventions.md` §7 |
 | T-H1-02 | Comm bring-up: 5 GHz mesh + `rmw_zenoh` (only `/avatar/*` shared), M64 modems through T-C6-01, tether ACL (no Avatar traffic) | P0 | T-C6-01 | todo | | Bench test: packets over real M64 |
 | T-H1-03 | Ground truth: RTK for UGV/UAV/gateway, UGPS G2 for UUVs, survey of pile tops and quay | P0 | D6 | todo | | GT logs with uncertainty |
+| T-H1-05 | **Tarot compute and payload** (R13): ROS 2 Jazzy on the Jetson Nano (JetPack 4.6 is Ubuntu 18.04: container or module swap), CPU and memory budget for VLP-16 + D435i drivers, odometry, front-end and agent; payload and endurance with the VLP-16 | P1 | D6 | todo | | Measured budget on the device; flight time with the full payload |
 | T-H1-04 | Verify every UNVERIFIED spec in `docs/hardware.md` (Gemini vertical aperture, M64 frame size, X150 payload rate) | P1 | – | todo | | Table updated with datasheet sources |
 | T-P2-01 | Introduction + related work from the ledgers | P1 | T-R1-01 | todo | | – |
 | T-P3-01 | Method sections (formal statement of the no-double-counting property) | P1 | – | in-progress | Claude · `claude/relaxed-ramanujan-bzrqyd` | – |
@@ -114,7 +119,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 
 | ID | Task | Pri | Deps | Status | Owner / branch |
 |---|---|---|---|---|---|
-| T-N1-01 | Per-agent 3DGS submaps anchored to keyframes (camera, then LiDAR depth) | P2 | M2 | todo | |
+| T-N1-01 | Per-agent 3DGS submaps anchored to keyframes (camera, then LiDAR depth); design input for T-N1 … T-N4: `heterogeneous_slam` (PLAN §10) | P2 | M2 | todo | |
 | T-N2-01 | Imaging-sonar rasterizer (range–azimuth) | P2 | T-N1-01 | todo | |
 | T-N3-01 | Decentralized submap exchange + uncertainty-weighted merge | P2 | T-N1-01 | todo | |
 | T-N4-01 | Open-vocabulary feature field | P2 | T-N1-01 | todo | |
@@ -126,6 +131,8 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-R1-03 | Monthly novelty re-search (next: 2026-10-28) | P1 | – | todo (recurring) | |
 
 ## Notes / hand-offs
+
+- *2026-10-06 (Claude, T-I1-07, joint project):* **`~/heterogeneous_slam` is now an archive that donates parts** (PLAN v2.0 §10, with the main and specific goals G-1 … G-9); it is a local git repository with a README that points here. PI decisions recorded: D3 and D7 (Luiz Eugenio Santos Araujo Filho, ITA; the manuscript's author note says so), D2 and D6 (Tarot 680 with a Jetson Nano, a Pixhawk Cube and a D435i, plus a VLP-16), D13 (paper content after the analysis). All `wp/*` branches were pushed (they were local only since 2026-09-28) and one PR carries the stack to `main`. Checks before the push: `pytest` 170 passed, `ruff` clean, `ctest` 11/11 (with `nlohmann-json3-dev` unpacked locally: the host still lacks it). **PI actions:** copy `results/tier2/*/sonar.npz` (2.9 GB, not bit-reproducible) off the host, which has one disk; review and merge the PR; accept or reject ADR-0009. **Next for agents:** T-E3-02 (P0), then T-F3-06.
 
 - *2026-09-30 (Claude, host blocker):* **[Resolved 2026-09-30, see the next note.] Waiting on the PI: T-I1-06 (more disk space, Docker access).** T-S2-05 and T-I1-03 cannot start without it; nothing else is blocked. Until it is done, agents keep disk use small (no new recordings beyond what a task needs; `results/` is git-ignored and regenerable). Free list, quickest first: `results/**/detections*.pkl` (767 MB of caches), `results/tier2*/*/raw.npz` (452 MB, `make tier2-record` re-creates them at about 22 s each), then space elsewhere on `/` (about 425 GB in use, not in this repository).
 - *2026-09-30 (Claude, host moved):* **T-I1-06 is met.** The project runs on `luiz-predator-neo` (i9-14900HX, 32 threads; RTX 4070 8 GB; about 300 GB free; Docker with the GPU); the old machine's copy is stale, do not use it. Compute differs, so re-measure timings before reusing old estimates. Learned there: results depend on the NumPy version, so `avatar_py/requirements-lock.txt` is the reference environment (LOG L33); the images and how to build them are in `experiments/gazebo/README.md`; DAVE's sonar passes its smoke test (LOG L34). Open: T-S2-05 steps 2-6, T-F3-05, T-S1-10.

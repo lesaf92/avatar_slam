@@ -5,9 +5,9 @@ underwater robot teams.*
 
 | | |
 |---|---|
-| **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho (repository owner) |
+| **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho, ITA (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v1.9 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v2.0 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -44,8 +44,8 @@ underwater robot teams.*
    medium-aware communication + cross-medium association) goes to **RA-L**,
    with an IROS 2027 option (target submission ≈ 2027-03-01). Paper B (full
    system + neural layer + field data) goes to **T-RO**, ≈ 2027-Q4.
-6. **Fleet (decided).** Husky (VLP-16 + D435i), Tarot 680 (D435i + Cube), and
-   BlueROV2 (DVL A50 + Micron Gemini 720s). A quay-side **surface gateway**
+6. **Fleet (decided).** Husky (VLP-16 + D435i), Tarot 680 hexacopter (D435i + VLP-16,
+   Pixhawk Cube, Jetson Nano), and BlueROV2 (DVL A50 + Micron Gemini 720s). A quay-side **surface gateway**
    relays between the Wi-Fi mesh and the acoustic modems (Water Linked M64,
    64 bps). The BlueROV2 tether never carries SLAM traffic. See
    [`hardware.md`](hardware.md).
@@ -127,7 +127,7 @@ separated by `‖` can run **in parallel** by different agents.
 - **S1 (done v0).** Fast Python multi-domain simulator: harbour world, 4 domains,
   LiDAR, camera, imaging-sonar, and odometry models, and a comm network.
 - **S2 (v0 done as ADR-0007 rigs; DAVE/PX4/Clearpath open, T-S2-05).** Gazebo Harmonic multi-domain world with the reference fleet: Husky
-  (`clearpath_simulator`, VLP-16 + D435i), PX4 SITL hexacopter (D435i), BlueROV2
+  (`clearpath_simulator`, VLP-16 + D435i), PX4 SITL hexacopter (D435i + VLP-16, D6), BlueROV2
   (DAVE, Gemini-configured multibeam, DVL), a static surface gateway, and an
   optional BlueBoat. A single `unified.launch.py` spawns all of them.
 - **S3.** ROS 2 comm emulator: a gateway node that enforces the `avatar.comm`
@@ -227,7 +227,7 @@ separated by `‖` can run **in parallel** by different agents.
 |---|---|---|---|
 | **M0** | 2026-10-05 | Foundation: rules, plan, v0 sim + backbone + codec, CI | CI green; `avatar.cli compare` runs |
 | **M1** | 2026-10-31 | Backbone v1 in the fast sim: robust association (X2), VoI scheduler (C2), gateway (C3); first ablations. Gazebo world spawns all 4 domains (S2) | H1/H2 trends visible in the fast sim |
-| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28-L33, pinned environment):** passes on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy): 40 of 40 seeds (development 0-19, held-out 20-39). With a realistic front-end (an EKF-SLAM tracker over the agent's own estimate, with joint pairing): 18/20 development and 18/20 held-out seeds (the dead-reckoning NN tracker: 8/20 and 11/20); with a UAV LiDAR, 30/30. A 20-seed count moves by about two runs with the NumPy version, and two of the failures are a wrong few-inlier alignment (T-F3-05). **Repeated on DAVE's sonar images (T-S2-05, development seeds, LOG L34-L35): with ground-truth intra-agent ids G1 holds in 18/20 runs (proxy 20/20), after fixing two pipeline defects (T-F2-06); with the EKF tracker in 6/20 (T-F3-06). Not yet met with a realistic front-end; held-out seeds not recorded with the sonar** |
+| **G1** | 2026-11-30 | **Go/No-Go:** cross-medium association works on Gazebo (DAVE) sonar data | Frame error < 1 m on the Gazebo Harbour. If not, re-scope C2 to USV-bridged association only. **Preliminary (2026-09-30, LOG L28-L33, pinned environment):** passes on Tier 2 with ground-truth intra-agent tracks (kinematic rigs, sonar proxy): 40 of 40 seeds (development 0-19, held-out 20-39). With a realistic front-end (an EKF-SLAM tracker over the agent's own estimate, with joint pairing): 18/20 development and 18/20 held-out seeds (the dead-reckoning NN tracker: 8/20 and 11/20); with a UAV LiDAR, 30/30. A 20-seed count moves by about two runs with the NumPy version, and two of the failures are a wrong few-inlier alignment (T-F3-05). **Repeated on DAVE's sonar images (T-S2-05, development seeds, LOG L34-L35): with ground-truth intra-agent ids G1 holds in 18/20 runs (proxy 20/20), after fixing two pipeline defects (T-F2-06); with the EKF tracker in 6/20 (T-F3-06). Not yet met with a realistic front-end; held-out seeds not recorded with the sonar** **Fresh seeds 40-79 (LOG L37-L38): with ground-truth ids on the proxy 31/40 (seeds 0-39: 40/40, p = 0.002); the cause is open (T-E3-02)** |
 | **M2** | 2026-12-20 | ROS 2 end-to-end (front-ends → backbone → comm emulator); baselines on air/ground and underwater subsets | Full experiment matrix runs unattended |
 | **M3** | 2027-02-10 | Paper A: experiments + real-data validation + draft | Internal review passed |
 | **M4** | ≈ 2027-03-01 | **Paper A submission** (RA-L + IROS 2027 option; verify the deadline) + arXiv | Submitted |
@@ -269,7 +269,8 @@ and M6 moves to ≈ 2027-06, with the neural layer scoped down.
 | R3 | No real multi-domain field experiment | M | M | Reference fleet exists (ADR-0006). Still needed: modems, UGPS, RTK and a site (T-H1-*). Fall back to real single-medium datasets; label sim vs. real | E |
 | R8 | 64 bps acoustic too slow to connect the team within one BlueROV2 battery | M | H | Token buckets + descriptor stripping (done), VoI scheduler (T-C2-01), SeaTrac X150 upgrade path, longer exchange periods under water | C |
 | R9 | UUV heading drift near steel piles (compass) | H | M | Model it in sim (yaw bias); cross-medium constraints; report it as a motivating result | X |
-| R10 | D435i-only UAV contributes few landmarks (≤ 6 m depth) | H | L | Stand-off inspection paths; optional light LiDAR (D6) | S |
+| R10 | D435i-only UAV contributes few landmarks (≤ 6 m depth) | H | L | **Decided (D6, 2026-10-06): a VLP-16 on the Tarot**; the simulated LiDAR fleet is the evidence (LOG L31). Residual: payload and endurance (T-H1-05) | S |
+| R13 | The Tarot's companion computer is a Jetson Nano: its last JetPack (4.6, Ubuntu 18.04) predates ROS 2 Jazzy, and 4 GB / 4 Cortex-A57 cores must run the VLP-16 and D435i drivers, odometry, the front-end and the agent (verify on the device) | M | M | ROS 2 Jazzy in a container on the Nano, or offload LIO to the Cube + a lighter odometry; measure the budget in T-H1-05 before field work; an Orin-class module is the fallback | H |
 | R4 | Perceptual aliasing in regular pile grids yields wrong alignments | M | H | PCM/GNC + object-graph matching (X2); the Aliasing scenario as a gate | X |
 | R11 | **Intra-agent** association fails when the pose uncertainty approaches the spacing of similar landmarks (Tier 2: BlueROV2 drift 8-10 m vs. 8 m between pier rows), and the damage is mostly duplicate landmarks (lost loop closures), which no robust kernel repairs (Tier 1 confirms it, LOG L32) | M | H | Joint-covariance EKF tracker with joint pairing (T-F3-02/03, done: fresh-seed G1 6/10 → 9/10); the UAV's sparse-fix aliasing (T-F3-04) is the residual; structured errors in Tier 1 (T-S1-09, done: LOG L32) | F, X |
 | R12 | Tier-2 results rest on proxies (kinematic rigs, ray-cast sonar) until DAVE's sonar images, and PX4 and Clearpath if they are added, are recorded; the host now has Docker and a GPU (T-I1-06 done) | H | M | DAVE sonar recording and front-end (T-S2-05, ADR-0008); PX4 and Clearpath deferred; label Tier-2 results as kinematic rigs and sonar proxy everywhere until then | I, S |
@@ -309,19 +310,60 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 | ID | Decision | Options | Status |
 |---|---|---|---|
 | D1 | Venue | RA-L or T-RO | **Decided (PI, 2026-09-28):** aim for RA-L or T-RO. Plan: Paper A → RA-L (+IROS'27 option), Paper B → T-RO |
-| D2 | Hardware | – | **Decided (PI):** Husky + VLP-16 + D435i; Tarot 680 + D435i + Cube; BlueROV2 + DVL A50 + Micron Gemini 720s. Comm stack delegated to Claude and decided in ADR-0006 |
-| D3 | Authors | – | **Decided (PI):** sole confirmed author Luiz Eugenio Santos Araujo Filho. Affiliation still to be given. Contacting *A&B* / DRACo authors for data remains open |
-| D4 | Compute | GPU workstation for Gazebo + 3DGS | Open. Needed by M1 |
+| D2 | Hardware | – | **Decided (PI):** Husky + VLP-16 + D435i; Tarot 680 + D435i + Cube; BlueROV2 + DVL A50 + Micron Gemini 720s. Comm stack delegated to Claude and decided in ADR-0006. **Updated (PI, 2026-10-06):** the Tarot 680 hexacopter carries a Jetson Nano companion computer, a Pixhawk Cube (hex) and a D435i; a VLP-16 is added (D6) |
+| D3 | Authors | – | **Decided (PI, 2026-10-06):** Luiz Eugenio Santos Araujo Filho (ITA), for now the only author. Contacting *A&B* / DRACo authors for data remains open |
+| D4 | Compute | GPU workstation for Gazebo + 3DGS | **Resolved with D12:** `luiz-predator-neo` (RTX 4070 8 GB, Docker with the GPU) |
 | D5 | Scenario priority | Harbour first vs. Dam first | Harbour (it matches A&B for comparison) |
-| D6 | Purchases for field work | M64 modems, UGPS G2, mesh radios, RTK; optional BlueBoat and a UAV LiDAR | Open. **Evidence (LOG L31): the UAV LiDAR removes the tracker's recurrent failure in simulation (G1 30/30, Tarot alone 0.10 m), so it is the first item to buy.**  See [`hardware.md`](hardware.md) §6 |
-| D7 | Affiliation / funding line for the paper | – | Open |
+| D6 | Purchases for field work | M64 modems, UGPS G2, mesh radios, RTK; optional BlueBoat and a UAV LiDAR | Open. **Evidence (LOG L31): the UAV LiDAR removes the tracker's recurrent failure in simulation (G1 30/30, Tarot alone 0.10 m), so it is the first item to buy.**  See [`hardware.md`](hardware.md) §6. **UAV LiDAR decided (PI, 2026-10-06): a VLP-16 on the Tarot.** Modems, UGPS, mesh radios and RTK remain open |
+| D7 | Affiliation / funding line for the paper | – | **Affiliation decided (PI, 2026-10-06): ITA.** Funding line open |
 | D8 | Scope of H1 (drift correction) | All drift vs. small drift | **Decided (PI, 2026-09-28):** claim correction only for small drift (solo AUV drift ≲ 1 m over the mission); metre-level correction is later work (T-X1-03). LOG L20–L23 |
 | D9 | AUV heading model | Compass-aided (bias-free) vs. gyro-integrated (bias) | **Decided (PI, 2026-09-28):** if heading is mostly magnetometer-based, ignore the bias; if the magnetometer is unreliable (steel in harbours), model it. See LOG L24 |
 | D10 | Robust estimation | Huber vs. certifiable / GNC methods | **PI guidance (2026-09-28):** adopt Carlone-group robust estimation (graduated non-convexity) where it helps; decide the default from data (LOG L25) |
 | D11 | Hypothesis targets | Pass/fail thresholds vs. reference values | **Decided (PI, 2026-09-28):** numeric targets in H1–H3 are ideal reference values for comparison; the paper reports measured gains and their trend, step by step |
 | D12 | Host resources for the Docker route (DAVE, PX4, Clearpath) | ≥ 40 GB free on `/` (now 21 GB) or Docker `data-root` on another disk; user in group `docker` (or rootless `podman`) | **Resolved 2026-09-30 (PI).** The project moved to `luiz-predator-neo`: about 300 GB free, user in group `docker`, GPU in containers. T-I1-03 and T-S2-05 are unblocked |
+| D13 | What the paper reports: seed sets (0-39 or 0-79), estimator defaults (the veto rule of T-F3-05), reference fleet (camera-only or LiDAR UAV) | – | **Decided (PI, 2026-10-06):** decided once the analysis gives meaningful results (T-E3-02), not before. Until then paper data are not regenerated for these choices |
 
-## 10. Changelog
+## 10. Joint project with `heterogeneous_slam` and goals (2026-10-06)
+
+`~/heterogeneous_slam` (local only, no remote) is the first scoping of the same paper, written on
+2026-09-28: UAV + UGV + AUV, 3D Gaussian Splatting submaps, UDON-style consensus, DINOv2/CLIP
+semantics, sonar-LiDAR-camera registration. Its factual claims are corrected in
+[`research/gap_analysis.md`](research/gap_analysis.md) §2, and its workspace never built. It is now
+an **archive that donates parts** to this repository; nothing is developed there. A part enters
+only through the task named below, adapted to this repository's contracts (the naming of
+[`conventions.md`](conventions.md) §7 replaces its `robot_<domain>_<id>` schema).
+
+| Part (paths under `~/heterogeneous_slam/`) | Enters through | How |
+|---|---|---|
+| `ros2_ws/src/heterogeneous_bringup/launch/{unified,air,ground,underwater}.launch.py` | T-S2-02 | Skeleton of `unified.launch.py`: a PX4 hexacopter instead of `gz_x500`, the `clearpath_simulator` Husky, a DAVE (`d2121a5`) BlueROV2 instead of uuv_simulator |
+| `docker/docker-compose.yml` (discovery server, headless Gazebo service) | T-I1-03 | Compose file over the existing `avatar-tier2` and `avatar-dave` images |
+| `ros2_ws/src/heterogeneous_bringup/params/{ekf_auv,ekf_ugv,slam_toolbox_ugv}.yaml` | T-F1-01 | Starting values for the odometry adapters (`robot_localization`) |
+| `ros2_ws/src/heterogeneous_bringup/worlds/{harbor_inspection,offshore_platform}.sdf` | T-S4-02 | Geometry reference for the dam-face and offshore scenarios (the PI's 2022 dam inspection); worlds are generated from Python scenarios here, and these files point to missing assets |
+| `ros2_ws/src/heterogeneous_slam_core/src/cross_modal_registration/sonar_lidar_icp.cpp` | T-E2-07 | Starting point of a scan-level registration comparator |
+| `heterogeneous_msgs/msg/{Submap,ConsensusState,SemanticEntity}.msg`, `srv/QuerySemanticMap.srv`, `camera_sonar_association.cpp`, `PROJECT_PLAN.md` §3 (phases 3-4), §6-§7 | T-N1-01 … T-N4-01 (Paper B, gate G2) | Design input for the neural layer; new messages need an ADR (ADR-0005) |
+| `ros2_ws/src/heterogeneous_benchmarks/config/baseline_configs.yaml` | T-E2-01 … T-E2-04 | Baseline list; GRAND-SLAM, MAGiC-SLAM and MNE-SLAM are neural baselines for Paper B |
+| Everything else (headers without code, `run_benchmarks.py`, its CI and Dockerfiles, `uuv_simulator_ros2/`, its topic and TF schema) | – | Not used: superseded here |
+
+**Main goal.** Publish Avatar SLAM, a decentralized SLAM system that builds one map from aerial,
+ground and underwater robots by linking structures that cross the waterline, over links down to
+64 bit/s: Paper A to RA-L (≈ 2027-03-01) and Paper B, with the neural layer and field data, to
+T-RO (≈ 2027-11), with open code and an open benchmark.
+
+| # | Specific goal | Measure | Due | Tasks |
+|---|---|---|---|---|
+| G-1 | No work on one disk only | Every task branch on GitHub, CI green on the open PR, the sonar recordings (`results/tier2/*/sonar.npz`, 2.9 GB, not bit-reproducible) copied off the host | 2026-10-07 | T-I1-07 |
+| G-2 | Held-out results understood | The cause of the fresh-seed G1 gap named; a recommendation for D13 | 2026-10-20 | T-E3-02 |
+| G-3 | Realistic sonar front-end | DAVE sonar with the EKF tracker: G1 ≥ 16/20 development seeds, then one held-out evaluation | 2026-10-31 (M1) | T-F3-06 |
+| G-4 | H2 settled | Bandwidth and loss sweep (100 bit/s to 10 kbit/s) in `paper/data`; H2 kept, reworded or dropped | 2026-10-31 (M1) | T-C2-01, T-C5-01 |
+| G-5 | ROS 2 end to end in Gazebo | `unified.launch.py` runs the reference fleet (DAVE sonar) with agent nodes and the comm emulator; the same G1 as the offline Tier-2 pipeline on the same seeds | 2026-12-20 (M2) | T-S2-02, T-S3-01, T-I1-09 |
+| G-6 | Fair baselines | ≥ 2 external baselines (Swarm-SLAM on air/ground, DRACo-SLAM2 underwater) and the *A&B*-style server, on the same inputs | 2027-01-31 | T-E2-01 … T-E2-04 |
+| G-7 | Real data | ≥ 1 real sonar sequence through the front-end | 2027-02-10 (M3) | T-R1-05, T-E4-01 |
+| G-8 | Paper A submitted | No UNVERIFIED cited entry; Reviewer-2 checklist ticked | ≈ 2027-03-01 (M4) | T-R1-04, T-P* |
+| G-9 | Neural layer go/no-go | Per-agent 3DGS submaps beat single-agent geometry (Chamfer) on ≥ 1 scenario | 2027-04-15 (G2) | T-N1-01 … |
+
+## 11. Changelog
+
+- **v2.0 (2026-10-06).** Joint project: `heterogeneous_slam` becomes an archive that donates parts (§10), with the main and specific goals. PI decisions: authors and affiliation (D3, D7: Luiz Eugenio Santos Araujo Filho, ITA), the Tarot carries a Jetson Nano, a Pixhawk Cube and a D435i, plus a VLP-16 (D2, D6); paper content is decided after the analysis (D13). New risk R13 (Jetson Nano), new tasks T-E3-02 (fresh seeds fail G1 more often, LOG L38), T-I1-07, T-I1-09 (ADR-0009, proposed), T-E2-07, T-S4-05, T-H1-05. All task branches pushed to GitHub.
 
 - **v1.9 (2026-10-01).** T-F2-06 (LOG L35): L34's failure on sonar images was two pipeline defects (footprint ranking in the association; stale sonar frames); with ground-truth ids G1 is 18/20 on sonar images. Wire format v0: a footprint of 0 x 0 means "not measured" (bytes and golden vectors unchanged). New task T-F3-06 (EKF tracker on sonar).
 - **v1.8 (2026-09-30).** DAVE's sonar in Tier 2 (LOG L34, ADR-0008): the recording pass, the sonar-image detector, and the first repetition of G1 on its images: not met on the development seeds (2/20 teams merge with ground-truth ids). R2 raised to H likelihood; new task T-F2-06; the re-scope clause of G1 is left to the PI.
