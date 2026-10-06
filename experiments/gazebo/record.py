@@ -8,7 +8,8 @@ starts ``gz sim`` headless (paused) and the C++ recorder ``gz_recorder``
 
 1. moves each kinematic sensor rig to its ground-truth pose
    (``/world/<w>/set_pose``),
-2. steps the world by two physics iterations (``/world/<w>/control``),
+2. steps the world by four physics iterations (``/world/<w>/control``; two left whole
+   recordings one keyframe late after a stray step, docs/LOG.md L39),
 3. stores the next scan/depth image of every sensor.
 
 Output: ``<out>/raw.npz`` (ranges as float16, one array per agent/sensor,
