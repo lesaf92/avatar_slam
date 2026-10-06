@@ -69,11 +69,18 @@ def surface_distance(p: np.ndarray, world) -> np.ndarray:
     return best
 
 
-def main() -> None:
+# Largest share of returns farther than 0.2 m from any surface in an accepted recording. Clean
+# recordings of seeds 0-79 stay at <= 3 % (LiDAR, depth) and <= 8.2 % (sonar proxy); recordings
+# one keyframe late reach 13-47 % and 47-63 % (docs/LOG.md L39).
+MAX_OFF = {"lidar": 0.10, "depth": 0.10, "sonar": 0.25}
+
+
+def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("run_dir")
     ap.add_argument("--every", type=int, default=10, help="check every n-th keyframe")
     args = ap.parse_args()
+    failed = []
     run = Path(args.run_dir)
     meta = json.loads((run / "meta.json").read_text())
     scenario, sim = make_sim(
@@ -94,11 +101,16 @@ def main() -> None:
         if len(d) == 0:
             print(f"{key:28s} {0:9d}")
             continue
+        off = float(np.mean(d > 0.2))
         print(
-            f"{key:28s} {len(d):9d} {np.median(d):11.4f} {np.percentile(d, 95):8.4f} "
-            f"{np.mean(d > 0.2):7.1%}"
+            f"{key:28s} {len(d):9d} {np.median(d):11.4f} {np.percentile(d, 95):8.4f} {off:7.1%}"
         )
+        if off > MAX_OFF[spec.kind]:
+            failed.append(key)
+    if failed:
+        print(f"FAIL: returns off the scene geometry ({', '.join(failed)}): pose/scan timing?")
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

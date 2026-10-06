@@ -29,6 +29,7 @@
 #include <chrono>
 #include <cmath>
 #include <condition_variable>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -145,12 +146,25 @@ int main(int argc, char** argv) {
     std::this_thread::sleep_for(std::chrono::milliseconds(100));
   }
 
-  // Let pending renders arrive, then take the current sim time from the stamps.
-  std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-  int64_t sim_ns = 0;
-  for (auto& s : sensors) {
-    std::lock_guard<std::mutex> lk(s->mu);
-    sim_ns = std::max(sim_ns, s->stamp_ns);
+  // Take the sim time only once the world is quiescent: every sensor at the same stamp,
+  // unchanged for a second. Steps requested above may still be queued (the control service
+  // replies first); a sim time read while they run is too early, and every keyframe is then
+  // recorded one render late (docs/LOG.md L39: seeds 40-79 under GPU load).
+  int64_t sim_ns = -1;
+  for (;;) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    int64_t lo = INT64_MAX, hi = -1;
+    for (auto& s : sensors) {
+      std::lock_guard<std::mutex> lk(s->mu);
+      lo = std::min(lo, s->stamp_ns);
+      hi = std::max(hi, s->stamp_ns);
+    }
+    if (lo == hi && hi == sim_ns) break;
+    sim_ns = hi;
+    if (elapsed() > 180.0) {
+      std::cerr << "gz_recorder: world not quiescent after 180 s\n";
+      return 1;
+    }
   }
   const int64_t step_ns = 1000000;  // physics step of the generated world (1 ms)
 
@@ -207,6 +221,11 @@ int main(int argc, char** argv) {
     sim_ns = target_ns;
     for (size_t i = 0; i < n_sensors; ++i) {
       std::lock_guard<std::mutex> lk(sensors[i]->mu);
+      if (sensors[i]->stamp_ns != target_ns) {  // the world ran ahead of the plan
+        std::cerr << "gz_recorder: " << sensors[i]->topic << " stamped " << sensors[i]->stamp_ns
+                  << " ns at keyframe " << k << ", expected " << target_ns << "\n";
+        return 1;
+      }
       if (sensors[i]->data.size() != sensors[i]->n_values) {
         std::cerr << "gz_recorder: " << sensors[i]->topic << " has " << sensors[i]->data.size()
                   << " values, expected " << sensors[i]->n_values << "\n";

@@ -55,15 +55,13 @@ T2LIDAR     ?= $(shell seq 0 19) $(shell seq 30 39)
 tier2-record:
 	$(MAKE) -C gazebo
 	for s in $(T2DEV) $(HELDOUT); do \
-		$(PY) gazebo/record.py --seed $$s --duration 600 --out $(T2RUNS)/harbor_fleet_seed$$s; \
-		$(PY) gazebo/check_geometry.py $(T2RUNS)/harbor_fleet_seed$$s --every 30; \
+		$(PY) gazebo/record.py --seed $$s --duration 600 --out $(T2RUNS)/harbor_fleet_seed$$s || exit 1; \
 	done
 
 tier2-record-lidar:
 	for s in $(T2LIDAR); do \
 		$(PY) gazebo/record.py --seed $$s --duration 600 --scenario-arg uav_lidar=true \
-			--out $(T2LIDARRUNS)/harbor_fleet_seed$$s; \
-		$(PY) gazebo/check_geometry.py $(T2LIDARRUNS)/harbor_fleet_seed$$s --every 30; \
+			--out $(T2LIDARRUNS)/harbor_fleet_seed$$s || exit 1; \
 	done
 
 tier2:

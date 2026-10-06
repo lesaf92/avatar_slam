@@ -154,6 +154,12 @@ def main() -> None:
     np.savez_compressed(out / "raw.npz", **arrays)
     meta["wall_time_s"] = time.time() - t_start
     (out / "meta.json").write_text(json.dumps(meta, indent=1, default=float))
+    # A recording whose returns miss the scene (pose/scan timing, LOG L39) is never kept as raw.npz.
+    with open(out / "geometry_check.txt", "w") as f:
+        check = subprocess.run([sys.executable, str(HERE / "check_geometry.py"), str(out)], stdout=f)
+    if check.returncode != 0:
+        (out / "raw.npz").rename(out / "raw.rejected.npz")
+        raise SystemExit(f"geometry check failed; see {out / 'geometry_check.txt'}")
     print(f"[record] wrote {out / 'raw.npz'} in {meta['wall_time_s']:.0f} s")
 
 
