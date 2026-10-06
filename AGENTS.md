@@ -34,7 +34,7 @@ here conflict, stop and ask the PI (repository owner).
 |---|---|---|
 | Documentation, plans, specs, notes | **Markdown** (GitHub-flavoured; diagrams in Mermaid) | `docs/`, `README.md`, package READMEs |
 | Paper manuscript | **LaTeX** (`IEEEtran` journal class) + BibTeX | `paper/` |
-| Real-time / onboard code, ROS 2 nodes | **C++17** (Eigen; `rclcpp` for ROS) | `avatar_core/`, `ros2/` |
+| Real-time / onboard code, ROS 2 nodes | **C++17** (Eigen; `rclcpp` for ROS). Simulation-only nodes may be thin `rclpy` wrappers around `avatar_py` (ADR-0009) | `avatar_core/`, `ros2/` |
 | Research prototypes, simulation, evaluation, learning, tooling | **Python ≥ 3.10** (NumPy/SciPy; PyTorch when learning is needed) | `avatar_py/`, `experiments/`, `tools/` |
 | High-rate / high-quality visualization | **HTML + JS** (ES modules, no build step, pinned CDN versions such as three.js and uPlot) | `viz/` |
 | Glue | CMake, YAML, shell (POSIX `sh`/`bash`), GitHub Actions YAML | anywhere needed |

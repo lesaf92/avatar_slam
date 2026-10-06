@@ -219,6 +219,9 @@ TIER_NAMES = {
     "T2ekf": "Tier 2 (Gazebo), EKF tracker",
     "T2nn-uuv": "Tier 2 (Gazebo), NN on BlueROV2s only",
     "T2nn-land": "Tier 2 (Gazebo), NN on Husky + Tarot only",
+    "T2s": "Tier 2 (Gazebo), DAVE sonar, GT tracks",
+    "T2snn": "Tier 2 (Gazebo), DAVE sonar, NN tracker",
+    "T2sekf": "Tier 2 (Gazebo), DAVE sonar, EKF tracker",
 }
 ROW_NAMES = {  # row labels of the first table (Tier-2 rows sit under one sub-header)
     "T1": "Tier 1 (abstract)",
@@ -228,9 +231,13 @@ ROW_NAMES = {  # row labels of the first table (Tier-2 rows sit under one sub-he
     "T2ekf": "\\quad EKF tracker",
     "T2nn-uuv": "\\quad NN, BlueROV2s only",
     "T2nn-land": "\\quad NN, Husky + Tarot only",
+    "T2s": "\\quad GT tracks",
+    "T2snn": "\\quad NN tracker",
+    "T2sekf": "\\quad EKF tracker",
 }
 TIER_TAGS = {"T1": "One", "T2": "Two", "T2nn": "TwoNN", "T2reg": "TwoReg", "T2ekf": "TwoEKF",
-             "T2nn-uuv": "TwoNNUuv", "T2nn-land": "TwoNNLand"}  # fmt: skip
+             "T2nn-uuv": "TwoNNUuv", "T2nn-land": "TwoNNLand", "T2s": "TwoS", "T2snn": "TwoSNN",
+             "T2sekf": "TwoSEKF"}  # fmt: skip
 AGENT_TIERS = ("T1", "T2", "T2nn", "T2ekf")  # per-robot table: main tiers only (column width)
 FLEET = (("ugv_0", "Husky"), ("uav_0", "Tarot 680"), ("uuv_0", "BlueROV2 0"),
          ("uuv_1", "BlueROV2 1"))  # fmt: skip
@@ -255,6 +262,8 @@ def tier2(csv_name: str = "tier2.csv", suffix: str = "", prefix: str = "tier") -
     for t in tiers:
         if t == "T2":
             lines.append("\\multicolumn{7}{l}{Tier 2 (Gazebo, kinematic rigs, sonar proxy):} \\\\")
+        if t == "T2s":
+            lines.append("\\multicolumn{7}{l}{Tier 2, DAVE's sonar images on the BlueROV2s:} \\\\")
         sel = [r for r in rows if r["tier"] == t]
         merged = sum(int(r["n_connected"]) == int(r["n_slam"]) for r in sel)
         # Median over the runs that merged (a run without a common frame has no time).
@@ -352,7 +361,10 @@ def main() -> None:
                     (lambda: tier2("tier2_heldout.csv", "_heldout", "held"),
                      "tier2_heldout.csv"),
                     (lambda: tier2("tier2_uavlidar.csv", "_uavlidar", "lidar"),
-                     "tier2_uavlidar.csv")):  # fmt: skip
+                     "tier2_uavlidar.csv"),
+                    (lambda: tier2("tier2_sonar.csv", "_sonar", "sonar"), "tier2_sonar.csv"),
+                    (lambda: tier2("tier2_sonar_heldout.csv", "_sonar_heldout", "sonarHeld"),
+                     "tier2_sonar_heldout.csv")):  # fmt: skip
         if (DATA / src).exists():
             fn()
             made.append(src)

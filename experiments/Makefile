@@ -9,13 +9,13 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data all-data tables tier2-heldout2 tier2-lidar-heldout2 server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
+.PHONY: paper-data all-data tables tier2-sonar-heldout server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
 
 paper-data: server cycle bandwidth drift realism tables
 
 # `paper-data` builds the tables from whatever Tier-2 CSVs exist, so the Tier-2 studies come
 # first here and the tables are rebuilt in a second make (a goal that is already made is skipped).
-all-data: paper-data tier2 tier2-heldout tier2-lidar
+all-data: paper-data tier2 tier2-heldout tier2-lidar tier2-sonar tier2-sonar-heldout
 	$(MAKE) tables
 
 server:
@@ -40,17 +40,16 @@ realism:
 # Tier 2 (Gazebo Harmonic): needs a GPU, Gazebo and the recorder (gazebo/README.md).
 # Not part of `paper-data`, which must run without Gazebo; run it explicitly.
 # Seeds 0-19: development set (every design decision was made on them, LOG L29-L31).
-# Seeds 20-39: held-out set, recorded afterwards (20-29 were analysed after their
-# run, 30-39 only ran once). LIDAR: the fleet with a LiDAR on the UAV (LOG L31),
-# recorded into T2LIDARRUNS, on seeds 0-19 and 30-39; the tracker was not tuned for it.
+# Seeds 20-79: held-out set (D13, LOG L39): 20-39 recorded after the tracker's design (20-29
+# were analysed after their run), 40-79 recorded for T-F3-05 (22 of them re-recorded after L39).
+# LIDAR: the fleet with a LiDAR on the UAV (LOG L31), recorded into T2LIDARRUNS on seeds 0-79;
+# the tracker was not tuned for it. SONAR: DAVE's sonar images, a second pass over the runs.
 T2RUNS      ?= ../results/tier2
 T2LIDARRUNS ?= ../results/tier2_uavlidar
 JOBS        ?= 4
 T2DEV       ?= $(shell seq 0 19)
-HELDOUT     ?= $(shell seq 20 39)
-# Seeds 40-59: a second held-out set, recorded for T-F3-05 and evaluated once (LOG L37).
-HELDOUT2    ?= $(shell seq 40 59)
-T2LIDAR     ?= $(shell seq 0 19) $(shell seq 30 39)
+HELDOUT     ?= $(shell seq 20 79)
+T2LIDAR     ?= $(shell seq 0 79)
 
 tier2-record:
 	$(MAKE) -C gazebo
@@ -72,23 +71,15 @@ tier2-heldout:
 	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(HELDOUT) --jobs $(JOBS) \
 		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_heldout.csv
 
-tier2-heldout2:
-	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(HELDOUT2) --jobs $(JOBS) \
-		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_heldout2.csv
-
-tier2-lidar-heldout2:
-	$(PY) tier2_study.py --runs $(T2LIDARRUNS) --seeds $(HELDOUT2) --jobs $(JOBS) \
-		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_uavlidar_heldout2.csv
-
 tier2-lidar:
 	$(PY) tier2_study.py --runs $(T2LIDARRUNS) --seeds $(T2LIDAR) --jobs $(JOBS) \
 		--tiers T1 T2 T2nn T2ekf --out $(DATA)/tier2_uavlidar.csv
 
-# DAVE's multibeam sonar on the development seeds (T-S2-05, ADR-0008, LOG L34). The recording
+# DAVE's multibeam sonar (T-S2-05, ADR-0008, LOG L34). The recording
 # is a second pass over `tier2-record`'s runs in the avatar-dave image (docker/, gazebo/README.md);
 # the study needs no Gazebo. Diagnostics: why the team does not merge on the sonar images.
 tier2-record-sonar:
-	for s in $(T2DEV); do \
+	for s in $(T2DEV) $(HELDOUT); do \
 		AVATAR_TIER2_IMAGE=avatar-dave ../docker/tier2.sh python experiments/gazebo/record_sonar.py \
 			--run-dir results/tier2/harbor_fleet_seed$$s; \
 	done
@@ -96,6 +87,10 @@ tier2-record-sonar:
 tier2-sonar:
 	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(T2DEV) --jobs $(JOBS) \
 		--tiers T2 T2s T2snn T2sekf --out $(DATA)/tier2_sonar.csv
+
+tier2-sonar-heldout:
+	$(PY) tier2_study.py --runs $(T2RUNS) --seeds $(HELDOUT) --jobs $(JOBS) \
+		--tiers T2 T2s T2snn T2sekf --out $(DATA)/tier2_sonar_heldout.csv
 
 sonar-diagnostics:
 	for st in reasons ambiguity noise snap rules; do \
