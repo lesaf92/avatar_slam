@@ -24,13 +24,26 @@ from avatar.agent import AvatarParams
 from avatar.runner import make_sim
 from avatar.sim.measurements import SimData
 from avatar.sim.scenarios import Scenario
-from avatar.tier2 import frontend as frontend_module
-from avatar.tier2 import sonar_image as sonar_image_module
 from avatar.tier2.frontend import FrontEndParams, detections_for_agent
 from avatar.tier2.sdf import DAVE_SONARS, GZ_SENSORS, SONAR_DB_MAX, SONAR_DB_MIN
 from avatar.tier2.sonar_image import SonarFrames
 
 TRACK_ID_STRIDE = 1_000_000
+_PKG = Path(__file__).resolve().parents[1]  # the `avatar` package
+
+
+def frontend_sources() -> list[Path]:
+    """Source files the Tier-2 detections depend on (they key the detection cache).
+
+    The front-end and its tracker, and the scenario and sensor models it reads. Until
+    2026-10-06 only ``frontend.py`` and ``sonar_image.py`` keyed it, so a change to the EKF
+    tracker kept stale caches (no stored cache was affected: LOG L39).
+    """
+    files = [*(_PKG / "tier2").glob("*.py"), *(_PKG / "sim").glob("*.py")]
+    files += [
+        _PKG / f for f in ("frontend/ekf_tracker.py", "geometry.py", "semantics.py", "types.py")
+    ]
+    return sorted(files)
 
 
 def load_meta(run_dir: str | Path) -> dict:
@@ -62,11 +75,9 @@ def build_tier2_sim(
         meta["scenario"], int(meta["seed"]), float(meta["duration_s"]), params,
         **meta["scenario_args"],
     )  # fmt: skip
-    # Cache key: parameters, the front-end source (a code change invalidates it) and the
-    # NumPy/SciPy versions (random-number streams and solvers differ between them, LOG L33).
-    src = (
-        Path(frontend_module.__file__).read_bytes() + Path(sonar_image_module.__file__).read_bytes()
-    )
+    # Cache key: parameters, the source the detections depend on (a code change invalidates it)
+    # and the NumPy/SciPy versions (random-number streams and solvers differ, LOG L33).
+    src = b"".join(p.read_bytes() for p in frontend_sources())
     key = (
         repr(fe_params)
         + hashlib.sha1(src).hexdigest()

@@ -10,7 +10,7 @@ import pytest
 
 from avatar.agent import AvatarParams
 from avatar.runner import make_sim
-from avatar.tier2.dataset import build_tier2_sim
+from avatar.tier2.dataset import build_tier2_sim, frontend_sources
 from avatar.tier2.frontend import FrontEndParams, Tracker, segment
 from avatar.tier2.rays import body_to_world, depth_directions, scan_directions, sensor_points
 from avatar.tier2.sdf import GZ_SENSORS, RaySensorSpec, bridge_yaml, rig_sensors, world_sdf
@@ -230,6 +230,21 @@ def test_build_tier2_sim_keeps_tier1_odometry(tmp_path):
                 assert kf2.detections == []  # no returns -> no detections
     assert stats["ugv_0"]["clusters"] == 0
     assert (tmp_path / "detections_oracle.pkl").exists()
+
+
+def test_detection_cache_key_covers_frontend_imports():
+    # A front-end dependency outside the key would let a code change reuse stale detections.
+    import ast
+    from pathlib import Path
+
+    from avatar.tier2 import frontend
+
+    keyed = {p.resolve() for p in frontend_sources()}
+    root = Path(frontend.__file__).resolve().parents[2]
+    tree = ast.parse(Path(frontend.__file__).read_text())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and (node.module or "").startswith("avatar."):
+            assert root / (node.module.replace(".", "/") + ".py") in keyed, node.module
 
 
 def test_body_to_world():
