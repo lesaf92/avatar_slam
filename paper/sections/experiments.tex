@@ -4,7 +4,8 @@
 
 \subsection{Platforms}
 \draftnote{Reference fleet (docs/hardware.md): Clearpath Husky with a Velodyne VLP-16 and
-RealSense D435i; Tarot 680 hexacopter with a D435i and Cube autopilot (PX4); BlueROV2 with a
+RealSense D435i; Tarot 680 hexacopter with a D435i, a Cube autopilot (PX4) and a Jetson Nano, to
+which a VLP-16 is being added (decision D6); BlueROV2 with a
 Water Linked DVL A50 and Tritech Micron Gemini 720s; quay-side gateway bridging a 5\,GHz Wi-Fi
 mesh and Water Linked M64 acoustic modems (64\,bit/s). The BlueROV2 tether never carries
 Avatar traffic.}
@@ -12,8 +13,9 @@ Avatar traffic.}
 \subsection{Setup}
 \draftnote{Scenarios: Harbor, Dam face, Offshore jacket, Aliasing grid (docs/PLAN.md §6).
 Teams: USV+2AUV; UAV+UGV; full. Tier-1 fast simulator; Tier-2 Gazebo Harmonic with
-kinematic sensor rigs and a ray-cast sonar proxy (ADR-0007; DAVE and PX4 are future work).
-Everything is simulation.}
+kinematic sensor rigs, a ray-cast sonar proxy (ADR-0007) and DAVE's multibeam sonar images
+(ADR-0008); PX4 and Clearpath vehicle models are future work. Seeds 0--19 are the development
+set, 20--79 are held out. Everything is simulation.}
 
 \subsection{Baselines and metrics}
 Independent single-agent SLAM; centralized oracle with ground-truth association; an
@@ -90,6 +92,12 @@ drift is not yet corrected (Sec.~\ref{sec:discussion}).
   \providecommand{\heldTwoEKFGOne}{?}\providecommand{\heldTwoEKFWrong}{?}%
   \providecommand{\heldTwoEKFAvatar}{?}\providecommand{\heldTwoEKFMerged}{?}%
   \providecommand{\heldTwoEKFMedian}{?}\providecommand{\heldTwoMedian}{?}}
+\IfFileExists{data/tier2_sonar_summary.tex}{\input{data/tier2_sonar_summary.tex}}{%
+  \providecommand{\sonarTwoSGOne}{?}\providecommand{\sonarTwoSEKFGOne}{?}}
+\IfFileExists{data/tier2_sonar_heldout_summary.tex}{\input{data/tier2_sonar_heldout_summary.tex}}{%
+  \providecommand{\sonarHeldTwoSGOne}{?}\providecommand{\sonarHeldTwoSEKFGOne}{?}%
+  \providecommand{\sonarHeldTwoSWrong}{?}\providecommand{\sonarHeldTwoSEKFWrong}{?}%
+  \providecommand{\sonarHeldTwoSNNGOne}{?}}
 The same scenario is rendered in Gazebo Harmonic. Each robot is a kinematic sensor rig placed at
 its ground-truth pose at every keyframe, with a VLP-16, a D435i depth camera, and a ray-cast
 proxy for the imaging sonar (no speckle, multipath, or shadows). Odometry, depth, and ground
@@ -98,13 +106,14 @@ gates returns by medium, removes ground and seabed, clusters, and fits circles. 
 such as hulls have no viewpoint-invariant centre and are mostly dropped. Table~\ref{tab:tier2}
 reports \tierTwoRuns{} development seeds, on which every design decision was made, and
 Table~\ref{tab:tier2held} \heldTwoRuns{} further seeds recorded afterwards. With ground-truth
-intra-agent tracks, the team merges in every run (\tierTwoMerged), an accepted alignment is wrong
-in only \tierTwoWrong{} cases on the development seeds, and the frame error of every robot stays below
-1\,m (gate G1, \tierTwoGOne{} development runs, \heldTwoGOne{} held-out). Team ATE is
+intra-agent tracks, the team merges in every development run (\tierTwoMerged), an accepted
+alignment is wrong in only \tierTwoWrong{} cases on the development seeds, and the frame error of
+every robot stays below 1\,m (gate G1) in \tierTwoGOne{} development runs and \heldTwoGOne{}
+held-out runs; the held-out exceptions leave one BlueROV2 just above the gate. Team ATE is
 \tierTwoAvatar\,m against \tierTwoOracle\,m for the oracle, versus \tierOneAvatar\,m and
 \tierOneOracle\,m in Tier 1: the ratio to the oracle is similar, and the absolute error grows
-because noisy clusters replace idealized detections. This does not yet show that G1 holds on
-realistic sonar images, since the proxy is idealized.
+because noisy clusters replace idealized detections. The proxy is idealized; sonar images follow
+below.
 
 Real robots do not know which detection is which, so the front-end must also associate
 detections within one robot. A nearest-neighbour tracker that gates in the dead-reckoning frame
@@ -118,12 +127,13 @@ lets a landmark inform the biases only after it has proved static. It reaches G1
 \tierTwoEKFGOne{} development runs (\tierTwoEKFWrong{} wrong alignments) and \heldTwoEKFGOne{}
 held-out runs (\heldTwoEKFWrong{} wrong). The median held-out team ATE is \heldTwoEKFMedian\,m
 against \heldTwoMedian\,m for ground-truth tracks; the mean, \heldTwoEKFAvatar\,m, is dominated by one
-run. The runs in which it fails involve the Tarot, for two reasons. Its depth camera sees a pile for
+run. Where it fails, the robot off is most often the Tarot. Its depth camera sees a pile for
 a few keyframes at a time, so between fixes its pose uncertainty is of the order of the pile
 spacing, and a new pile is occasionally taken for a mapped one (Sec.~\ref{sec:discussion}); the UAV's
-frame is then several metres off. In other runs it shares only four or five landmarks with the
-ground robot, and the anchor accepts an alignment turned by about half a revolution, which moves
-every other robot by tens of metres. These counts are estimates: they move by about two runs
+frame is then several metres off. The Tarot may also share only four or five landmarks with the
+ground robot, and without the reverse-estimate test of Sec.~\ref{sec:association} the anchor then
+accepted an alignment turned by about half a revolution, which moved every other robot by tens of
+metres; with the test no such run remains. These counts are estimates: they move by about two runs
 when the NumPy version changes, so the environment is pinned in the repository. The remedy is a sensor. With a light LiDAR added to the Tarot
 (the optional upgrade of the fleet, modelled as a VLP-16-class unit), the same tracker, not
 retuned, reaches G1 in \lidarTwoEKFGOne{} of \lidarTwoEKFRuns{} runs with \lidarTwoEKFWrong{}
@@ -131,6 +141,18 @@ wrong alignments (Table~\ref{tab:tier2lidar}), because the Tarot then sees many 
 keyframe and can pair them jointly. The failure is mostly underwater with the simpler tracker
 (Table~\ref{tab:tier2agents}): with it on the BlueROV2s alone G1 holds in \tierTwoNNUuvGOne{}
 development runs, on the Husky and Tarot alone in \tierTwoNNLandGOne{}.
+
+On the BlueROV2s, the ray-cast proxy can then be replaced by DAVE's multibeam sonar images
+(speckle, reverberation and side lobes; Tables~\ref{tab:tier2sonar} and~\ref{tab:tier2sonarheld});
+an image front-end extracts range-bearing blobs, and the other robots are unchanged. With
+ground-truth tracks G1 holds in \sonarTwoSGOne{} development runs and \sonarHeldTwoSGOne{} held-out
+runs (\sonarHeldTwoSWrong{} wrong alignments held-out); the failures are mostly wrong
+cross-medium alignments, with frame errors of tens of metres, or a robot left out of the team. The filter, tuned
+on the proxy, does not transfer: it reaches G1 in \sonarTwoSEKFGOne{} development and
+\sonarHeldTwoSEKFGOne{} held-out runs (\sonarHeldTwoSEKFWrong{} wrong alignments held-out), because
+echoes of the quay face and of hulls slide along those surfaces and become landmarks, and
+alignments on few inliers then go wrong (Sec.~\ref{sec:discussion}). On sonar images, cross-medium
+association with ground-truth tracks mostly holds; intra-agent association does not yet.
 
 \begin{table}[t]
   \centering
@@ -151,7 +173,8 @@ development runs, on the Husky and Tarot alone in \tierTwoNNLandGOne{}.
 \begin{table}[t]
   \centering
   \caption{As Table~\ref{tab:tier2} on the held-out seeds, recorded after every design decision
-  (the tracker parameters, in particular, were fixed on the development seeds).}
+  (the tracker parameters, in particular, were fixed on the development seeds; seeds 40--79 also
+  served once to evaluate the reverse-estimate test of Sec.~\ref{sec:association}).}
   \label{tab:tier2held}
   \scriptsize
   \setlength{\tabcolsep}{3pt}
@@ -176,6 +199,25 @@ development runs, on the Husky and Tarot alone in \tierTwoNNLandGOne{}.
   \scriptsize
   \setlength{\tabcolsep}{3pt}
   \IfFileExists{data/tab_tier2_agents.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_tier2_agents.tex}}}{\todo{run make -C experiments tier2 tables}}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \caption{DAVE's multibeam sonar images on the BlueROV2s, development seeds, columns as in
+  Table~\ref{tab:tier2}; the first row repeats the ray-cast proxy with ground-truth tracks.}
+  \label{tab:tier2sonar}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \IfFileExists{data/tab_tier2_sonar.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_tier2_sonar.tex}}}{\todo{run make -C experiments tier2-sonar tables}}
+\end{table}
+
+\begin{table}[t]
+  \centering
+  \caption{As Table~\ref{tab:tier2sonar} on the held-out seeds.}
+  \label{tab:tier2sonarheld}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \IfFileExists{data/tab_tier2_sonar_heldout.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_tier2_sonar_heldout.tex}}}{\todo{run make -C experiments tier2-sonar-heldout tables}}
 \end{table}
 
 \subsection{Ablations}

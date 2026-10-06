@@ -35,6 +35,14 @@ recomputed from scratch at every exchange, so the veto is lifted when new eviden
 the edge. Edges that close no cycle cannot be checked. Table~\ref{tab:cycle} reports the
 generic harbor team, where every wrong alignment links two agents with no true overlap.
 
+An edge to a leaf of the frame graph closes no cycle, yet its two directions are often estimated
+separately, once by each agent of the pair. With only a handful of shared landmarks, one direction
+can be turned by about half a revolution while the other is right; with equal support the
+cycle check keeps an arbitrary one of the two. An estimate with fewer than eight inliers (the
+support required of an alignment with only cross-medium matches) is therefore used only if the
+reverse estimate of the same pair, when one exists, agrees with it within the cycle gate; if
+the two disagree, neither is used. Without a reverse estimate it is used as before.
+
 \begin{table}[t]
   \centering
   \caption{One-shot all-to-all association after 90\,s of solo mapping (harbor, five agents,

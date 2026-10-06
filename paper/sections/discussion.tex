@@ -2,9 +2,9 @@
 \label{sec:discussion}
 Almost all results are from the Tier-1 simulator, in which sensors are abstracted at the level of
 landmark parts. Front-end errors (identity switches, clutter) are injected, but occlusion is
-not modelled. A Tier-2 check in Gazebo uses kinematic sensor rigs and a ray-cast proxy for the
-sonar, not a physics-based sonar or vehicle dynamics; all results are simulation. Five
-limitations shape the claims of this paper.
+not modelled. A Tier-2 check in Gazebo uses kinematic sensor rigs, a ray-cast proxy for the
+sonar and DAVE's simulated multibeam sonar images, but no vehicle dynamics; all results are
+simulation. Six limitations shape the claims of this paper.
 First, collaboration corrects a drifting AUV only when its solo drift is small. With metre-level
 drift, each neighbour's frame absorbs the nearest cluster of matches rigidly, and the
 trajectory does not bend. This needs anchors at both ends of the drift that are linked to the
@@ -15,8 +15,10 @@ slightly worse. Holding its heading bias at the local estimate removed most such
 Third, ordering records by expected information did not beat a simple quality order. At
 tens of bit/s the binding constraint is to deliver enough matchable records, not their
 geometry.
-Fourth, cycle consistency cannot check an alignment that closes no cycle. The centralized
-baseline shows how an aliased alignment on sparse data can then corrupt the whole team.
+Fourth, cycle consistency cannot check an alignment that closes no cycle. A weak alignment is
+dropped when the other agent's estimate of the same pair contradicts it, but without such an
+estimate it is used unchecked. The centralized baseline shows how an aliased alignment on sparse
+data can then corrupt the whole team.
 Multi-hop sharing without double counting is future work.
 Fifth, intra-agent association. The Tier-2 estimator result uses ground-truth tracks. A tracker
 that gates in the dead-reckoning frame fails once an underwater robot's drift approaches the
@@ -26,7 +28,12 @@ with the joint covariance of pose and landmarks and joint pairing of a keyframe'
 detections, recovers most of the gap, but it still fails occasionally for the robot whose sensor
 gives sparse fixes: when its pose uncertainty is of the order of the pile spacing, a single
 detection cannot separate a new pile from a mapped one. It also shares few landmarks with the
-others, and an alignment built on four or five of them can be a mirror image that no acceptance
-test rejects, which moves the whole team (Sec.~\ref{sec:experiments}). Pairing over a window of
+others, and an alignment built on four or five of them can be turned by half a revolution, which
+moved the whole team until the reverse-estimate test of Sec.~\ref{sec:association}. Pairing over a window of
 keyframes is future work. In simulation, a light LiDAR on that robot removes the failure
 (Sec.~\ref{sec:experiments}).
+Sixth, the filter does not yet transfer to sonar images. Echoes of extended surfaces, such as
+the quay face and hulls, slide along them and pass its static-landmark test, so they become
+landmarks, and cross-medium alignments on few inliers then go wrong; with ground-truth tracks
+the same images mostly suffice (Sec.~\ref{sec:experiments}). Rejecting such clutter in the image
+front-end is ongoing work.
