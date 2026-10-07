@@ -146,6 +146,10 @@ class FrontEndParams:
     # at a 1 m range setting and 33 s at 50 m to the 30 m used here (UNVERIFIED). 0: the whole
     # turn at every keyframe (an upper bound).
     ping360_sweep_s: float = 21.0
+    # A Ping360 *image* (DAVE, T-S1-12) keeps this much more on each side of the swept sector,
+    # so that a pile cut by one sector's border lies whole in the next one (the detector drops
+    # echoes at the border of an image); 5° is 1 m at 11 m.
+    ping360_margin_rad: float = float(np.deg2rad(5.0))
     # Sensors whose data are ignored (paired controls: the same recording without them).
     ignore_sensors: tuple[str, ...] = ()
     # Semantic oracle: max distance [m] from a detection to a GT part's surface
@@ -535,19 +539,32 @@ def label_detection(
 
 
 def swept_sector(
-    spec: RaySensorSpec, scan: NDArray, times: FloatArray, k: int, sweep_s: float
-) -> NDArray:
+    spec: RaySensorSpec,
+    scan: NDArray | SonarImage,
+    times: FloatArray,
+    k: int,
+    sweep_s: float,
+    margin_rad: float = 0.0,
+) -> NDArray | SonarImage:
     """The part of a full-turn scan that a mechanical scanner swept up to keyframe ``k``.
 
-    The head turns at ``2π / sweep_s`` [rad/s] from azimuth ``-π`` at ``times[0]``; returns
-    ``scan`` (``(v, h)`` ranges) with the columns outside the azimuths swept since keyframe
-    ``k - 1`` set to ``inf`` (no return). The vehicle's motion during the sweep is neglected:
-    a keyframe lasts one second, the BlueROV2 moves 0.5 m in it.
+    The head turns at ``2π / sweep_s`` [rad/s] from azimuth ``-π`` at ``times[0]``. A range
+    scan (``(v, h)`` ranges) is returned with the columns outside the azimuths swept since
+    keyframe ``k - 1`` set to ``inf`` (no return). A sonar image is cut to those columns, widened
+    by ``margin_rad`` on each side, in sweep order (contiguous across the ±π seam; the azimuths
+    are unwrapped, ascending). The vehicle's motion during the sweep is neglected: a keyframe
+    lasts one second, the BlueROV2 moves 0.5 m in it.
     """
     t0 = times[k - 1] if k > 0 else times[0] - (times[1] - times[0] if len(times) > 1 else 1.0)
     rate = 2.0 * np.pi / sweep_s
     start = rate * (t0 - times[0])
     width = rate * (times[k] - t0)
+    if isinstance(scan, SonarImage):
+        lo = start - margin_rad
+        rel = np.mod(scan.azimuth_rad + np.pi - lo, 2.0 * np.pi)
+        cols = np.flatnonzero(rel < width + 2.0 * margin_rad)
+        cols = cols[np.argsort(rel[cols], kind="stable")]
+        return SonarImage(scan.db[:, cols], scan.range_m, lo - np.pi + rel[cols])
     az, _ = ray_angles(spec)
     keep = np.mod(az + np.pi - start, 2.0 * np.pi) < width
     out = np.array(scan, dtype=np.float64, copy=True)
@@ -626,7 +643,8 @@ def detections_for_agent(
             medium = sensor.target_medium
             scan = sensor_data[sname][k]
             if sname == "ping360" and params.ping360_sweep_s > 0.0:
-                scan = swept_sector(spec, scan, agent_data.times, k, params.ping360_sweep_s)
+                margin = params.ping360_margin_rad if isinstance(scan, SonarImage) else 0.0
+                scan = swept_sector(spec, scan, agent_data.times, k, params.ping360_sweep_s, margin)
             for c in segment(spec, scan, z_a, world.seabed_z, params, rng):
                 if c.range_m > sensor.max_range_m or c.range_m < sensor.min_range_m:
                     continue

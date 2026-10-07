@@ -51,6 +51,9 @@ CONFIGS = [
     ("Ping360, sonar EKF", "tier2_ping360", "ekf", "sonar", {}),
     ("Ping360 full turns, sonar EKF", "tier2_ping360", "ekf", "sonar", {"ping360_sweep_s": 0.0}),
     ("Ping360, sonar GT ids", "tier2_ping360", "oracle", "sonar", {}),
+    # The Ping360 rendered by DAVE (T-S1-12, `make tier2-record-ping360-sonar`: sonar360.npz).
+    ("Ping360 DAVE, sonar EKF", "tier2_ping360", "ekf", "sonar360", {}),
+    ("Ping360 DAVE, sonar GT ids", "tier2_ping360", "oracle", "sonar360", {}),
 ]
 DEFAULT_CONFIGS = [c[0] for c in CONFIGS if c[1] != "tier2_ping360"]
 

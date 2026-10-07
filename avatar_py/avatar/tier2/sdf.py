@@ -288,11 +288,22 @@ class DaveSonar:
     bandwidth_hz: float
     source_level_db: float = 220.0
     sensor_gain: float = 0.02
+    # A sensor wider than one fan (the Ping360's full turn) is rendered as one fan per yaw
+    # [rad] about the rig's z axis, each in a model of its own that follows the rig (DAVE's
+    # sonar ignores a sensor's <pose> and looks along its model's x axis; T-S1-12);
+    # record_sonar.py stitches the fans into one image.
+    fan_yaws_rad: tuple[float, ...] = (0.0,)
 
     @property
     def image_beams(self) -> int:
-        """Columns of the image: DAVE gives one more than the number of beams."""
+        """Columns of one fan's image: DAVE gives one more than the number of beams."""
         return self.beams + 1
+
+    def fans(self, sensor: str) -> list[tuple[str, float]]:
+        """``(DAVE sensor name, yaw)`` of each rendered fan of ``sensor``."""
+        if len(self.fan_yaws_rad) == 1:
+            return [(sensor, self.fan_yaws_rad[0])]
+        return [(f"{sensor}_{i}", y) for i, y in enumerate(self.fan_yaws_rad)]
 
     @property
     def raw_range_bins(self) -> int:
@@ -305,11 +316,12 @@ class DaveSonar:
 
     def image_spec(self) -> RaySensorSpec:
         """Spec of a stored image, for the front-end (``kind = "sonar_image"``)."""
+        n = len(self.fan_yaws_rad)
         return RaySensorSpec(
             "sonar_image",
-            self.image_beams,
+            self.image_beams if n == 1 else n * self.beams,  # stitched fans (approximate)
             self.range_bins,
-            self.h_fov_rad,
+            n * self.h_fov_rad,
             self.v_fov_rad,
             self.min_range_m,
             self.max_range_m,
@@ -320,6 +332,21 @@ class DaveSonar:
 # resolution (bandwidth c / (2 * 8 mm)), 20 deg vertical aperture (datasheet, docs/hardware.md).
 DAVE_SONARS: dict[str, DaveSonar] = {
     "gemini_720s": DaveSonar(128, 64, np.deg2rad(90.0), np.deg2rad(20.0), 0.5, 30.0, 720e3, 94e3),
+    # Blue Robotics Ping360 (D14, T-S1-12): 750 kHz, 2° x 25° beam, 0.9° steps (100 per 90°
+    # fan), 30 m range setting; 2.5 cm range samples (1200 per 30 m; bandwidth c / (2 x 2.5 cm),
+    # UNVERIFIED). A mechanical scanner rendered as four 90° fans; the front-end keeps the
+    # sector swept since the previous keyframe (FrontEndParams.ping360_sweep_s).
+    "ping360": DaveSonar(
+        100,
+        32,
+        np.deg2rad(90.0),
+        np.deg2rad(25.0),
+        0.75,
+        30.0,
+        750e3,
+        30e3,
+        fan_yaws_rad=(0.0, 0.5 * np.pi, np.pi, -0.5 * np.pi),
+    ),
 }
 
 
@@ -328,13 +355,33 @@ def sonar_image_specs() -> dict[str, RaySensorSpec]:
     return {k: v.image_spec() for k, v in DAVE_SONARS.items()}
 
 
-def sonar_rigs(scenario: Scenario) -> dict[str, list[str]]:
-    """SLAM agent name -> its sensors that have a DAVE sonar emulation."""
+def sonar_rigs(scenario: Scenario, only: list[str] | None = None) -> dict[str, list[str]]:
+    """SLAM agent name -> its sensors that have a DAVE sonar emulation (those in ``only``)."""
     out: dict[str, list[str]] = {}
     for a in scenario.agents:
-        names = [s for s in a.sensors if s in DAVE_SONARS]
+        names = [s for s in a.sensors if s in DAVE_SONARS and (only is None or s in only)]
         if a.role == "slam" and names:
             out[a.name] = names
+    return out
+
+
+def sonar_models(
+    scenario: Scenario, only: list[str] | None = None
+) -> list[tuple[str, str, float, list[tuple[str, DaveSonar]]]]:
+    """Gazebo models of the sonar pass: ``(model, agent, yaw offset, [(DAVE sensor, spec)])``.
+
+    An agent's model carries its one-fan sonars; every fan of a multi-fan sensor gets a model
+    ``<agent>__<fan>`` at the agent's pose turned by the fan's yaw.
+    """
+    out = []
+    for agent, sensors in sonar_rigs(scenario, only).items():
+        single = [(s, DAVE_SONARS[s]) for s in sensors if len(DAVE_SONARS[s].fan_yaws_rad) == 1]
+        if single:
+            out.append((agent, agent, 0.0, single))
+        for s in sensors:
+            dave = DAVE_SONARS[s]
+            if len(dave.fan_yaws_rad) > 1:
+                out += [(f"{agent}__{fan}", agent, yaw, [(fan, dave)]) for fan, yaw in dave.fans(s)]
     return out
 
 
@@ -373,8 +420,8 @@ def _dave_sensor_xml(agent: str, sensor: str, dave: DaveSonar) -> str:
         </sensor>"""
 
 
-def _sonar_rig_model(name: str, sensors: list[str], pose0) -> str:
-    body = "".join(_dave_sensor_xml(name, s, DAVE_SONARS[s]) for s in sensors)
+def _sonar_rig_model(name: str, agent: str, sensors: list[tuple[str, DaveSonar]], pose0) -> str:
+    body = "".join(_dave_sensor_xml(agent, s, dave) for s, dave in sensors)
     x, y, z, yaw = (float(v) for v in pose0)
     return f"""
     <model name="{name}">
@@ -388,7 +435,10 @@ def _sonar_rig_model(name: str, sensors: list[str], pose0) -> str:
 
 
 def sonar_world_sdf(
-    scenario: Scenario, initial_poses: dict[str, np.ndarray], world_name: str
+    scenario: Scenario,
+    initial_poses: dict[str, np.ndarray],
+    world_name: str,
+    only: list[str] | None = None,
 ) -> str:
     """SDF (1.9) text of the **acoustic** world for the DAVE sonar pass.
 
@@ -396,7 +446,9 @@ def sonar_world_sdf(
     only what is below the waterline: structures clipped at ``z = 0`` (those entirely above
     water are left out), the quay face (land up to ``z = 0``) and the seabed. Rigs carry the
     DAVE sonar of every sensor in :data:`DAVE_SONARS`, at the rig origin looking along the
-    body ``x`` axis (level), as the proxy does. Same structures, seed and poses as
+    body ``x`` axis (level), as the proxy does; a sensor of several fans gets one model per fan
+    (:func:`sonar_models`).
+    ``only`` restricts the rigs to those sensors. Same structures, seed and poses as
     :func:`world_sdf`, so a sonar recording pairs with the range-data recording of the run.
     """
     w = scenario.world
@@ -421,8 +473,9 @@ def sonar_world_sdf(
             (0.6, 0.55, 0.4),
         )
     )
-    for name, sensors in sonar_rigs(scenario).items():
-        models.append(_sonar_rig_model(name, sensors, initial_poses[name]))
+    for model, agent, yaw, sensors in sonar_models(scenario, only):
+        x, y, z, yaw0 = (float(v) for v in initial_poses[agent])
+        models.append(_sonar_rig_model(model, agent, sensors, (x, y, z, yaw0 + yaw)))
     return f"""<?xml version="1.0"?>
 <!-- Generated by avatar.tier2.sdf.sonar_world_sdf from scenario '{escape(scenario.name)}'. Do not edit. -->
 <sdf version="1.9">

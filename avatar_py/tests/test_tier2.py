@@ -287,3 +287,19 @@ def test_harbor_fleet_ping360_option():
     assert with360["uuv_0"][-1] == with360["uuv_1"][-1] == "ping360"
     assert with360["ugv_0"] == plain["ugv_0"]
     assert {n for n, s in with360.items() if "ping360" in s} == {"uuv_0", "uuv_1"}
+
+
+def test_sonar_world_renders_the_ping360_as_four_yawed_fans():
+    from avatar.sim.scenarios import harbor_fleet
+    from avatar.tier2.sdf import sonar_world_sdf
+
+    sc = harbor_fleet(np.random.default_rng(0), uuv_ping360=True)
+    poses = {a.name: np.zeros(4) for a in sc.agents}
+    both = sonar_world_sdf(sc, poses, "w")
+    only = sonar_world_sdf(sc, poses, "w", only=["ping360"])
+    assert both.count('name="ping360_') == 8 and both.count('name="gemini_720s"') == 2
+    assert only.count('name="ping360_') == 8 and "gemini_720s" not in only
+    # one model per fan, turned by the fan's yaw (DAVE ignores a sensor's own pose)
+    assert only.count('<model name="uuv_1__ping360_') == 4 and '<model name="uuv_1">' not in only
+    assert '<model name="uuv_1">' in both
+    assert only.count(" 0 0 1.5708</pose>") == 2  # the +90° fans of both BlueROV2s
