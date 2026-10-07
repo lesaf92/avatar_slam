@@ -4,10 +4,12 @@
 %   status: verified-web <date>                   -> title/venue/year confirmed by web search; open the DOI before submission
 %   status: UNVERIFIED (reason)                    -> must be verified or removed before submission
 % `python tools/check_citations.py --submission` fails if a cited entry is not `verified`.
+% 2026-10-07 (T-R1-04): every entry checked field by field against its DOI record (Crossref API,
+% api.crossref.org) or, for LOTUSim, the arXiv record; corrections are listed in docs/LOG.md L44.
 
 % ---------------------------------------------------------------- C-SLAM on radio links
 
-% status: verified-web 2026-09-28
+% status: verified 2026-10-07 doi:10.1109/TRO.2021.3137751 (Crossref)
 @article{tian2022kimeramulti,
   author  = {Tian, Yulun and Chang, Yun and Herrera Arias, Fernando and Nieto-Granda, Carlos and How, Jonathan P. and Carlone, Luca},
   title   = {{Kimera-Multi}: Robust, Distributed, Dense Metric-Semantic {SLAM} for Multi-Robot Systems},
@@ -15,10 +17,11 @@
   volume  = {38},
   number  = {4},
   pages   = {2022--2038},
-  year    = {2022}
+  year    = {2022},
+  doi     = {10.1109/TRO.2021.3137751}
 }
 
-% status: verified-web 2026-09-28
+% status: verified 2026-10-07 doi:10.1109/LRA.2023.3333742 (Crossref)
 @article{lajoie2024swarmslam,
   author  = {Lajoie, Pierre-Yves and Beltrame, Giovanni},
   title   = {{Swarm-SLAM}: Sparse Decentralized Collaborative Simultaneous Localization and Mapping Framework for Multi-Robot Systems},
@@ -26,281 +29,352 @@
   volume  = {9},
   number  = {1},
   pages   = {475--482},
-  year    = {2024}
+  year    = {2024},
+  doi     = {10.1109/LRA.2023.3333742}
 }
 
-% status: verified-web 2026-09-28 (title, venue: IEEE Xplore 11230622); UNVERIFIED author list, volume, pages
+% status: verified 2026-10-07 doi:10.1109/TRO.2025.3629786 (Crossref; volume and pages added)
 @article{liu2025slideslam,
   author  = {Liu, Xu and Lei, Jiuzhou and Prabhu, Ankit and Tao, Yuezhan and Spasojevic, Igor and Chaudhari, Pratik and Atanasov, Nikolay and Kumar, Vijay},
   title   = {{SlideSLAM}: Sparse, Lightweight, Decentralized Metric-Semantic {SLAM} for Multirobot Navigation},
   journal = {IEEE Transactions on Robotics},
-  year    = {2025}
+  volume  = {41},
+  pages   = {6529--6548},
+  year    = {2025},
+  doi     = {10.1109/TRO.2025.3629786}
 }
 
-% status: verified-web 2026-09-28 (authors, title); venue inferred from IEEE Xplore proceedings id, check
+% status: verified 2026-10-07 doi:10.1109/IROS55552.2023.10341838 (Crossref; IROS 2023 confirmed, pages added)
 @inproceedings{chang2023hydramulti,
   author    = {Chang, Yun and Hughes, Nathan and Ray, Aaron and Carlone, Luca},
   title     = {{Hydra-Multi}: Collaborative Online Construction of {3D} Scene Graphs with Multi-Robot Teams},
   booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  year      = {2023}
+  pages     = {10995--11002},
+  year      = {2023},
+  doi       = {10.1109/IROS55552.2023.10341838}
 }
 
-% status: verified-web 2026-09-28
+% status: verified 2026-10-07 doi:10.15607/RSS.2025.XXI.029 (Crossref; "Yi Xuan" corrected to "Yixuan", middle initial of the first author not in the record)
 @inproceedings{peterson2025roman,
-  author    = {Peterson, Mason B. and Jia, Yi Xuan and Tian, Yulun and Thomas, Annika and How, Jonathan P.},
+  author    = {Peterson, Mason and Jia, Yixuan and Tian, Yulun and Thomas, Annika and How, Jonathan P.},
   title     = {{ROMAN}: Open-Set Object Map Alignment for Robust View-Invariant Global Localization},
-  booktitle = {Robotics: Science and Systems (RSS)},
-  year      = {2025}
+  booktitle = {Robotics: Science and Systems XXI},
+  year      = {2025},
+  doi       = {10.15607/RSS.2025.XXI.029}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1177/0278364917732640 (Crossref; pages added)
 @article{choudhary2017dgs,
   author  = {Choudhary, Siddharth and Carlone, Luca and Nieto, Carlos and Rogers, John and Christensen, Henrik I. and Dellaert, Frank},
   title   = {Distributed Mapping with Privacy and Communication Constraints: Lightweight Algorithms and Object-Based Models},
   journal = {The International Journal of Robotics Research},
   volume  = {36},
   number  = {12},
-  year    = {2017}
+  pages   = {1286--1311},
+  year    = {2017},
+  doi     = {10.1177/0278364917732640}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/TRO.2021.3072346 (Crossref; pages added)
 @article{tian2021dpgo,
   author  = {Tian, Yulun and Khosoussi, Kasra and Rosen, David M. and How, Jonathan P.},
   title   = {Distributed Certifiably Correct Pose-Graph Optimization},
   journal = {IEEE Transactions on Robotics},
   volume  = {37},
   number  = {6},
-  year    = {2021}
+  pages   = {2137--2156},
+  year    = {2021},
+  doi     = {10.1109/TRO.2021.3072346}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/IROS.2010.5652875 (Crossref; pages added)
 @inproceedings{cunningham2010ddfsam,
   author    = {Cunningham, Alexander and Paluri, Manohar and Dellaert, Frank},
   title     = {{DDF-SAM}: Fully Distributed {SLAM} using Constrained Factor Graphs},
   booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  year      = {2010}
+  pages     = {3025--3030},
+  year      = {2010},
+  doi       = {10.1109/IROS.2010.5652875}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/ICRA.2013.6631323 (Crossref; pages added)
 @inproceedings{cunningham2013ddfsam2,
   author    = {Cunningham, Alexander and Indelman, Vadim and Dellaert, Frank},
   title     = {{DDF-SAM} 2.0: Consistent Distributed Smoothing and Mapping},
   booktitle = {IEEE International Conference on Robotics and Automation (ICRA)},
-  year      = {2013}
+  pages     = {5220--5227},
+  year      = {2013},
+  doi       = {10.1109/ICRA.2013.6631323}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/ICRA.2018.8460217 (Crossref; pages added)
 @inproceedings{mangelson2018pcm,
   author    = {Mangelson, Joshua G. and Dominic, Derrick and Eustice, Ryan M. and Vasudevan, Ram},
   title     = {Pairwise Consistent Measurement Set Maximization for Robust Multi-Robot Map Merging},
   booktitle = {IEEE International Conference on Robotics and Automation (ICRA)},
-  year      = {2018}
+  pages     = {2916--2923},
+  year      = {2018},
+  doi       = {10.1109/ICRA.2018.8460217}
 }
 
-% status: UNVERIFIED (from memory; doi.org and arxiv.org are blocked in the dev container, 2026-09-28; expected DOI 10.1109/LRA.2020.2965893)
+% status: verified 2026-10-07 doi:10.1109/LRA.2020.2965893 (Crossref; pages added)
 @article{yang2020gnc,
   author  = {Yang, Heng and Antonante, Pasquale and Tzoumas, Vasileios and Carlone, Luca},
   title   = {Graduated Non-Convexity for Robust Spatial Perception: From Non-Minimal Solvers to Global Outlier Rejection},
   journal = {IEEE Robotics and Automation Letters},
   volume  = {5},
   number  = {2},
-  year    = {2020}
+  pages   = {1127--1134},
+  year    = {2020},
+  doi     = {10.1109/LRA.2020.2965893}
 }
 
 % ---------------------------------------------------------------- Multi-agent neural / Gaussian mapping
 
-% status: verified-web 2026-09-28 (title, venue, first author); UNVERIFIED co-authors
+% status: verified 2026-10-07 doi:10.1109/CVPR52734.2025.00632 (Crossref; author list complete, pages added)
 @inproceedings{yugay2025magic,
   author    = {Yugay, Vladimir and Gevers, Theo and Oswald, Martin R.},
   title     = {{MAGiC-SLAM}: Multi-Agent {Gaussian} Globally Consistent {SLAM}},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-  year      = {2025}
+  pages     = {6741--6750},
+  year      = {2025},
+  doi       = {10.1109/CVPR52734.2025.00632}
 }
 
-% status: verified-web 2026-09-28 (title, venue, first-author surname); UNVERIFIED full author list
+% status: verified 2026-10-07 doi:10.1109/CVPR52734.2025.00146 (Crossref; full author list replaces "and others", pages added)
 @inproceedings{deng2025mneslam,
-  author    = {Deng, Tianchen and others},
+  author    = {Deng, Tianchen and Shen, Guole and Xun, Chen and Yuan, Shenghai and Jin, Tongxin and Shen, Hongming and Wang, Yanbo and Wang, Jingchuan and Wang, Hesheng and Wang, Danwei and Chen, Weidong},
   title     = {{MNE-SLAM}: Multi-Agent Neural {SLAM} for Mobile Robots},
   booktitle = {IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)},
-  year      = {2025}
+  pages     = {1485--1494},
+  year      = {2025},
+  doi       = {10.1109/CVPR52734.2025.00146}
 }
 
-% status: verified-web 2026-09-28
+% status: verified 2026-10-07 doi:10.1109/LRA.2025.3623026 (Crossref; volume, number and pages added)
 @article{thomas2025grandslam,
   author  = {Thomas, Annika and Sonawalla, Aneesa and Rose, Alex and How, Jonathan P.},
   title   = {{GRAND-SLAM}: Local Optimization for Globally Consistent Large-Scale Multi-Agent {Gaussian} {SLAM}},
   journal = {IEEE Robotics and Automation Letters},
-  year    = {2025}
+  volume  = {10},
+  number  = {12},
+  pages   = {13129--13136},
+  year    = {2025},
+  doi     = {10.1109/LRA.2025.3623026}
 }
 
-% status: UNVERIFIED (title verified-web 2026-09-28, IEEE Xplore 11018364; authors from memory)
+% status: verified 2026-10-07 doi:10.1109/LRA.2025.3575235 (Crossref; authors confirmed, volume, number and pages added)
 @article{yu2025hammer,
   author  = {Yu, Javier and Chen, Timothy and Schwager, Mac},
   title   = {{HAMMER}: Heterogeneous, Multi-Robot Semantic {Gaussian} Splatting},
   journal = {IEEE Robotics and Automation Letters},
-  year    = {2025}
+  volume  = {10},
+  number  = {7},
+  pages   = {7270--7277},
+  year    = {2025},
+  doi     = {10.1109/LRA.2025.3575235}
 }
 
-% status: UNVERIFIED (title verified-web; venue/volume from memory)
+% status: verified 2026-10-07 doi:10.1109/LRA.2022.3142402 (Crossref; volume, number and pages added)
 @article{yu2022dinno,
   author  = {Yu, Javier and Vincent, Joseph A. and Schwager, Mac},
   title   = {{DiNNO}: Distributed Neural Network Optimization for Multi-Robot Collaborative Learning},
   journal = {IEEE Robotics and Automation Letters},
-  year    = {2022}
+  volume  = {7},
+  number  = {2},
+  pages   = {1896--1903},
+  year    = {2022},
+  doi     = {10.1109/LRA.2022.3142402}
 }
 
-% status: verified-web 2026-09-28
+% status: verified 2026-10-07 doi:10.15607/RSS.2025.XXI.041 (Crossref)
 @inproceedings{zhao2025ramen,
   author    = {Zhao, Hongrui and Ivanovic, Boris and Mehr, Negar},
   title     = {{RAMEN}: Real-time Asynchronous Multi-agent Neural Implicit Mapping},
-  booktitle = {Robotics: Science and Systems (RSS)},
-  year      = {2025}
+  booktitle = {Robotics: Science and Systems XXI},
+  year      = {2025},
+  doi       = {10.15607/RSS.2025.XXI.041}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1145/3592433 (Crossref; pages added)
 @article{kerbl2023gs,
   author  = {Kerbl, Bernhard and Kopanas, Georgios and Leimk{\"u}hler, Thomas and Drettakis, George},
   title   = {{3D} {Gaussian} Splatting for Real-Time Radiance Field Rendering},
   journal = {ACM Transactions on Graphics},
   volume  = {42},
   number  = {4},
-  year    = {2023}
+  pages   = {1--14},
+  year    = {2023},
+  doi     = {10.1145/3592433}
 }
 
 % ---------------------------------------------------------------- Underwater / cross-medium
 
-% status: verified-web 2026-09-28 (IEEE Xplore 11248870; arXiv 2605.09811; presented at ICRA 2026). Title and authors checked against the arXiv v1 PDF on 2026-09-28; venue from the web only
+% status: verified 2026-10-07 doi:10.1109/LRA.2025.3632613 (Crossref; volume, number and pages added; presented at ICRA 2026)
 @article{mcconnell2026aboveandbelow,
   author  = {McConnell, John and Shariati, Armon and Szenher, Paul and Li, Yaxuan},
   title   = {Above and Below: Heterogeneous Multi-Robot {SLAM} Across Surface and Underwater Domains},
   journal = {IEEE Robotics and Automation Letters},
-  year    = {2026}
+  volume  = {11},
+  number  = {1},
+  pages   = {129--136},
+  year    = {2026},
+  doi     = {10.1109/LRA.2025.3632613}
 }
 
-% status: verified-web 2026-09-28
+% status: verified 2026-10-07 doi:10.1109/IROS60139.2025.11246631 (Crossref; pages added)
 @inproceedings{huang2025draco2,
   author    = {Huang, Yewei and McConnell, John and Lin, Xi and Englot, Brendan},
   title     = {{DRACo-SLAM2}: Distributed Robust Acoustic Communication-efficient {SLAM} for Imaging Sonar Equipped Underwater Robot Teams with Object Graph Matching},
   booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  year      = {2025}
+  pages     = {3587--3594},
+  year      = {2025},
+  doi       = {10.1109/IROS60139.2025.11246631}
 }
 
-% status: UNVERIFIED (title verified-web via arXiv 2210.00867; authors/venue from memory)
+% status: verified 2026-10-07 doi:10.1109/IROS47612.2022.9981822 (Crossref; authors and IROS 2022 confirmed, pages added)
 @inproceedings{mcconnell2022draco,
   author    = {McConnell, John and Huang, Yewei and Szenher, Paul and Collado-Gonzalez, Ivana and Englot, Brendan},
   title     = {{DRACo-SLAM}: Distributed Robust Acoustic Communication-efficient {SLAM} for Imaging Sonar Equipped Underwater Robot Teams},
   booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  year      = {2022}
+  pages     = {8457--8464},
+  year      = {2022},
+  doi       = {10.1109/IROS47612.2022.9981822}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1177/0278364908100561 (Crossref; pages added)
 @article{bahr2009cl,
   author  = {Bahr, Alexander and Leonard, John J. and Fallon, Maurice F.},
   title   = {Cooperative Localization for Autonomous Underwater Vehicles},
   journal = {The International Journal of Robotics Research},
   volume  = {28},
   number  = {6},
-  year    = {2009}
+  pages   = {714--728},
+  year    = {2009},
+  doi     = {10.1177/0278364908100561}
 }
 
 % ---------------------------------------------------------------- Sonar neural reconstruction
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1145/3641519.3657446 (Crossref; pages added)
 @inproceedings{qadri2024aoneus,
   author    = {Qadri, Mohamad and Zhang, Kevin and Hinduja, Akshay and Kaess, Michael and Pediredla, Adithya and Metzler, Christopher A.},
   title     = {{AONeuS}: A Neural Rendering Framework for Acoustic-Optical Sensor Fusion},
   booktitle = {ACM SIGGRAPH Conference Papers},
-  year      = {2024}
+  pages     = {1--12},
+  year      = {2024},
+  doi       = {10.1145/3641519.3657446}
 }
 
-% status: verified-web 2026-09-28 (title, venue TPAMI 47(9)); UNVERIFIED full author list
+% status: verified 2026-10-07 doi:10.1109/TPAMI.2024.3462290 (Crossref; full author list replaces "and others", pages added)
 @article{qu2025zsplat,
-  author  = {Qu, Ziyuan and others},
+  author  = {Qu, Ziyuan and Vengurlekar, Omkar and Qadri, Mohamad and Zhang, Kevin and Kaess, Michael and Metzler, Christopher and Jayasuriya, Suren and Pediredla, Adithya},
   title   = {{Z-Splat}: {Z}-Axis {Gaussian} Splatting for Camera-Sonar Fusion},
   journal = {IEEE Transactions on Pattern Analysis and Machine Intelligence},
   volume  = {47},
   number  = {9},
-  year    = {2025}
+  pages   = {7255--7267},
+  year    = {2025},
+  doi     = {10.1109/TPAMI.2024.3462290}
 }
 
-% status: UNVERIFIED (title verified-web, arXiv 2504.00159; authors/venue from memory)
-@misc{sethuraman2025sonarsplat,
-  author       = {Sethuraman, Advaith V. and others},
-  title        = {{SonarSplat}: Novel View Synthesis of Imaging Sonar via {Gaussian} Splatting},
-  howpublished = {arXiv:2504.00159},
-  year         = {2025}
+% status: verified 2026-10-07 doi:10.1109/LRA.2025.3627089 (Crossref; published in RA-L since the arXiv preprint 2504.00159: venue, full author list, volume and pages)
+@article{sethuraman2025sonarsplat,
+  author  = {Sethuraman, Advaith V. and Rucker, Max and Bagoren, Onur and Kung, Pou-Chun and Amutha, Nibarkavi N. B. and Skinner, Katherine A.},
+  title   = {{SonarSplat}: Novel View Synthesis of Imaging Sonar via {Gaussian} Splatting},
+  journal = {IEEE Robotics and Automation Letters},
+  volume  = {10},
+  number  = {12},
+  pages   = {13312--13319},
+  year    = {2025},
+  doi     = {10.1109/LRA.2025.3627089}
 }
 
 % ---------------------------------------------------------------- Simulation
 
-% status: UNVERIFIED (title verified-web; authors/venue from memory)
+% status: verified 2026-10-07 doi:10.1109/AUV53081.2022.9965808 (Crossref; full author list replaces "and others", pages added)
 @inproceedings{zhang2022dave,
-  author    = {Zhang, Mabel M. and others},
+  author    = {Zhang, Mabel M. and Choi, Woen-Sug and Herman, Jessica and Davis, Duane and Vogt, Carson and McCarrin, Michael and Vijay, Yadunund and Dutia, Dharini and Lew, William and Peters, Steven and Bingham, Brian},
   title     = {{DAVE} Aquatic Virtual Environment: Toward a General Underwater Robotics Simulator},
   booktitle = {IEEE/OES Autonomous Underwater Vehicles Symposium (AUV)},
-  year      = {2022}
+  pages     = {1--8},
+  year      = {2022},
+  doi       = {10.1109/AUV53081.2022.9965808}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/ICRA46639.2022.9812353 (Crossref; pages added)
 @inproceedings{potokar2022holoocean,
   author    = {Potokar, Easton and Ashford, Spencer and Kaess, Michael and Mangelson, Joshua G.},
   title     = {{HoloOcean}: An Underwater Robotics Simulator},
   booktitle = {IEEE International Conference on Robotics and Automation (ICRA)},
-  year      = {2022}
+  pages     = {3040--3046},
+  year      = {2022},
+  doi       = {10.1109/ICRA46639.2022.9812353}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/OCEANSE.2019.8867434 (Crossref; pages added)
 @inproceedings{cieslak2019stonefish,
   author    = {Cie{\'s}lak, Patryk},
   title     = {Stonefish: An Advanced Open-Source Simulation Tool Designed for Marine Robotics, With a {ROS} Interface},
   booktitle = {OCEANS 2019 -- Marseille},
-  year      = {2019}
+  pages     = {1--6},
+  year      = {2019},
+  doi       = {10.1109/OCEANSE.2019.8867434}
 }
 
-% status: UNVERIFIED (title/venue verified-web 2026-09-28, arXiv 2607.03072; authors unknown)
+% status: verified 2026-10-07 arXiv:2607.03072v1 (authors and title from the arXiv record; venue from its journal-ref, IROS 2026; no DOI registered yet: add it when the proceedings appear)
 @inproceedings{lotusim2026,
-  author    = {{LOTUSim authors}},
+  author    = {Buche, C{\'e}dric and Grosset, Juliette and Lech{\^e}ne, H{\'e}l{\`e}ne and Dubromel, Marie and Havez-Bodivit, Pierig and Neo, Malcom and Prodhon, Julien},
   title     = {{LOTUSim}: Multi-Domain Simulator for Marine Robotics},
   booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  year      = {2026}
+  year      = {2026},
+  note      = {arXiv:2607.03072}
 }
 
 % ---------------------------------------------------------------- Foundations
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/TRO.2018.2853729 (Crossref; pages added)
 @article{qin2018vins,
   author  = {Qin, Tong and Li, Peiliang and Shen, Shaojie},
   title   = {{VINS-Mono}: A Robust and Versatile Monocular Visual-Inertial State Estimator},
   journal = {IEEE Transactions on Robotics},
   volume  = {34},
   number  = {4},
-  year    = {2018}
+  pages   = {1004--1020},
+  year    = {2018},
+  doi     = {10.1109/TRO.2018.2853729}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1561/2300000043 (Crossref; the journal issue, not the book edition 10.1561/9781680833270; pages added)
 @article{dellaert2017factor,
   author  = {Dellaert, Frank and Kaess, Michael},
   title   = {Factor Graphs for Robot Perception},
   journal = {Foundations and Trends in Robotics},
   volume  = {6},
   number  = {1--2},
-  year    = {2017}
+  pages   = {1--139},
+  year    = {2017},
+  doi     = {10.1561/2300000043}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/34.88573 (Crossref; pages added)
 @article{umeyama1991,
   author  = {Umeyama, Shinji},
   title   = {Least-Squares Estimation of Transformation Parameters Between Two Point Patterns},
   journal = {IEEE Transactions on Pattern Analysis and Machine Intelligence},
   volume  = {13},
   number  = {4},
-  year    = {1991}
+  pages   = {376--380},
+  year    = {1991},
+  doi     = {10.1109/34.88573}
 }
 
-% status: UNVERIFIED (from memory)
+% status: verified 2026-10-07 doi:10.1109/IROS.2012.6385773 (Crossref; pages added)
 @inproceedings{sturm2012tum,
   author    = {Sturm, J{\"u}rgen and Engelhard, Nikolas and Endres, Felix and Burgard, Wolfram and Cremers, Daniel},
   title     = {A Benchmark for the Evaluation of {RGB-D} {SLAM} Systems},
   booktitle = {IEEE/RSJ International Conference on Intelligent Robots and Systems (IROS)},
-  year      = {2012}
+  pages     = {573--580},
+  year      = {2012},
+  doi       = {10.1109/IROS.2012.6385773}
 }
