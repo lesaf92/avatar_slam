@@ -135,3 +135,16 @@ def test_fleet_gateway_bridges_media(fleet_run):
     # ...and the anchor's frame chain covers the whole team within the mission.
     assert m["team_connected_s"] is not None and m["disconnected"] == []
     assert m["decode_errors"] == 0
+
+
+def test_odometry_states_follow_the_platform_spec():
+    """T-X1-04: the scale-error states exist only when asked for and declared by the spec."""
+    from avatar.agent import AvatarParams, odometry_states
+    from avatar.backend.graph import FactorGraph
+    from avatar.sim.scenarios import harbor_fleet
+
+    cfgs = {a.name: a for a in harbor_fleet(np.random.default_rng(0)).agents}
+    on = AvatarParams(model_odometry_scale=True)
+    assert odometry_states(FactorGraph(), cfgs["uuv_0"], AvatarParams()) == (("b",), None, None)
+    assert odometry_states(FactorGraph(), cfgs["uuv_0"], on, 2) == (("b", 2), ("s", 2), ("g", 2))
+    assert odometry_states(FactorGraph(), cfgs["ugv_0"], on) == (("b",), None, ("g",))  # LIO
