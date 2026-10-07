@@ -5,6 +5,34 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo, later): every cited reference verified; the PDF build (Claude)
+
+Branch `wp/T-R1-04-verify-bib`; task T-R1-04. Not a result: bibliography hygiene (AGENTS.md §5).
+
+### L44. All 33 cited entries verified against their DOI records; the local PDF build needed the IEEEtran class
+
+1. **The PDF was not blocked by the citations.** `make -C paper` stopped at line 4 of `main.tex`:
+   "File `IEEEtran.cls' not found". The host's TeX Live lacked `texlive-publishers`. Its two files
+   (`IEEEtran.cls`, `IEEEtran.bst`) were unpacked into `~/texmf` (no root); the paper builds (8
+   pages, no undefined reference). `paper/README.md` now names the requirement. Draft builds never
+   depended on citation status: only `make submission-check` does.
+2. **Every entry checked field by field** against its Crossref record
+   (`api.crossref.org/works/<doi>`: title, year, volume, issue, pages, number of authors), LOTUSim
+   against arXiv 2607.03072v1 (no DOI registered yet). Status: 21 UNVERIFIED + 12 verified-web ->
+   33 verified (`python tools/check_citations.py`). Corrections:
+   - completed author lists that read "and others": MNE-SLAM (11 authors), Z-Splat (8), DAVE (11),
+     SonarSplat (6), LOTUSim (7, was "LOTUSim authors");
+   - SonarSplat is now an RA-L article (10(12):13312-13319), no longer an arXiv preprint;
+   - ROMAN: "Yi Xuan" -> "Yixuan"; RSS proceedings named "Robotics: Science and Systems XXI";
+   - Factor Graphs for Robot Perception: the journal issue (doi 10.1561/2300000043), not the book;
+   - DOIs and page ranges added everywhere; volumes and issues for SlideSLAM, GRAND-SLAM, HAMMER,
+     DiNNO, Above and Below (11(1):129-136).
+   No title, year or venue claimed before was wrong.
+3. `make submission-check` still fails, now only on the 36 drafting markers (`\todo`,
+   `\draftnote`) the sections still hold, which belong to the writing tasks (T-P2 ... T-P6).
+
+---
+
 ## 2026-10-07 (luiz-predator-neo): 200 clique seeds on the held-out seeds, and the paper data (Claude)
 
 Branch `wp/T-F3-07-window-association`; tasks T-F3-06/07; **simulation**. 200 clique seeds are the

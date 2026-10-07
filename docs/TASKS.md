@@ -30,7 +30,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 |---|---|---|---|---|---|---|
 | T-R1-01 | **Deep-read *Above and Below*** (method, association, data, code). Update ledger N3 and the Paper A positioning | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | Notes in `docs/research/above_and_below.md`; N3 reworded (not "first"), N2 re-scoped |
 | T-R1-02 | Deep-read DRACo-SLAM2 + SlideSLAM (comm numbers, association) | P1 | – | todo | | Notes in `docs/research/` |
-| T-R1-04 | Verify every bib entry by DOI (`verified-web` / `UNVERIFIED` → `verified`) | P1 | – | todo | | `make -C paper check` shows no unverified cited entries |
+| T-R1-04 | Verify every bib entry by DOI (`verified-web` / `UNVERIFIED` → `verified`) | P1 | – | review | Claude · `wp/T-R1-04-verify-bib` | `make -C paper check` shows no unverified cited entries. **Met (LOG L44):** 33/33 cited entries verified against their DOI records (LOTUSim against arXiv, no DOI yet); author lists completed, DOIs and pages added |
 | T-S1-04 | **Realism for H1**: front-end association errors (missed/false detections, id switches), feature-poor transits, exploration-only coverage; show non-trivial single-agent drift | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | LOG entry: independent AUV ATE ≥ 5× the centralized oracle on at least one scenario: **10–32×** on `fleet_transit` (LOG L19); front-end errors in L14 |
 | T-S1-03 | Occlusion model (footprint ray casting) | P1 | – | todo | | Test: pile behind hull not detected |
 | T-S1-05 | Profile + speed up decentralized runs (incremental solves, cached marginals) | P1 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | 600 s harbour ≤ 60 s wall: 49 s (LOG L10) |

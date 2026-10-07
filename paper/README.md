@@ -9,6 +9,12 @@ make check      # citation hygiene (draft mode: warns on unverified entries)
 make submission-check   # fails on unverified cited entries or leftover \todo / \draftnote
 ```
 
+Needs `latexmk` and TeX Live with the IEEE class: on Ubuntu `sudo apt install latexmk
+texlive-latex-recommended texlive-publishers` (`texlive-publishers` holds `IEEEtran.cls` and
+`IEEEtran.bst`; without it the build stops with "File `IEEEtran.cls' not found"). Without root,
+unpack that package (`apt-get download texlive-publishers`, `dpkg -x`) and copy the two files into
+`~/texmf/tex/latex/ieeetran/` and `~/texmf/bibtex/bst/ieeetran/`.
+
 ## Layout
 
 | Path | Content |
