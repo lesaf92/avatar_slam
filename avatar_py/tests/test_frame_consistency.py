@@ -70,6 +70,29 @@ def test_ties_and_order_do_not_change_the_result():
         assert consistent_subset(perm)[1] == [bad]
 
 
+@pytest.mark.parametrize("reverse", ["disagrees", "missing", "agrees"])
+def test_veto_drops_a_weak_estimate_only_when_its_reverse_disagrees(reverse):
+    # T-F3-05 / D13 default: a weak (< 8 inliers) estimate whose reverse direction exists and
+    # disagrees is used in neither direction; without a reverse it is used (LOG L37, L39).
+    from avatar.agent import AvatarAgent, FrameEstimate
+    from avatar.frontend.association import Alignment
+
+    params = AvatarParams()
+    assert (params.confirm_weak_inliers, params.confirm_weak_policy) == (8, "veto")
+    sc, _ = make_sim("harbor_fleet", 0, 4.0, params)
+    agent = AvatarAgent(sc.agents[0], params, np.zeros(0, np.int64), 0.0, np.random.default_rng(0))
+    flipped = compose(true_edge(0, 1).T, np.array([0.0, 0.0, 0.0, np.pi]))  # the L33 180° flip
+    pairs = tuple((i, i, False) for i in range(5))
+    agent.alignments = {1: Alignment(flipped, pairs, 0.1, 0.1, 0.1, 0.005)}
+    if reverse != "missing":
+        T = true_edge(1, 0).T if reverse == "disagrees" else inverse(flipped)
+        agent.frames_about_me = {1: FrameEstimate(T, 0.1, 0.1, 0.005, 5, 1)}
+    agent.check_cycles()
+    own_dropped = 1 in agent.vetoed | agent.unconfirmed
+    assert own_dropped == (reverse == "disagrees")
+    assert (1 in agent.rejected_about_me) == (reverse == "disagrees")
+
+
 def test_cycle_check_keeps_the_fleet_run_intact():
     # No wrong alignments in this run: the check must not veto correct ones.
     params = AvatarParams()

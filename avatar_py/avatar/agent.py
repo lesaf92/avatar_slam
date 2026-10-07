@@ -99,10 +99,11 @@ class AvatarParams:
     # the cycle check); weak own estimates are still advertised, so that the neighbour can
     # confirm them. 0 disables. Few-inlier alignments can be aliased, and a leaf of the frame
     # graph has no cycle that would expose them (LOG L33, L36, L37; T-F3-05). Policy "confirm"
-    # waits for the reverse estimate (it delays merges in Tier 1, L37, so it is off by default);
-    # "veto" uses a weak estimate unless the reverse exists and disagrees.
-    confirm_weak_inliers: int = 0
-    confirm_weak_policy: str = "confirm"
+    # waits for the reverse estimate (it delays merges in Tier 1, L37); "veto" (the default,
+    # decision D13) uses a weak estimate unless the reverse exists and disagrees: it never broke a
+    # run on the development or the clean held-out seeds and fixed three (L37, L39 item 8).
+    confirm_weak_inliers: int = 8
+    confirm_weak_policy: str = "veto"
     align_confirm_xy_m: float = 1.0
     align_confirm_yaw_rad: float = 0.035
 

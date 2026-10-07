@@ -1,6 +1,6 @@
 # ADR-0009: Python (`rclpy`) agent nodes for simulation experiments (amends AGENTS.md §2)
 
-- **Status:** Proposed (2026-10-06); the PI accepts or rejects it (T-I1-09)
+- **Status:** Accepted (PI, 2026-10-06; T-I1-09)
 - **Date:** 2026-10-06
 - **Deciders:** PI; proposed by Claude
 - **Amends:** AGENTS.md §2 ("Real-time / onboard code, ROS 2 nodes: C++17"), for simulation only

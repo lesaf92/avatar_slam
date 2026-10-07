@@ -8,7 +8,8 @@ starts ``gz sim`` headless (paused) and the C++ recorder ``gz_recorder``
 
 1. moves each kinematic sensor rig to its ground-truth pose
    (``/world/<w>/set_pose``),
-2. steps the world by two physics iterations (``/world/<w>/control``),
+2. steps the world by four physics iterations (``/world/<w>/control``; two left whole
+   recordings one keyframe late after a stray step, docs/LOG.md L39),
 3. stores the next scan/depth image of every sensor.
 
 Output: ``<out>/raw.npz`` (ranges as float16, one array per agent/sensor,
@@ -154,6 +155,13 @@ def main() -> None:
     np.savez_compressed(out / "raw.npz", **arrays)
     meta["wall_time_s"] = time.time() - t_start
     (out / "meta.json").write_text(json.dumps(meta, indent=1, default=float))
+    # A recording whose returns miss the scene (pose/scan timing, LOG L39) is never kept as raw.npz.
+    with open(out / "geometry_check.txt", "w") as f:
+        cmd = [sys.executable, str(HERE / "check_geometry.py"), str(out)]
+        check = subprocess.run(cmd, stdout=f)
+    if check.returncode != 0:
+        (out / "raw.npz").rename(out / "raw.rejected.npz")
+        raise SystemExit(f"geometry check failed; see {out / 'geometry_check.txt'}")
     print(f"[record] wrote {out / 'raw.npz'} in {meta['wall_time_s']:.0f} s")
 
 

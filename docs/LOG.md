@@ -5,6 +5,132 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-06 (luiz-predator-neo, evening): the paper data under decision D13 (Claude)
+
+Branch `wp/T-E3-03-d13-decisions`; task T-E3-03; **simulation**. The PI accepted L39's
+recommendation (D13): the veto rule (threshold 8) by default, Tier 2 over every clean recording,
+seeds 0-79. New recordings, all through the geometry gate: UAV-LiDAR fleet seeds 20-29; DAVE sonar
+seeds 20-39 (share of sonar detections that match a part 0.69 and 0.76, as on the other seeds).
+Paper data at `1666748` (committed as `e485901`): `make -C experiments server cycle bandwidth drift
+realism tier2 tier2-heldout tier2-lidar tier2-sonar tier2-sonar-heldout tables JOBS=28`. Previous
+paper data: `58d11da`.
+
+### L40. G1 over 80 seeds with the veto rule; what the default changed
+
+G1 passes (development 0-19 / held out 20-79 / all):
+
+| Perception | 0-19 | 20-79 | 0-79 |
+|---|---|---|---|
+| Tier 1 | 20/20 | 60/60 | 80/80 |
+| proxy, ground-truth tracks | 20/20 | 58/60 | 78/80 |
+| proxy, EKF | 19/20 | 55/60 | 74/80 |
+| proxy, NN | 8/20 | 38/60 | 46/80 |
+| UAV-LiDAR fleet, ground-truth tracks | | | 78/80 |
+| UAV-LiDAR fleet, EKF | | | 78/80 |
+| sonar images, ground-truth tracks | 19/20 | 51/60 | 70/80 |
+| sonar images, EKF | 6/20 | 30/60 | 36/80 |
+
+1. **Tier 1**: every table is unchanged except realism, whose no-kernel and Huber columns move as
+   L37 item 9 found (default preset, 15 % + 1.0, Huber 0.76 -> 0.54 m; exploration, 15 % + 1.0,
+   Huber 0.75 m with 3/3 merged -> 0.64 m with 2/3); the GNC-TLS column is unchanged. One server
+   value differs in the 15th digit.
+2. **The default on the development seeds** (`tier2.csv`, every tier against `58d11da`): EKF seed 8
+   fixed (frame error 59.5 -> 0.25 m); sonar with ground-truth tracks seed 8 fixed (18 -> 19/20).
+   Among the diagnostic trackers it stops six wrong merges that already failed G1 (registration
+   seeds 0, 1, 5, NN seed 5, NN on the BlueROV2s seed 8, NN on Husky and Tarot seed 12; frame
+   errors 1.3-46 m before) and **breaks one run**: NN on Husky and Tarot, seed 1, 0.28 -> 60.9 m.
+   L39 item 8 ("never breaks a run") holds for the perceptions the paper relies on, not for that
+   diagnostic tier.
+3. **What still fails.** With ground-truth tracks on the proxy and on the LiDAR fleet: BlueROV2 1
+   just above the gate (1.04-1.13 m; seeds 45, 71 and 46, 57). EKF on the proxy: the Tarot (dev 19,
+   held-out 21 and 65: 8-10 m), BlueROV2 1 (71: 1.14 m, 77: 4.1 m), one run with a robot left out
+   (41); no half-revolution flip remains. Sonar images: wrong alignments with 24-61 m frame errors
+   or a robot left out, and one marginal run (seed 10, 1.01 m) with ground-truth tracks; the clutter
+   landmarks of L36 with the EKF (T-F3-06).
+4. Paper text updated to these data (`03894a5`): the reverse-estimate test in the method, the
+   held-out G1 no longer "every run", the sonar paragraph and two tables, a sixth limitation.
+
+---
+
+## 2026-10-06 (luiz-predator-neo, later): why fresh seeds failed G1 (Claude)
+
+Branch `wp/T-E3-02-heldout-gap`; task T-E3-02; **simulation**. Before: every perception on every
+recorded seed at `d35ab54`, `alignment_acceptance_study.py --weak 0 --jobs 28 --seeds ...`
+(rows in `results/heldout_gap_{ref,sonar}.jsonl`). Geometry: `experiments/gazebo/check_geometry.py`
+on all 150 recordings. After: the 22 late recordings re-recorded at `7a10f5f` and the same study
+at `7a10f5f` (`results/heldout_gap2_{ref,lidar,sonar}.jsonl`). Seed blocks:
+`python experiments/heldout_gap.py results/heldout_gap2_*.jsonl`.
+
+### L39. Fresh seeds were not harder: 22 of their recordings were one keyframe late
+
+1. **At one commit the gap stays** (ground-truth ids, proxy: seeds 0-39 40/40, 40-79 31/40), but
+   the distribution of the largest frame error per run does not move (median 0.48-0.53 m in every
+   block of 20; Mann-Whitney p = 0.21): the failures are a tail. Six are the UAV (a wrong UGV-UAV
+   alignment; its frame error p90 0.47 m on seeds 0-39, 1.22 m on 40-79, p = 0.012), three are
+   BlueROV2 1 just above the gate (1.04-1.13 m). Tier 1 shows no difference at all.
+2. **The UAV sees ghosts only in the failing seeds.** Spurious UAV detections occur in seeds 40, 41,
+   58, 60 and 72 and in no seed below 40: clusters about 2 m up at fixed places, nowhere near a
+   structure, once per UAV loop. Same world layout, same front-end: the recordings differ.
+3. **22 recordings are one keyframe late** (all made on 2026-10-02 with several recordings in
+   parallel, 50-100 s each instead of 16-25 s): reference fleet seeds 40, 41, 56, 58, 60, 72, 74;
+   UAV-LiDAR fleet 40, 46, 47, 52, 54, 57, 60, 61, 64, 65, 67, 68, 70, 73, 75. Their returns farther
+   than 0.2 m from any surface: UAV D435i 36-46 %, VLP-16 13-19 %, sonar proxy 47-63 %; every
+   other recording ≤ 3.0 % (LiDAR, depth) and ≤ 8.2 % (sonar proxy). 95-99 % of their frames are
+   bit-identical to the *previous* keyframe's frame of a clean re-recording, and their stamps were on
+   schedule. They hold 7 of the 9 G1 failures with ground-truth ids of the reference fleet and all 8
+   of the LiDAR fleet. DAVE's sonar recordings (their own driver, L35) are not affected: the share
+   of sonar detections that match a part is the same in every seed group.
+4. **Reproduced and fixed.** One extra `/world/<w>/control` step while recording
+   (`gz service ... --req 'pause: true, multi_step: 1'`) makes the two-step recorder write every
+   later frame one keyframe late, with on-schedule stamps; injected at start-up it does so for the
+   original recorder and for one that waits for a quiescent world (`e99f0c3`, whose commit message
+   names a wrong mechanism). With four steps per keyframe (`7a10f5f`) the same start-up injection
+   gives a recording bit-identical to the clean one, and an injection while recording stops the
+   recorder ("stamped 593000000 ns before keyframe 143, expected 592000000"). What sent the extra
+   step on 2026-10-02 is not known: load alone did not reproduce it (four recordings in parallel
+   under 24 CPU burners, or next to two DAVE sonar passes, were clean with the old recorder).
+   `record.py` now keeps `raw.npz` only if the geometry check passes, and the Makefile loops stop
+   at the first failure. Clean recordings are bit-identical with the old and the new recorder.
+5. **Two cache holes closed on the way** (`5086dce`, `2b8fb20`): the detection cache was keyed by
+   `frontend.py` and `sonar_image.py` only (not the EKF tracker, rays or scenario code) and not by
+   `raw.npz`. No stored cache was stale (all rebuilt on 2026-10-02, after the tracker's last
+   change), but a re-recorded run would have reused the late recording's detections.
+6. **After re-recording, G1 is the same on old and fresh seeds** (passes per block of 20; LiDAR
+   fleet 20-39 means 30-39; Fisher's test 0-39 against 40-79):
+
+   | Perception | 0-19 | 20-39 | 40-59 | 60-79 | p |
+   |---|---|---|---|---|---|
+   | Tier 1 | 20 | 20 | 20 | 20 | 1.0 |
+   | proxy, ground-truth ids | 20 | 20 | 19 | 19 | 0.49 |
+   | proxy, EKF | 18 | 18 | 18 | 17 | 1.0 |
+   | UAV-LiDAR fleet, ground-truth ids | 20 | 10/10 | 18 | 20 | 0.50 |
+   | UAV-LiDAR fleet, EKF | 20 | 10/10 | 18 | 20 | 0.50 |
+   | sonar, ground-truth ids | 18 | – | 16 | 17 | 0.70 |
+   | sonar, EKF | 6 | – | 11 | 12 | 0.058 |
+
+   The largest-frame-error distributions agree too (Mann-Whitney p = 0.75-0.86 for proxy and
+   LiDAR fleet). The remaining failures with ground-truth ids on the proxy are BlueROV2 1 at
+   1.12-1.13 m (seeds 45, 71); on the sonar, wrong alignments with 23-61 m frame errors or a robot
+   left out of the team (one marginal, seed 10 at 1.01 m; T-F3-05/06). Sonar with the EKF does better on fresh seeds than on the development seeds it was
+   studied on (p = 0.058); not interpreted here.
+7. **Corrections.** L37 item 6 and L38 item 2 ("fresh seeds are harder") are wrong, and the held-out
+   numbers of L37 (seeds 40-59) and L38 (60-79) rest on 7 late reference-fleet and 15 late
+   LiDAR-fleet recordings: they are void. The paper data (seeds 0-39, recorded on the old host)
+   are not affected: every one of those recordings passes the geometry check.
+
+8. **The veto rule of T-F3-05 on clean held-out seeds** (40-79, threshold 8, `--weak 8 --policy
+   veto` at `7a10f5f`, rows in `results/veto_clean_*.jsonl`, against threshold 0 in
+   `heldout_gap2_*`): it never breaks a run and fixes two (proxy EKF seed 45: 35 -> 36/40; sonar
+   EKF seed 40: 23 -> 24/40); merges, wrong alignments used and every other perception unchanged.
+   With L37 (development seed 8 fixed, Tier 1 unchanged) it is safe but small.
+
+**Recommendation for D13 (PI decides):** report Tier-2 G1 over every clean recording, seeds 0-79
+(development 0-19, held out 20-79), from `heldout_gap2_*`; with ground-truth ids that is 78/80
+(proxy), 68/70 (LiDAR fleet) and 51/60 (sonar). The veto rule (threshold 8) can be made the
+default: no run got worse in any perception or seed set.
+
+---
+
 ## 2026-10-06 (luiz-predator-neo): held-out seeds 60-79 for the alignment rule (Claude)
 
 Branch `wp/T-F3-05-alignment-acceptance`; task T-F3-05; **simulation**. The evaluation announced
