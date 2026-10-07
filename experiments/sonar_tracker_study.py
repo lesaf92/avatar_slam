@@ -13,7 +13,13 @@ each runs the decentralized estimator and reports merges, gate G1 and wrong acce
 * ``tracks``:     quality of the EKF's tracks on sonar (no estimator run): pile tracks against
                   the truth, and what the clutter tracks are;
 * ``birth``:      the EKF's birth test for the sonar agents (``FrontEndParams.ekf_sonar``);
-* ``confirm``:    an alignment adopted only after 2 or 3 agreeing attempts (``align_confirm``).
+* ``density``:    the new-landmark test's expected landmark density, with ground-truth
+                  identities (``ekf_truth``: duplicates only) and without (``ekf``);
+* ``confirm``:    an alignment adopted only after 2 or 3 agreeing attempts (``align_confirm``);
+* ``truth``:      the EKF given ground-truth identities (``ekf_truth``), against the EKF and
+                  ground-truth ids: what association costs and what the filter costs (L41).
+
+``--clique-seeds`` overrides ``AssociationParams.clique_seeds`` (LOG L41).
 
     python experiments/sonar_tracker_study.py alignments --jobs 28
 """
@@ -49,15 +55,25 @@ BIRTH = {
     "confirm8_chi2_6": {"confirm_frames": 8, "static_chi2": 5.99},
     "floor0": {"static_floor_m": 0.0},
     "confirm8_chi2_6_floor0": {"confirm_frames": 8, "static_chi2": 5.99, "static_floor_m": 0.0},
+    # the new-landmark test's expected landmark density [1/m^2] (default 0.005; LOG L41)
+    "density0.002": {"landmark_density_per_m2": 0.002},
+    "density0.001": {"landmark_density_per_m2": 0.001},
+    "density0.0005": {"landmark_density_per_m2": 0.0005},
 }
 # (tracking, sonar recording or None for the proxy, variant)
 STUDIES: dict[str, list[tuple[str, str | None, str]]] = {
     "alignments": [(t, s, "") for s in (None, "sonar") for t in ("oracle", "ekf")],
     "clutter": [("ekf", "sonar", "no_clutter"), ("oracle", "sonar", "no_clutter")],
     "minlen": [("ekf", "sonar", f"minlen:{n}") for n in (8, 12, 16, 24)],
-    "birth": [("ekf", "sonar", f"birth:{k}") for k in BIRTH],
+    "birth": [("ekf", "sonar", f"birth:{k}") for k in BIRTH if not k.startswith("density")],
     "confirm": [
         (t, s, f"confirm:{c}") for s in (None, "sonar") for t in ("oracle", "ekf") for c in (2, 3)
+    ],
+    "truth": [(t, "sonar", "") for t in ("oracle", "ekf_truth", "ekf")],
+    "density": [
+        (t, "sonar", f"birth:{k}")
+        for t in ("ekf_truth", "ekf")
+        for k in ("default", "density0.002", "density0.001", "density0.0005")
     ],
 }
 
@@ -68,9 +84,12 @@ def _kind(a: str, b: str) -> str:
     return "above" if "uuv" not in a + b else "cross"
 
 
-def run_one(job: tuple[int, str, str | None, str, str]) -> dict:
-    seed, tracking, sonar, variant, runs = job
+def run_one(job: tuple[int, str, str | None, str, str, int]) -> dict:
+    seed, tracking, sonar, variant, runs, clique_seeds = job
     params = AvatarParams()
+    params = dataclasses.replace(
+        params, association=dataclasses.replace(params.association, clique_seeds=clique_seeds)
+    )
     fe = FrontEndParams(tracking=tracking)
     if variant.startswith("birth:"):
         ov = BIRTH[variant.split(":")[1]]
@@ -144,6 +163,7 @@ def main() -> None:
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(20)))
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--out", default=None, help="JSON lines of every run")
+    ap.add_argument("--clique-seeds", type=int, default=AvatarParams().association.clique_seeds)
     args = ap.parse_args()
     if args.study == "tracks":
         with ProcessPoolExecutor(max_workers=args.jobs) as ex:
@@ -167,7 +187,14 @@ def main() -> None:
             )
         )
         rows = list(
-            ex.map(run_one, [(sd, t, s, v, args.runs) for t, s, v in cfgs for sd in args.seeds])
+            ex.map(
+                run_one,
+                [
+                    (sd, t, s, v, args.runs, args.clique_seeds)
+                    for t, s, v in cfgs
+                    for sd in args.seeds
+                ],
+            )
         )
     if args.out:
         Path(args.out).write_text("\n".join(json.dumps(r) for r in rows) + "\n")

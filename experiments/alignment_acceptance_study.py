@@ -53,13 +53,15 @@ def _kind(a: str, b: str) -> str:
     return "above" if "uuv" not in a + b else "cross"
 
 
-def run_one(job: tuple[int, int, int, str, str]) -> dict:
-    seed, ci, weak, results, policy = job
+def run_one(job: tuple[int, int, int, str, str, int]) -> dict:
+    seed, ci, weak, results, policy, clique_seeds = job
     label, runs, tracking, sonar = CONFIGS[ci]
     run = Path(results) / runs / f"harbor_fleet_seed{seed}"
+    base = AvatarParams()
     params = dataclasses.replace(
-        AvatarParams(), confirm_weak_inliers=weak, confirm_weak_policy=policy
-    )
+        base, confirm_weak_inliers=weak, confirm_weak_policy=policy,
+        association=dataclasses.replace(base.association, clique_seeds=clique_seeds),
+    )  # fmt: skip
     if tracking is None:
         meta = load_meta(run)
         scenario, sim = make_sim(
@@ -111,7 +113,8 @@ def main() -> None:
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(20)))
     ap.add_argument("--weak", type=int, nargs="+", default=[0, 6, 8, 10, 13])
     ap.add_argument("--configs", nargs="+", default=[c[0] for c in CONFIGS])
-    ap.add_argument("--policy", default="confirm", choices=["confirm", "veto"])
+    ap.add_argument("--policy", default="veto", choices=["confirm", "veto"])
+    ap.add_argument("--clique-seeds", type=int, default=AvatarParams().association.clique_seeds)
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--out", default=None, help="JSON lines of every run")
     args = ap.parse_args()
@@ -119,7 +122,7 @@ def main() -> None:
     with ProcessPoolExecutor(max_workers=args.jobs) as ex:
         list(ex.map(_build, [(s, ci, args.results) for ci in cis for s in args.seeds]))
         jobs = [
-            (s, ci, w, args.results, args.policy)
+            (s, ci, w, args.results, args.policy, args.clique_seeds)
             for ci in cis
             for w in args.weak
             for s in args.seeds
