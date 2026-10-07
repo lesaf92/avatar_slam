@@ -581,36 +581,6 @@ def detections_for_agent(
     stats = {"clusters": 0, "matched": 0, "spurious": 0, "wrong_track": 0}
     track_truth: dict[int, int] = {}
     n_clutter = 0
-    deferred: dict[tuple[int, int], tuple] = {}  # EKF (k, index) -> (keyframe, item) (window)
-
-    def emit(item: tuple, tid_okey: tuple[int, int]) -> Detection:
-        sensor, medium, c, sig, true_idx = item
-        tid, okey = tid_okey
-        first = track_truth.setdefault(tid, true_idx)
-        if first != true_idx:
-            stats["wrong_track"] += 1
-        cls, desc = label_detection(sensor, true_idx, part_classes, inst_desc, rng)
-        ext = np.array([c.footprint[0], c.footprint[1], c.height_m])
-        return Detection(
-            part_index=tid,
-            medium=medium,
-            modality=LandmarkFlags(sensor.modality),
-            p_body=c.p_body,
-            sigmas=sig,
-            extent=ext,
-            class_id=cls,
-            descriptor=desc,
-            true_part_index=true_idx,
-            object_key=okey,
-        )
-
-    def emit_resolved() -> None:
-        # pending detections of earlier keyframes that the EKF decided now (T-F3-07)
-        for k0, slot, res in ekf.resolved:
-            kf_index, item = deferred.pop((k0, slot))
-            if res is not None:
-                out[kf_index].append(emit(item, res))
-
     for k in range(n_kf):
         kf = agent_data.keyframes[k]
         if k > 0 and kf.odom is not None:
@@ -669,21 +639,38 @@ def detections_for_agent(
                 # "ekf_truth" (diagnostic upper bound): ground-truth identities
                 truth=[it[4] for it in items] if params.tracking == "ekf_truth" else None,
             )
-            for e in ekf._pending:
-                if e["k"] == ekf.k:
-                    deferred[(ekf.k, e["slot"])] = (k, items[e["slot"]])
-            emit_resolved()
         elif params.tracking == "registration":
             ids = tracker.associate(
                 k, [it[1] for it in items], p_dr, np.array([it[3][0] for it in items])
             )
         else:
             raise ValueError(f"unknown tracking mode {params.tracking!r}")
-        # ambiguous (or pending) association: no detection is emitted now
-        out.append([emit(item, res) for item, res in zip(items, ids, strict=True) if res])
+        dets: list[Detection] = []
+        for (sensor, medium, c, sig, true_idx), tid_okey in zip(items, ids, strict=True):
+            if tid_okey is None:  # ambiguous association: no detection is emitted
+                continue
+            tid, okey = tid_okey
+            first = track_truth.setdefault(tid, true_idx)
+            if first != true_idx:
+                stats["wrong_track"] += 1
+            cls, desc = label_detection(sensor, true_idx, part_classes, inst_desc, rng)
+            ext = np.array([c.footprint[0], c.footprint[1], c.height_m])
+            dets.append(
+                Detection(
+                    part_index=tid,
+                    medium=medium,
+                    modality=LandmarkFlags(sensor.modality),
+                    p_body=c.p_body,
+                    sigmas=sig,
+                    extent=ext,
+                    class_id=cls,
+                    descriptor=desc,
+                    true_part_index=true_idx,
+                    object_key=okey,
+                )
+            )
+        out.append(dets)
     if params.tracking in ("ekf", "ekf_truth"):
-        ekf.flush()
-        emit_resolved()
         # Detections are released once their landmark has proved static (a delay of
         # ``confirm_frames`` keyframes online; applied after the pass here).
         n_before = sum(len(d) for d in out)
