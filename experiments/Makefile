@@ -9,13 +9,13 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data all-data tables tier2-sonar-heldout tier2-record-ping360 server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
+.PHONY: paper-data all-data tables loss loss-confirm tier2-sonar-heldout tier2-record-ping360 server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
 
-paper-data: server cycle bandwidth drift realism tables
+paper-data: server cycle bandwidth loss drift realism tables
 
 # `paper-data` builds the tables from whatever Tier-2 CSVs exist, so the Tier-2 studies come
 # first here and the tables are rebuilt in a second make (a goal that is already made is skipped).
-all-data: paper-data tier2 tier2-heldout tier2-lidar tier2-sonar tier2-sonar-heldout
+all-data: paper-data loss-confirm tier2 tier2-heldout tier2-lidar tier2-sonar tier2-sonar-heldout
 	$(MAKE) tables
 
 server:
@@ -27,8 +27,19 @@ cycle:
 		--out $(DATA)/association_cycle_check.csv
 
 bandwidth:
-	$(PY) bandwidth_sweep.py --seeds $(SEEDS) --rates 16 32 64 128 256 512 1024 \
+	$(PY) bandwidth_sweep.py --seeds $(SEEDS) --rates 16 32 64 128 256 512 1024 10000 \
 		--workers $(JOBS) --out $(DATA)/bandwidth_sweep.csv
+
+# Packet loss (T-C5-01): flat loss at every range, at the M64's rate and at 1 kbit/s.
+loss:
+	$(PY) bandwidth_sweep.py --seeds $(SEEDS) --rates 64 1024 --losses 0 0.2 0.4 0.6 0.8 \
+		--workers $(JOBS) --out $(DATA)/loss_sweep.csv
+
+# The pre-registered paired test of the digest orders under heavy loss (LOG L47): 200 fresh
+# seeds, 1200 runs.
+loss-confirm:
+	$(PY) bandwidth_sweep.py --seeds $$(seq 50 249) --rates 64 --losses 0.5 0.6 \
+		--workers $(JOBS) --out $(DATA)/loss_confirm.csv
 
 drift:
 	$(PY) trajectory_study.py --presets fleet_transit_anchored --seeds $(SEEDS) \
