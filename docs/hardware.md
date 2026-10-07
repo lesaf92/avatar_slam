@@ -143,7 +143,7 @@ simulations (5 seeds, docs/LOG.md L6), the whole team shared one frame after
 | RTK-GNSS base + rovers | 1 + 3 | Above-water ground truth | P0 |
 | BlueBoat + D435i + Micron Gemini | 1 | Sensing bridge; direct comparison with *Above and Below* | P1 |
 | Velodyne VLP-16 for the UAV | 1 | Makes the UAV a useful mapper (LOG L31) | **decided (D6)** |
-| Blue Robotics Ping360 | 1 per UUV (the one with sparse fixes first) | 360° 2-D scans against sparse fixes (D14) | P1, after T-S1-11 |
+| Blue Robotics Ping360 | 1 per UUV | 360° 2-D scans against sparse fixes (D14); in simulation the EKF tracker on sonar images goes from 34 to 56 of 60 held-out runs (LOG L45, idealized sensor) | P1, recommended |
 
 ## Sources (checked 2026-09-28)
 

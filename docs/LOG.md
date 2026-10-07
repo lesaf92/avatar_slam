@@ -5,6 +5,52 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo, evening): a Ping360 on each BlueROV2 (Claude)
+
+Branch `wp/T-S1-11-ping360-sim`; task T-S1-11 (decision D14); **simulation**. At `2ea4d40`:
+`make tier2-record-ping360` for seeds 0-79 (range data with `--scenario-arg uuv_ping360=true` in
+`results/tier2_ping360`, all through the geometry gate; the Gemini's DAVE images are hard links
+to the reference fleet's), then `alignment_acceptance_study.py --weak 8 --configs "Ping360 off,
+sonar EKF" "Ping360, sonar EKF" "Ping360 full turns, sonar EKF" "Ping360, sonar GT ids"` on the
+development seeds 0-19, and once, after them, on 20-79 (rows in `results/l45_ping360*.jsonl`).
+
+### L45. With a Ping360 the EKF tracker works on sonar images: held-out G1 34 -> 56 of 60 (idealized Ping360)
+
+**Model.** Tier 1: a 360° sonar detection model (2° x 25° beam, 30 m range setting). Tier 2: a
+ray-cast proxy recorded as a full turn at each keyframe, of which the front-end keeps the sector
+the head swept since the previous keyframe, at 21 s per turn (the product page gives 3.4-4.3 s at
+a 1 m range setting and 33 s at 50 m; 21 s interpolates to 30 m, UNVERIFIED). The Gemini keeps
+DAVE's sonar images. The control is the same recording with the Ping360 ignored, so the Tier-1
+noise is identical (adding a sensor shifts the random streams: the control's G1 differs from the
+reference fleet's by chance, 14 against 11 of 20 on the development seeds).
+
+G1 (merged; wrong alignments: cross / BlueROV2 pair), sonar images:
+
+| | development 0-19 | held out 20-79 |
+|---|---|---|
+| EKF, Ping360 ignored (control) | 14 (17; 6/89, 4/40) | 34 (53; 24/242, 5/117) |
+| **EKF, Ping360 (21 s per turn)** | **18** (18; 3/86, 1/40) | **56** (58; 6/272, 4/120) |
+| EKF, Ping360, a full turn each keyframe (bound) | 18 (19; 3/81, 1/40) | not run |
+| ground-truth tracks, Ping360 | 20 (20; 0/95, 0/40) | 60 (60; 0/282, 0/120) |
+
+1. **The Ping360 closes most of the gap.** Held out, paired by seed: 33 runs pass with and
+   without it, 23 only with it, 1 only without (sign test p = 3e-6); wrong cross alignments fall
+   from 24 to 6, the median time to merge from 400 to 360 s. On the development seeds it meets
+   T-F3-06's target (>= 16/20) with the tracker unchanged.
+2. **The slow sweep costs little**: 21 s per turn gives the same development G1 as a full turn at
+   every keyframe (18/20): what matters is that every pile around the vehicle is seen within a
+   turn, not at once.
+3. **Caveat: the Ping360 is idealized.** It is a ray-cast proxy (no speckle, side lobes, or the
+   quay and hull clutter that DAVE's images have), so these numbers are an upper bound for the
+   real sensor. The vehicle's motion within one keyframe and the sweep time at 30 m are also
+   approximations. A Ping360 rendered by DAVE (T-S1-12) is the next fidelity step before the
+   paper relies on it.
+
+**For D14:** in simulation the Ping360 is a strong candidate for the BlueROV2s (analogous to the
+VLP-16 on the Tarot, L31); the PI decides the purchase. Nothing in the paper changes yet.
+
+---
+
 ## 2026-10-07 (luiz-predator-neo, later): every cited reference verified; the PDF build (Claude)
 
 Branch `wp/T-R1-04-verify-bib`; task T-R1-04. Not a result: bibliography hygiene (AGENTS.md §5).
