@@ -5,6 +5,49 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-06 (luiz-predator-neo, late night): a window of keyframes for sparse fixes does not help (Claude)
+
+Branch `wp/T-F3-07-window-association`; task T-F3-07; development seeds 0-19 only; **simulation**.
+At `1c96113` (the window code of `499503f`, and 200 clique seeds by default):
+`tier2_study.py --runs results/tier2 --seeds 0 ... 19 --tiers T2ekf T2sekf --ekf window_frames=W`
+and the same with `--runs results/tier2_uavlidar --tiers T2ekf` (outputs in `results/l42/`).
+
+### L42. Joint pairing over a window of keyframes admits wrong matches; deferring alone does not help (negative result)
+
+**What was tried** (`EkfTrackerParams.window_frames`, `499503f`): a detection with landmarks in its
+gate but no confident match waits up to W keyframes, carried with the odometry into the current
+body frame with the odometry's variance added; each keyframe the pending and the undecided
+detections go into the joint pairing together (which then also takes fixes that do not beat
+"new" on their own); after W keyframes a pending detection is decided as before. With W = 0 the
+front-end is bit-identical to the code before it (three recordings); unit tests showed sparse
+fixes of an irregular row matched one per keyframe.
+
+G1 (merged; wrong alignments) on the development seeds:
+
+| Window | proxy, EKF | sonar, EKF | UAV-LiDAR fleet, EKF |
+|---|---|---|---|
+| 0 | 19 (20; 6/174) | 11 (17; 13/163) | 20 (20; 0/181) |
+| 3 | 14 (15; 21/167) | 7 (12; 37/154) | 18 (19; 13/173) |
+| 6 | 14 (17; 29/168) | 9 (14; 42/151) | 18 (19; 13/171) |
+| 10 | 13 (16; 29/167) | 5 (14; 46/150) | 18 (19; 13/171) |
+| 3, widened pairing for pending detections only | 15 (15; 20/167) | 7 (14; 35/156) | 18 (19; 8/174) |
+| 3, no widened pairing (deferral only) | 18 (19; 7/177) | 9 (17; 19/167) | 20 (20; 0/181) |
+
+(The last two rows used an exploratory switch on the widened criterion, not committed.)
+
+1. **Every variant is worse than no window**, also for the LiDAR fleet, whose frames are dense:
+   pairing fixes from several keyframes jointly admits wrong matches (wrong alignments triple),
+   and deferral alone loses runs. The relative geometry of fixes carried over a few keyframes is
+   less certain than the model assumed, and holding a detection back withholds its update from
+   the pose.
+2. **Reverted** (`1488623`): the code and its tests are gone, the front-end is bit-identical to
+   the code before it; the clique-seed default of L41 stays.
+3. Sparse fixes (BlueROV2 1 on sonar, the camera-only Tarot) remain the limit of the EKF tracker.
+   The Tarot's was removed by a sensor (L31, decision D6); BlueROV2 1's analogue is a wider or a
+   second sonar, or a path that keeps more piles in view, a decision for the PI.
+
+---
+
 ## 2026-10-06 (luiz-predator-neo, night): what the EKF's wrong alignments on sonar are made of (Claude)
 
 Branch `wp/T-F3-06-ekf-sonar`; task T-F3-06; development seeds 0-19 only; **simulation**. Defaults
