@@ -233,6 +233,7 @@ def harbor_fleet(
     acoustic_bps: float | None = None,
     uav_lidar: bool = False,
     uuv_ping360: bool = False,
+    acoustic_loss: float | None = None,
 ) -> Scenario:
     """Harbour world with the PI's **reference fleet** (ADR-0006, docs/hardware.md).
 
@@ -244,11 +245,11 @@ def harbor_fleet(
       ``uav_lidar=True`` adds a VLP-16-class LiDAR (stand-in for the optional
       Livox-class unit of decision D6, docs/hardware.md), which sees many piles
       per keyframe (LOG L31).
-      ``uuv_ping360=True`` adds a Blue Robotics Ping360 360° scanning sonar to every BlueROV2
-      (an option of decision D14, T-S1-11).
     * ``uuv_k``: BlueROV2, Micron Gemini 720s imaging sonar + low-light camera +
       Bar30 depth, DVL A50 dead reckoning. SLAM traffic goes **only** over the
       acoustic modem (the tether is for safety/logging, never for SLAM data).
+      ``uuv_ping360=True`` adds a Blue Robotics Ping360 360° scanning sonar to every BlueROV2
+      (an option of decision D14, T-S1-11).
     * ``gw_0``: quay-side surface gateway (topside modem + Wi-Fi), sensorless relay.
     * optional ``usv_0``: BlueBoat with D435i above and a Gemini below (bridge).
 
@@ -262,6 +263,8 @@ def harbor_fleet(
     :class:`~avatar.sim.measurements.FrontEndErrors` (clutter, identity switches;
     off by default). ``acoustic_bps`` overrides the acoustic profile's raw bit
     rate (bandwidth sweeps, T-C5-01); everything else of the profile is kept.
+    ``acoustic_loss`` replaces its range-dependent packet loss with a loss probability that is
+    the same at every range within the modem's reach (loss sweeps, T-C5-01).
     """
     errors = FrontEndErrors(**(frontend_errors or {}))
     world = harbor_world(rng)
@@ -310,6 +313,9 @@ def harbor_fleet(
     channels = {RF: CHANNEL_PROFILES[rf], AC: CHANNEL_PROFILES[acoustic]}
     if acoustic_bps is not None:
         channels[AC] = dataclasses.replace(channels[AC], bandwidth_bps=float(acoustic_bps))
+    if acoustic_loss is not None:
+        p = float(acoustic_loss)
+        channels[AC] = dataclasses.replace(channels[AC], loss_near=p, loss_far=p)
     return Scenario(
         "harbor_fleet", world, agents, channels=channels, anchor_id=0, frontend_errors=errors
     )

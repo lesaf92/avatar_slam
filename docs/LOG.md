@@ -5,6 +5,46 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo, late): bandwidth to 10 kbit/s and packet loss; H2 (Claude)
+
+Branch `wp/T-C5-01-bandwidth-loss-sweep`; task T-C5-01 (goal G-4); **simulation (Tier 1)**,
+`fleet_default`, 600 s. At `617db22`: `make -C experiments bandwidth loss loss-confirm tables`
+(`paper/data/bandwidth_sweep.csv`, `loss_sweep.csv`, `loss_confirm.csv`; tables `tab_bandwidth`,
+`tab_loss` and the macros `loss_confirm.tex`, now in the paper's ablations).
+
+### L47. Under heavy loss an informed digest order beats FIFO; VoI does not beat the quality order
+
+1. **Rate.** From 512 bit/s to 10 kbit/s the team merges at 100 s whatever the order (10/10,
+   team ATE 0.106 m): above that the link is not the limit. At 1 kbit/s the team sends 17 KB
+   in 600 s, well under its budget: it runs out of content.
+2. **Loss** (the same loss at every range, seeds 0-9, `tab_loss`). At 1 kbit/s every team
+   merges even at 80 % loss, later (100 -> 310-330 s). At 64 bit/s merging fails between 40 and
+   80 % loss (60 %: FIFO 2/10, quality 4/10, VoI 7/10).
+3. **Pre-registered test.** Seeds 10-49 at 64 bit/s gave the same direction, not significant
+   (VoI vs FIFO at 50 / 60 % loss: 28 vs 24 and 15 vs 10 of 40, sign test p = 0.42 / 0.23).
+   I then fixed a test before running it, recorded with a timestamp in
+   `results/c501_prereg.txt`:
+   - seeds 50-249, 50 and 60 % loss pooled (400 paired runs);
+   - two-sided sign test on team merged, VoI vs FIFO and VoI vs quality, α = 0.05;
+   - reported whatever the outcome.
+
+   **VoI merges more often than FIFO:** 212 vs 173 of 400 (discordant 78:39, p = 0.0004).
+   **VoI does not beat quality:** 212 vs 223 (37:48, p = 0.28).
+4. **H2 as worded.**
+   - "≥ 90 % of full-communication accuracy at ≤ 20 % of the bytes" holds for *every* order,
+     FIFO included: at 64 bit/s the team sends 13.6 % of the bytes it sends at 1 kbit/s, for
+     team ATE 0.118-0.121 m against 0.106 m (ratio 0.88-0.90; `loss_sweep.csv`, 0 % loss).
+     It is a property of the digests, not of the VoI order.
+   - "Beats FIFO at equal bytes on acoustic links" holds only when few records get through
+     (heavy loss, or about 32 bit/s, `tab_bandwidth`), and then for the quality order as well.
+
+**Proposed rewording of H2 (G-4, PI):** "At equal bytes, ordering map digests by how likely they
+are to be matched merges the team more often than FIFO when few records get through (low rate,
+heavy loss); a value-of-information order adds nothing over a simple quality order." The
+default stays the quality order; T-C2-01 is a negative result against it.
+
+---
+
 ## 2026-10-07 (luiz-predator-neo, night): does collaboration hurt the drifting AUV? (Claude)
 
 Branch `wp/T-X1-04-never-hurt`; task T-X1-04; **simulation (Tier 1)**, M64. At `590e02e`:
