@@ -223,6 +223,8 @@ def drift_correction() -> None:
         f"\\newcommand{{\\driftSmallRuns}}{{{len(small)}}}",
         f"\\newcommand{{\\driftSmallMeanChange}}{{{mean}}}",
         f"\\newcommand{{\\driftTeamAte}}{{{team:.2f}}}",
+        f"\\newcommand{{\\driftSmallWorse}}{{{sum(c > 0 for c in small)}}}",
+        f"\\newcommand{{\\driftSmallMaxWorse}}{{{max(small):.0f}}}",
     ]
     if (DATA / "drift_anchored_noscale.csv").exists():  # estimator without the scale states
         ns = _read("drift_anchored_noscale.csv")

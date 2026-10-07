@@ -58,11 +58,13 @@ which produces the large error at 100\,bit/s.
 \providecommand{\driftSmallRuns}{?}\providecommand{\driftSmallMeanChange}{?}%
 \providecommand{\driftTeamAte}{?}\providecommand{\driftNoScaleSmallRuns}{?}%
 \providecommand{\driftNoScaleSmallMeanChange}{?}\providecommand{\driftNoScaleTeamAte}{?}%
+\providecommand{\driftSmallWorse}{?}\providecommand{\driftSmallMaxWorse}{?}%
 We claim collaboration only for small drift (Table~\ref{tab:drift}). A BlueROV2 makes a
 one-way transit through the sparse outer harbor, and both ends of the transit lie in water
 that another AUV surveys. Over the \driftSmallRuns{} runs whose solo drift stays below 1\,m,
 sharing changes the drifting vehicle's error by \driftSmallMeanChange\,\% on average. The gain
-is not uniform: some runs improve substantially, and a few get slightly worse. Metre-level
+is not uniform: some runs improve substantially, while in \driftSmallWorse{} the error grows, by
+up to \driftSmallMaxWorse\,\% (Sec.~\ref{sec:discussion}). Metre-level
 drift is not yet corrected (Sec.~\ref{sec:discussion}). Without the scale-error states of
 Sec.~\ref{sec:system}, so that the simulated DVL and gyro scale errors go unmodelled, the
 team ATE averages \driftNoScaleTeamAte\,m instead of \driftTeamAte\,m, and sharing changes
@@ -117,7 +119,7 @@ Table~\ref{tab:tier2held} \heldTwoRuns{} further seeds recorded afterwards. With
 intra-agent tracks, the team merges in every development run (\tierTwoMerged), an accepted
 alignment is wrong in only \tierTwoWrong{} cases on the development seeds, and the frame error of
 every robot stays below 1\,m (gate G1) in \tierTwoGOne{} development runs and \heldTwoGOne{}
-held-out runs; the held-out exceptions leave one BlueROV2 just above the gate. Team ATE is
+held-out runs; the held-out exception leaves a BlueROV2 just above the gate. Team ATE is
 \tierTwoAvatar\,m against \tierTwoOracle\,m for the oracle, versus \tierOneAvatar\,m and
 \tierOneOracle\,m in Tier 1: the ratio to the oracle is similar, and the absolute error grows
 because noisy clusters replace idealized detections. The proxy is idealized; sonar images follow
@@ -135,7 +137,7 @@ lets a landmark inform the biases only after it has proved static. It reaches G1
 \tierTwoEKFGOne{} development runs (\tierTwoEKFWrong{} wrong alignments) and \heldTwoEKFGOne{}
 held-out runs (\heldTwoEKFWrong{} wrong). The median held-out team ATE is \heldTwoEKFMedian\,m
 against \heldTwoMedian\,m for ground-truth tracks; the mean, \heldTwoEKFAvatar\,m, is dominated by one
-run. Where it fails, the robot off is most often the Tarot. Its depth camera sees a pile for
+run. Where it fails, the robot off is often the Tarot. Its depth camera sees a pile for
 a few keyframes at a time, so between fixes its pose uncertainty is of the order of the pile
 spacing, and a new pile is occasionally taken for a mapped one (Sec.~\ref{sec:discussion}); the UAV's
 frame is then several metres off. The Tarot may also share only four or five landmarks with the
@@ -258,8 +260,8 @@ every range. At 1\,kbit/s every team still merges at 80\,\% loss, only later. At
 64\,bit/s merging fails as the loss grows from 40 to 80\,\%, and there the digest order matters.
 In a test fixed before it was run (200 fresh seeds at 50 and 60\,\% loss, 400 paired runs), the
 VoI order merged the team in \lossConfirmVoi{} runs and FIFO in \lossConfirmFifo{} (discordant
-pairs \lossConfirmVoiFifoPairs{}, two-sided sign test $p=\lossConfirmVoiFifoP$), but not more
-often than the quality order (\lossConfirmQuality{}; \lossConfirmVoiQualityPairs{},
+pairs \lossConfirmVoiFifoPairs{}, two-sided sign test $p=\lossConfirmVoiFifoP$), but not
+significantly more often than the quality order (\lossConfirmQuality{}; \lossConfirmVoiQualityPairs{},
 $p=\lossConfirmVoiQualityP$).
 
 \begin{table}[t]
@@ -282,7 +284,7 @@ and the team, at its error-free accuracy. Errors that persist for a burst of key
 same rate of wrong attributions, are absorbed as well. What no kernel can repair is a missing
 loop closure: if the front-end gives every revisited pile a new identity, the drifting robots
 lose their corrections and the team with them, whereas missing half of the revisits costs
-nothing. The oracle keeps ground-truth association and is not shown.
+little. The oracle keeps ground-truth association and is not shown.
 
 \begin{table}[t]
   \centering
