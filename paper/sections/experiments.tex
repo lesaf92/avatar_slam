@@ -291,8 +291,8 @@ little. The oracle keeps ground-truth association and is not shown.
   \caption{Team ATE [m] of \avatar{} under front-end errors (identity-switch rate + clutter
   per keyframe and sensor; ``in bursts'': a switch lasts 25 keyframes; ``split'': a part seen
   again after 30 keyframes gets a new identity) for three kernels on the landmark
-  observations (Tier-1 simulation, 600\,s, M64). In parentheses: runs in which the whole team
-  merged, if not all.}
+  observations (Tier-1 simulation, 600\,s, M64, 20 seeds): median / mean; in brackets, runs
+  that failed (the team did not merge, or its ATE exceeds 1\,m).}
   \label{tab:realism}
   \footnotesize
   \IfFileExists{data/tab_realism.tex}{\input{data/tab_realism.tex}}{\todo{run make -C experiments paper-data}}
