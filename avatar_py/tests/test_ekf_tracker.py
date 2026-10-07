@@ -335,3 +335,54 @@ def test_joint_pairing_refuses_a_tie_on_a_regular_row():
     out = _frame(t, [5.7, 11.7, 17.7])
     assert all(o is None for o in out)
     assert t.n_joint == 0 and t.n_landmarks == 5
+
+
+def _sparse_fixes(t: EkfTracker, xs: list[float]) -> list:
+    """One pile per keyframe (a sparse sensor), the robot not moving. Returns every fix's
+    final landmark id (``None``: dropped or still pending), resolved ones included."""
+    outs = []
+    for x in xs:
+        t.predict(np.zeros(4), np.full(4, 1e-4))
+        outs.append(_frame(t, [x])[0])
+        for k, _, res in t.resolved:
+            outs[k - 1] = res
+    return [None if o is None else o[0] for o in outs]
+
+
+def test_window_pairs_sparse_fixes_across_keyframes():
+    """T-F3-07: the three piles of the joint-pairing test, now seen one per keyframe. Alone
+    each fix is ambiguous under the 4 m pose σ (dropped without a window); kept pending,
+    they are paired jointly once the third arrives, and the earlier ones are resolved."""
+    row = [0.0, 6.0, 12.6, 18.5, 24.9]
+    seen = [5.7, 12.3, 18.2]
+    assert _sparse_fixes(_row_tracker(row), seen) == [None, None, None]
+    t = _row_tracker(row, window_frames=3)
+    assert _sparse_fixes(t, seen) == [1001, 1002, 1003]
+    assert t.n_landmarks == 5 and not t._pending  # no duplicate, nothing left waiting
+
+
+def test_window_expires_and_flush_decides_the_rest():
+    """A pending fix that nothing resolves is decided as without a window after
+    ``window_frames`` keyframes (here: ambiguous, dropped); ``flush`` decides what is left."""
+    row = [0.0, 6.0, 12.6, 18.5, 24.9]
+    t = _row_tracker(row, window_frames=2)
+    _sparse_fixes(t, [5.7])
+    assert len(t._pending) == 1
+    for _ in range(2):
+        t.predict(np.zeros(4), np.full(4, 1e-4))
+        assert t.associate([], np.zeros((0, 3)), np.zeros((0, 3))) == []
+    assert not t._pending and t.resolved == [(1, 0, None)] and t.n_dropped == 1
+    _sparse_fixes(t, [12.3])
+    t.flush()
+    assert not t._pending and t.resolved == [(4, 0, None)] and t.n_landmarks == 5
+
+
+def test_pending_detections_follow_the_odometry():
+    """A pending detection is carried into the new body frame (1 m forward, then a 90-degree
+    left turn: a point 5 m ahead ends 4 m to the right) and its variance grows."""
+    t = _tracker(window_frames=5)
+    t._pending = [dict(k=0, slot=0, medium=A, p=np.array([5.0, 0.0, 0.0]),
+                       sig=np.full(3, 0.05), var=0.0, truth=None)]  # fmt: skip
+    t.predict(np.array([1.0, 0.0, 0.0, np.pi / 2]), np.array([0.01, 0.01, 0.01, 0.002]))
+    np.testing.assert_allclose(t._pending[0]["p"][:2], [0.0, -4.0], atol=1e-12)
+    assert t._pending[0]["var"] > 0.0

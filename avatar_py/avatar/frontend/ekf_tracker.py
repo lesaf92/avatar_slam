@@ -116,6 +116,11 @@ class EkfTrackerParams:
     joint_margin_ll: float = 3.0
     joint_max_dets: int = 8
     joint_gate: float = 0.999
+    # A detection with landmarks in its gate but no confident match (one sparse fix under an
+    # uncertain pose) waits up to this many keyframes, carried with the odometry, and is
+    # paired jointly with later detections; then it is decided as without a window
+    # (T-F3-07, LOG L42). 0 decides at once.
+    window_frames: int = 0
     # A landmark is released (its detections are emitted) when confirmed or observed
     # this many times in all; one-off clutter and sliding clusters never are.
     release_min_obs: int = 3
@@ -194,6 +199,13 @@ class EkfTracker:
         # (small: near-duplicates of one object; large: aliasing between objects).
         self.ambiguity_gaps_m: list[float] = []
         self.n_joint = 0  # keyframes in which a joint pairing resolved ambiguous detections
+        # Detections waiting for a decision (``window_frames``): keyframe, index in it,
+        # medium, position in the *current* body frame, 1-σ at detection, variance added
+        # by the odometry since, ground-truth label (diagnostic).
+        self._pending: list[dict] = []
+        # ``(keyframe, index, (id, object key) or None)`` of the pending detections decided
+        # by the last :meth:`associate` or :meth:`flush`.
+        self.resolved: list[tuple[int, int, tuple[int, int] | None]] = []
 
     @property
     def x(self) -> FloatArray:
@@ -248,6 +260,11 @@ class EkfTracker:
         self.k += 1
         self._cum_pos += 0.5 * (Q[0, 0] + Q[1, 1])
         self._cum_yaw += Q[YAW, YAW]
+        if self._pending:  # into the new body frame, with the odometry's noise added
+            Rt = _rot(raw_turn * gscale)[0].T
+            for e in self._pending:
+                e["p"][:2] = Rt @ (e["p"][:2] - scale * d)
+                e["var"] += 0.5 * (Q[0, 0] + Q[1, 1]) + float(e["p"][:2] @ e["p"][:2]) * Q[YAW, YAW]
 
     def _measurement(
         self, p_body: FloatArray, sigmas: FloatArray
@@ -547,23 +564,52 @@ class EkfTracker:
 
         ``p_body`` is ``(n, 3)`` (only x, y are used), ``sigmas`` ``(n, 3)`` the
         detections' 1-σ. ``None``: dropped (ambiguous between landmarks, or attached
-        to a landmark that failed the static test).
+        to a landmark that failed the static test), or, with ``window_frames``, pending:
+        detections of earlier keyframes decided now are listed in :attr:`resolved`.
 
         ``truth`` is a **diagnostic** (never used by the front-end): the
         ground-truth part index of every detection (negative: clutter). Detections
         then match only landmarks of the same part, which measures the filter's
         consistency (NEES) under perfect association, and is an upper bound.
         """
+        n_cur = len(media)
+        cur = [
+            dict(k=self.k, slot=i, medium=media[i], p=np.array(p_body[i], dtype=float),
+                 sig=np.array(sigmas[i], dtype=float), var=0.0,
+                 truth=None if truth is None else int(truth[i]))
+            for i in range(n_cur)
+        ]  # fmt: skip
+        return self._decide(cur + self._pending, n_cur, force=False)[:n_cur]
+
+    def flush(self) -> None:
+        """Decide every pending detection as without a window (end of a run)."""
+        self._decide(self._pending, 0, force=True)
+
+    def _decide(self, entries: list[dict], n_cur: int, force: bool) -> list[tuple[int, int] | None]:
+        """Associate ``entries`` (this keyframe's ``n_cur`` detections, then the pending ones).
+
+        Returns the result of every entry; pending entries decided now go to
+        :attr:`resolved`, undecided ones (``window_frames``, unless ``force``) stay pending.
+        """
         prm = self.params
-        n = len(media)
+        self.resolved, self._pending = [], []
+        n = len(entries)
         out: list[tuple[int, int] | None] = [None] * n
         if n == 0:
             return out
+        media = [e["medium"] for e in entries]
+        p_body = np.array([e["p"] for e in entries]).reshape(n, 3)
+        sigmas = np.array([e["sig"] for e in entries]).reshape(n, 3)
+        for r, e in enumerate(entries):
+            if e["var"] > 0.0:  # carried with the odometry: isotropic, inflated
+                sigmas[r, :2] = np.sqrt(float(np.max(e["sig"][:2])) ** 2 + e["var"])
+        has_truth = any(e["truth"] is not None for e in entries)
+        window = 0 if force else prm.window_frames
         ll_new = float(np.log(prm.landmark_density_per_m2))
         margin_ll = 0.5 * prm.ambiguity_margin
 
         def t(i: int) -> int | None:
-            return None if truth is None else int(truth[i])
+            return entries[i]["truth"] if has_truth else None
 
         def candidates(i: int) -> tuple[FloatArray, FloatArray]:
             """In-gate landmarks of detection ``i`` (best log-likelihood first)."""
@@ -622,13 +668,16 @@ class EkfTracker:
                 updated |= apply_match(i, j)
             if not updated:
                 break
-        # Individually ambiguous detections of this keyframe: pair them jointly.
+        # Individually ambiguous detections (with a window: also those that do not beat
+        # "new" on their own): pair them jointly.
         forced_new: set[int] = set()
         if prm.joint_pairing:
             amb: dict[int, FloatArray] = {}
             for i in sorted(undecided):
                 idx, ll = candidates(i)
-                if len(idx) > 1 and ll[idx[0]] - ll[idx[1]] < margin_ll:
+                if window and len(idx) and not confident(idx, ll):
+                    amb[i] = idx
+                elif len(idx) > 1 and ll[idx[0]] - ll[idx[1]] < margin_ll:
                     amb[i] = idx
             if len(amb) >= 2:
                 pick = sorted(amb, key=lambda i: -float(candidates(i)[1][amb[i][0]]))
@@ -641,20 +690,23 @@ class EkfTracker:
                             forced_new.add(i)
                         else:
                             apply_match(i, j)
-        # Whatever is left: ambiguous between landmarks (drop), or no landmark clearly
-        # beats "new" (start one).
+        # Whatever is left: clear by now (match), worth waiting for (pending), ambiguous
+        # between landmarks (drop), or no landmark clearly beats "new" (start one).
         new: list[int] = []
+        keep: list[int] = []
         for i in sorted(undecided):
             if i in forced_new:
                 new.append(i)
                 continue
             idx, ll = candidates(i)
-            if len(idx) > 1 and ll[idx[0]] - ll[idx[1]] < margin_ll:
+            if confident(idx, ll):  # cleared up after the last round
+                apply_match(i, int(idx[0]))
+            elif window and len(idx) and self.k - entries[i]["k"] < window:
+                keep.append(i)
+            elif len(idx) > 1 and ll[idx[0]] - ll[idx[1]] < margin_ll:
                 dropped.add(i)
                 lm = self._landmarks()
                 self.ambiguity_gaps_m.append(float(np.hypot(*(lm[idx[0]] - lm[idx[1]]))))
-            elif confident(idx, ll):  # cleared up after the last round
-                apply_match(i, int(idx[0]))
             else:
                 new.append(i)
         for i, j in list(matched.items()):
@@ -667,11 +719,15 @@ class EkfTracker:
         for i in new:
             q, H, Rs = self._measurement(p_body[i], sigmas[i])
             matched[i] = self._augment(
-                media[i], q, H, Rs, 0.5 * float(np.trace(Rs)), t(i) if truth is not None else -2
+                media[i], q, H, Rs, 0.5 * float(np.trace(Rs)), t(i) if has_truth else -2
             )
         self.n_dropped += len(dropped)
         for i, j in matched.items():
             out[i] = (self.offset + j, self.offset + int(self._key[j]))
+        self._pending = [entries[i] for i in keep]
+        self.resolved = [
+            (entries[i]["k"], entries[i]["slot"], out[i]) for i in range(n_cur, n) if i not in keep
+        ]
         return out
 
 
