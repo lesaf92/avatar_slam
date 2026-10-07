@@ -210,14 +210,21 @@ class FactorGraph:
         j = self._idx(key_j, VarType.POSE4)
         self._blocks["between"].add((i, j), meas, sigmas)
 
-    def add_between_bias(self, key_i, key_j, bias_key, meas, dist_m: float, sigmas) -> None:
+    def add_between_bias(
+        self, key_i, key_j, bias_key, meas, dist_m: float, sigmas,
+        scale_key=None, gyro_scale_key=None,
+    ) -> None:  # fmt: skip
         """Odometry ``meas = [Δx, Δy, Δz, Δψ]`` whose heading carries a bias ``b``
-        [rad/m] times the distance travelled: ``Δψ_meas = Δψ + b·dist_m``."""
+        [rad/m] times the distance travelled: ``Δψ_meas = Δψ + b·dist_m``. Optional
+        scalar states for a translation scale error ``s`` and a gyro scale error ``g``:
+        ``Δp_meas = (1 + s)·Δp``, ``Δψ_meas = (1 + g)·Δψ + b·dist_m``."""
         i = self._idx(key_i, VarType.POSE4)
         j = self._idx(key_j, VarType.POSE4)
         b = self._idx(bias_key, VarType.SCALAR)
+        s = -1 if scale_key is None else self._idx(scale_key, VarType.SCALAR)
+        g = -1 if gyro_scale_key is None else self._idx(gyro_scale_key, VarType.SCALAR)
         m = np.concatenate([np.asarray(meas, dtype=float), [float(dist_m)]])
-        self._blocks["between_bias"].add((i, j, b), m, sigmas)
+        self._blocks["between_bias"].add((i, j, b, s, g), m, sigmas)
 
     def add_scalar_prior(self, key, mean: float, sigma: float) -> None:
         self._blocks["scalar_prior"].add((self._idx(key, VarType.SCALAR),), [mean], [sigma])
@@ -380,15 +387,25 @@ class FactorGraph:
 
     def _lin_between_bias(self, x, off, blk, jac):
         idx, meas, sig = self._arr(blk)
-        ob = off[idx[:, 2]]
+        ob, os_, og = off[idx[:, 2]], off[idx[:, 3]], off[idx[:, 4]]
+        has_s, has_g = idx[:, 3] >= 0, idx[:, 4] >= 0  # index -1: state not modelled
+        ks = 1.0 + np.where(has_s, x[os_], 0.0)
+        kg = 1.0 + np.where(has_g, x[og], 0.0)
         dist = meas[:, 4]
+        yaw = meas[:, 3] - x[ob] * dist  # remove the heading bias, then the scale errors
         corrected = meas[:, :4].copy()
-        corrected[:, 3] = meas[:, 3] - x[ob] * dist  # remove the heading bias
+        corrected[:, :3] /= ks[:, None]
+        corrected[:, 3] = yaw / kg
         tmp = _FactorBlock(robust_k=None)
         tmp._arrays = (idx[:, :2], corrected, sig, np.zeros(len(idx), dtype=bool))
         r, J = self._lin_between(x, off, tmp, jac)
-        if jac:  # ∂r_yaw/∂b = +dist/σ_yaw
-            J.append((3, ob, dist / sig[:, 3]))
+        if jac:  # r = f(poses) - corrected measurement
+            J.append((3, ob, dist / kg / sig[:, 3]))
+            if has_g.any():  # (zero entries where a factor has no such state)
+                J.append((3, og, np.where(has_g, yaw / kg**2, 0.0) / sig[:, 3]))
+            if has_s.any():
+                for c in range(3):
+                    J.append((c, os_, np.where(has_s, meas[:, c] / ks**2, 0.0) / sig[:, c]))
         return r, J
 
     def _lin_scalar_prior(self, x, off, blk, jac):

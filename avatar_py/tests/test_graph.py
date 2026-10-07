@@ -28,6 +28,7 @@ def rand_pose(rng):
         "pose_prior",
         "between",
         "between_bias",
+        "between_bias_scale",
         "scalar_prior",
         "point_obs",
         "z_prior",
@@ -54,6 +55,10 @@ def test_analytic_jacobians_match_finite_differences(rng, factor):
     elif factor == "between_bias":
         g.add_variable("bias", VarType.SCALAR, [rng.normal(0, 0.01)])
         g.add_between_bias("a", "b", "bias", rand_pose(rng), 3.7, sig4)
+    elif factor == "between_bias_scale":
+        for k in ("bias", "s", "g"):
+            g.add_variable(k, VarType.SCALAR, [rng.normal(0, 0.01)])
+        g.add_between_bias("a", "b", "bias", rand_pose(rng), 3.7, sig4, "s", "g")
     elif factor == "scalar_prior":
         g.add_variable("bias", VarType.SCALAR, [0.02])
         g.add_scalar_prior("bias", 0.0, 0.01)
@@ -255,3 +260,37 @@ def test_heading_bias_is_recovered_on_a_loop(rng):
         g.add_point_obs(("x", k), "l", inverse_transform_points(gt[k], lm), [0.01] * 3)
     g.optimize()
     assert g.value("bias")[0] == pytest.approx(b_true, rel=0.05)
+
+
+def test_odometry_scale_errors_are_recovered_on_a_loop(rng):
+    """A rectangle driven with a 2 % translation scale error and a 3 % gyro scale error (plus a
+    heading bias), seen against landmarks at known positions: the three states recover them."""
+    b_true, s_true, g_true = 1e-3, 0.02, 0.03
+    gt = [np.zeros(4)]
+    for leg in range(8):
+        for _ in range(10):
+            gt.append(compose(gt[-1], [2.0, 0.0, 0.0, 0.0]))
+        gt.append(compose(gt[-1], [0.0, 0.0, 0.0, np.pi / 2 * (1 if leg < 4 else -1)]))
+    g = FactorGraph()
+    for k, p in enumerate(gt):
+        g.add_variable(("x", k), VarType.POSE4, p)
+    for key, std in (("b", 2e-3), ("s", 0.02), ("g", 0.02)):
+        g.add_variable(key, VarType.SCALAR, [0.0])
+        g.add_scalar_prior(key, 0.0, std)
+    g.add_pose_prior(("x", 0), gt[0], [1e-3] * 4)
+    for k in range(1, len(gt)):
+        inc = between(gt[k - 1], gt[k])
+        d = float(np.linalg.norm(inc[:3]))
+        meas = np.array([*(1 + s_true) * inc[:3], (1 + g_true) * inc[3] + b_true * d])
+        g.add_between_bias(("x", k - 1), ("x", k), "b", meas, d, [0.01, 0.01, 0.01, 1e-4], "s", "g")
+    lms = rng.uniform(-5, 25, (12, 3)) * [1, 1, 0]
+    for n, lm in enumerate(lms):
+        g.add_variable(("l", n), VarType.POINT3, lm)
+        g.add_point_prior(("l", n), lm, [0.01] * 3)
+        for k in range(0, len(gt), 3):
+            if np.hypot(*(lm[:2] - gt[k][:2])) < 12:
+                g.add_point_obs(("x", k), ("l", n), inverse_transform_points(gt[k], lm), [0.01] * 3)
+    g.optimize(max_iters=50)
+    assert g.value("s")[0] == pytest.approx(s_true, abs=2e-3)
+    assert g.value("g")[0] == pytest.approx(g_true, abs=3e-3)
+    assert g.value("b")[0] == pytest.approx(b_true, abs=3e-4)

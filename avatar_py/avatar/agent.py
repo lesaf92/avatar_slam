@@ -77,6 +77,9 @@ class AvatarParams:
     # Estimate a per-agent heading bias [rad/m] when heading is dead-reckoned
     # (platform heading_source != "compass"); prior σ from the platform spec (D9, L24).
     model_heading_bias: bool = True
+    # With the heading bias, also estimate the translation (DVL) and gyro scale errors when
+    # the platform spec declares them (T-X1-04, LOG L46).
+    model_odometry_scale: bool = False
     fused_freeze_heading_bias: bool = True  # hold the bias at its local estimate in fused (L26)
     # Drift-tolerant association: also align sliding windows of this many own
     # keyframes (0 = whole map only). Recent sub-maps stay nearly rigid when the
@@ -106,6 +109,37 @@ class AvatarParams:
     confirm_weak_policy: str = "veto"
     align_confirm_xy_m: float = 1.0
     align_confirm_yaw_rad: float = 0.035
+
+
+def odometry_states(
+    graph: FactorGraph, cfg: AgentConfig, params: AvatarParams, *tag
+) -> tuple | None:
+    """Keys ``(b, s, g)`` of ``cfg``'s odometry calibration states in ``graph``.
+
+    Created on first use with zero-mean priors of the platform spec's σ: the heading bias ``b``
+    (D9, LOG L24) and, with ``params.model_odometry_scale``, the translation and gyro scale
+    errors ``s`` and ``g`` (L46; ``None`` when not modelled). ``None`` when no heading bias is
+    modelled; the scale errors are then not modelled either. ``tag`` makes the keys unique
+    in a graph of several agents.
+    """
+    if not (params.model_heading_bias and heading_bias_modelled(cfg)):
+        return None
+    noise = cfg.odometry_noise
+    keys = []
+    for name, std, on in (
+        ("b", noise.yaw_bias_std_rad_per_m, True),
+        ("s", noise.scale_bias_std, params.model_odometry_scale),
+        ("g", noise.yaw_scale_bias_std, params.model_odometry_scale),
+    ):
+        key = (name, *tag)
+        if not (on and std > 0):
+            keys.append(None)
+            continue
+        if not graph.has(key):
+            graph.add_variable(key, VarType.SCALAR, [0.0])
+            graph.add_scalar_prior(key, 0.0, std)
+        keys.append(key)
+    return tuple(keys)
 
 
 @dataclass
@@ -189,6 +223,7 @@ class AvatarAgent:
         self.k = -1
         self.meta: dict[int, LandmarkMeta] = {}
         self._bias_key: tuple | None = None  # heading-bias state (D9), created at k = 0
+        self._odo_keys: tuple | None = None  # (b, s, g), see odometry_states
         self._part_object_ids = part_object_ids
         self._initial_z = initial_z_m
         self._lid_of_part: dict[int, int] = {}
@@ -238,28 +273,27 @@ class AvatarAgent:
             init = np.array([0.0, 0.0, z0, 0.0])
             self.local.add_variable(key, VarType.POSE4, init)
             self.local.add_pose_prior(key, init, [1e-3, 1e-3, self.params.initial_z_sigma_m, 1e-3])
-            if self.params.model_heading_bias and heading_bias_modelled(self.cfg):
-                self._bias_key = ("b",)
-                self.local.add_variable(self._bias_key, VarType.SCALAR, [0.0])
-                std = self.cfg.odometry_noise.yaw_bias_std_rad_per_m
-                self.local.add_scalar_prior(self._bias_key, 0.0, std)
+            self._odo_keys = odometry_states(self.local, self.cfg, self.params)
+            if self._odo_keys is not None:
+                self._bias_key = self._odo_keys[0]
         else:
             if kf.odom is None or kf.odom_sigmas is None:
                 raise ValueError("keyframes after the first need odometry")
             prev = ("x", self.k - 1)
             odom = np.asarray(kf.odom, dtype=float)
             dist = float(np.linalg.norm(odom[:3]))
-            if self._bias_key is not None:
-                odom = odom.copy()
-                odom[3] -= float(self.local.value(self._bias_key)[0]) * dist
+            if self._odo_keys is not None:
+                b, s, g = (
+                    0.0 if k is None else float(self.local.value(k)[0]) for k in self._odo_keys
+                )
+                odom = np.array([*odom[:3] / (1 + s), (odom[3] - b * dist) / (1 + g)])
             init = compose(self.local.value(prev), odom)
             if kf.abs_z is not None:
                 init[2] = kf.abs_z
             self.local.add_variable(key, VarType.POSE4, init)
-            if self._bias_key is not None:
-                self.local.add_between_bias(
-                    prev, key, self._bias_key, kf.odom, dist, kf.odom_sigmas
-                )
+            if self._odo_keys is not None:
+                b, s, g = self._odo_keys
+                self.local.add_between_bias(prev, key, b, kf.odom, dist, kf.odom_sigmas, s, g)
             else:
                 self.local.add_between(prev, key, kf.odom, kf.odom_sigmas)
         if kf.abs_z is not None and kf.abs_z_sigma is not None:
