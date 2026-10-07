@@ -5,6 +5,46 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo): 200 clique seeds on the held-out seeds, and the paper data (Claude)
+
+Branch `wp/T-F3-07-window-association`; tasks T-F3-06/07; **simulation**. 200 clique seeds are the
+default since `1c96113` (chosen on the development seeds, L41). Held-out seeds evaluated once, as
+part of `make -C experiments all-data JOBS=28` at `8eafe5c` (paper data committed as `adaf085`;
+previous paper data at `1666748`, 40 seeds).
+
+### L43. On fresh seeds 200 clique seeds hold: sonar-EKF G1 30 -> 34/60 and wrong alignments 123 -> 53; with ground-truth tracks fewer teams merge
+
+G1 (merged; wrong alignments), 40 -> 200 clique seeds:
+
+| Perception | development 0-19 | held out 20-79 |
+|---|---|---|
+| sonar images, EKF | 6 -> **11** (17 -> 17; 38/157 -> 13/163) | 30 -> **34** (51 -> 53; 123/502 -> 53/490) |
+| sonar images, ground-truth tracks | 19 -> 20 (20 -> 20) | 51 -> **49** (57 -> 52; 18/513 -> 7/495) |
+| proxy, EKF / ground-truth tracks | 19 / 20, unchanged | 55 / 58, unchanged |
+| UAV-LiDAR fleet (0-79), EKF / ground-truth tracks | 78 / 78, unchanged | |
+
+1. **The gain holds on fresh seeds** for the EKF on sonar images (+4 runs held-out, wrong
+   alignments more than halved), the perception it was chosen for.
+2. **It costs merges with ground-truth tracks on sonar**: held-out 57 -> 52 teams merged, G1 51 ->
+   49; wrong alignments 18 -> 7. More seeds find more competing hypotheses, and the ambiguity test
+   refuses more alignments (not traced run by run). Of the 11 held-out failures, 8 leave a robot
+   out of the team and 3 misalign one (1.4, 1.4 and 58 m).
+3. **Sonar-EKF failures** (26 held-out): 7 unmerged, 19 off (1-60 m); the worst robot is BlueROV2 1
+   in 16, as on the development seeds (L41).
+4. **Tier 1** moves by at most one run or a few millimetres: server ATE +0.001-0.002 m, cycle
+   check 833 -> 830 accepted of 1000, bandwidth 32 bit/s one cell 8/10 -> 7/10, drift -6 -> -7 %,
+   realism no-kernel and Huber columns (the GNC-TLS column the paper uses changes by 0.02 m in
+   one cell). Diagnostic NN and registration tiers move by one or two runs either way.
+5. Paper text updated (`62476cf`): the clique seeds and why (method), the sonar failures as they
+   are now (experiments), the sixth limitation (sparse fixes, the window's negative result, a
+   sensor as the remedy).
+
+**T-F3-06 stays open, blocked on a decision** (PLAN D14): its target (sonar-EKF G1 >= 16/20 on the
+development seeds) is not reached by software (11/20); the remaining failures are BlueROV2 1's
+sparse fixes, whose remedy for the Tarot was a sensor (D6).
+
+---
+
 ## 2026-10-06 (luiz-predator-neo, late night): a window of keyframes for sparse fixes does not help (Claude)
 
 Branch `wp/T-F3-07-window-association`; task T-F3-07; development seeds 0-19 only; **simulation**.
