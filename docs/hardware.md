@@ -14,7 +14,7 @@ search on 2026-09-28 (open the PDF before quoting it in the paper) ·
 |---|---|---|---|---|
 | UGV (anchor) | Clearpath **Husky A200** | Velodyne **VLP-16** Puck, Intel RealSense **D435i** | wheel odometry, IMU; RTK-GNSS for ground truth | `ugv_0` |
 | UAV | **Tarot 680 Pro** hexacopter | RealSense **D435i**, Pixhawk **Cube** (hex) flight controller (PX4), **Jetson Nano** companion computer; Velodyne **VLP-16** added (D6, 2026-10-06) | Cube IMU and barometer; GNSS (Here-class) for ground truth | `uav_0` |
-| UUV | Blue Robotics **BlueROV2** | Water Linked **DVL A50**, Tritech **Micron Gemini 720s** | Bar30 depth, IMU/compass, low-light camera, acoustic modem (§3) | `uuv_k` |
+| UUV | Blue Robotics **BlueROV2** | Water Linked **DVL A50**, Tritech **Micron Gemini 720s** | Bar30 depth, IMU/compass, low-light camera, acoustic modem (§3); optional Blue Robotics **Ping360** scanning sonar (PI, 2026-10-07; D14) | `uuv_k` |
 | Surface gateway | quay-side mast or buoy (new) | none (relay only) | topside acoustic modem, Wi-Fi mesh radio, GNSS, UGPS topside | `gw_0` |
 | USV (optional) | Blue Robotics **BlueBoat** | D435i above, Micron Gemini below | GNSS, acoustic modem | `usv_0` |
 
@@ -41,6 +41,7 @@ The simulator uses speeds below these maxima: UGV 1.0 m/s, UAV 1.0 m/s, BlueROV2
 | Velodyne VLP-16 | 16 ch, 100 m, ±3 cm, 360° × 30° (±15°) | sheet | `vlp16`: object-level range 40 m, vertical fan ±15°, σ = 4 cm + 0.2 %·r |
 | RealSense D435i | depth FOV 87° × 58°, ideal 0.3–3 m, error grows with range² | sheet | `d435i` / `d435i_down30` (UAV, pitched 30° down): 0.3–6 m, σ = 3 cm + 0.005·r² |
 | Tritech Micron Gemini 720s | 720 kHz, 90° horizontal, 50 m, 128 beams, 0.7° angular / 8 mm range resolution, ≤ 20 Hz, built-in pressure sensor | sheet | `gemini_720s`: object-level 0.5–30 m, 90° H; **vertical aperture 20° is UNVERIFIED**; σ_z = 0.1 + 0.1·r (elevation ambiguity) |
+| Blue Robotics Ping360 (optional) | mechanical scanning imaging sonar: 750 kHz; 0.75–50 m; beam 2° horizontal × 25° vertical; 0.9° mechanical resolution (1° steps); a full 360° turn takes 3.4–4.3 s at a 1 m range setting and 33 s at 50 m; range resolution 0.08 % of range (4.1 cm at 50 m); 300 m depth rating; 11–25 V, 5 W; 510 g in air, 175 g in water; USB, Ethernet (UDP) or RS-485 (Ping Protocol) | sheet (2026-10-07) | not modelled yet (T-S1-11): a 2-D 360° scan around the BlueROV2, one beam at a time |
 | Water Linked DVL A50 | 5 cm–50 m altitude, ≤ 3.75 m/s, ±1.01 % long-term (±0.1 % "Performance" version), 2–15 Hz | sheet | `bluerov2_dvl` odometry: 1 cm/√m random walk + a per-vehicle **1 % scale bias** + heading bias 1.5 mrad/m |
 | Cube (PX4) IMU/baro | tri-redundant IMU, barometer | – | `tarot_vio` odometry + `baro` absolute z (σ 0.3 m) |
 | BlueROV2 Bar30 | pressure depth | UNVERIFIED σ | `bar30` absolute z (σ 0.02 m) |
@@ -66,6 +67,14 @@ The simulator uses speeds below these maxima: UGV 1.0 m/s, UAV 1.0 m/s, BlueROV2
 3. **Heading is the UUV's weak point.** DVL velocity is good, but heading comes
    from a compass/IMU near steel piles. This is why cross-medium constraints
    matter underwater.
+4. **A 360° scanner against sparse fixes (D14).** The BlueROV2 that sees few piles in the
+   Gemini's 90° fan is the EKF tracker's remaining failure on sonar images (LOG L41-L43), as the
+   camera-only Tarot was before its LiDAR (L31). A Ping360 acts as a slow 2-D LiDAR: one sweep
+   covers every pile around the vehicle. Its catch is the sweep time: 3.4-4.3 s per turn at a
+   1 m range setting and 33 s at 50 m, so at harbour ranges (10-30 m) one sweep spans many
+   seconds of motion at 0.5 m/s. Each beam needs the pose of its own time (from the odometry),
+   and the 25° vertical beam leaves elevation as ambiguous as with the Gemini. Simulation first
+   (T-S1-11), then the purchase (§6).
 
 ## 3. Communication stack (decided by Claude, ADR-0006)
 
@@ -121,7 +130,7 @@ simulations (5 seeds, docs/LOG.md L6), the whole team shared one frame after
 |---|---|---|
 | Husky | `clearpath_simulator` (Jazzy + Harmonic packages exist) | gz `gpu_lidar` configured as VLP-16, `rgbd_camera` as D435i |
 | Tarot 680 | PX4 SITL hexacopter airframe (a generic hex, tuned to the 680 mm frame) | `rgbd_camera` pitched −30° |
-| BlueROV2 | DAVE / BlueROV2 Gazebo models (ROS 2 Jazzy branch) | DAVE multibeam sonar plugin configured to 90° × 20°, 128 beams, 50 m; DAVE DVL plugin; pressure |
+| BlueROV2 | DAVE / BlueROV2 Gazebo models (ROS 2 Jazzy branch) | DAVE multibeam sonar plugin configured to 90° × 20°, 128 beams, 50 m; DAVE DVL plugin; pressure; Ping360: not modelled yet (T-S1-11) |
 | Gateway | static model at the quay | none; comm emulator node (T-S3-01) |
 
 ## 6. Suggested purchases (not yet approved)
@@ -133,7 +142,8 @@ simulations (5 seeds, docs/LOG.md L6), the whole team shared one frame after
 | 5 GHz mesh radios | n_RF agents + gateway | Inter-robot RF | P0 |
 | RTK-GNSS base + rovers | 1 + 3 | Above-water ground truth | P0 |
 | BlueBoat + D435i + Micron Gemini | 1 | Sensing bridge; direct comparison with *Above and Below* | P1 |
-| Livox Mid-360 class LiDAR for the UAV | 1 | Makes the UAV a useful mapper (UNVERIFIED specs) | P2 |
+| Velodyne VLP-16 for the UAV | 1 | Makes the UAV a useful mapper (LOG L31) | **decided (D6)** |
+| Blue Robotics Ping360 | 1 per UUV (the one with sparse fixes first) | 360° 2-D scans against sparse fixes (D14) | P1, after T-S1-11 |
 
 ## Sources (checked 2026-09-28)
 
@@ -147,4 +157,5 @@ simulations (5 seeds, docs/LOG.md L6), the whole team shared one frame after
 - [Clearpath Husky spec comparison](https://clearpathrobotics.com/husky-spec-comparison/) · [clearpath_simulator for Jazzy/Harmonic](https://github.com/Mechazo11/clearpath_simulator_harmonic)
 - [Tarot 680 Pro (RobotShop)](https://www.robotshop.com/products/tarot-680-pro-folding-hexacopter-frame)
 - [BlueROV2](https://bluerobotics.com/store/rov/bluerov2/) · [BlueBoat](https://bluerobotics.com/store/boat/blueboat/blueboat/)
+- [Blue Robotics Ping360 scanning imaging sonar](https://bluerobotics.com/store/sonars/imaging-sonars/ping360-sonar-r1-rp/) (checked 2026-10-07)
 - [rmw_zenoh binaries for Jazzy (ROS Discourse)](https://discourse.openrobotics.org/t/rmw-zenoh-binaries-for-rolling-jazzy-and-humble/41395)
