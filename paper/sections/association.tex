@@ -12,8 +12,12 @@ descriptor cosine similarity when both carry open-vocabulary descriptors.
 Two candidate pairs are consistent if they use distinct landmarks and preserve horizontal
 distance, and, if both are same-medium, vertical offset, within the sum of their uncertainty-scaled
 gates. Hypotheses are greedy maximal cliques of this graph, in the spirit of
-PCM~\cite{mangelson2018pcm}; each is refined by weighted 4-DoF Kabsch~\cite{umeyama1991} and
-scored with a one-to-one MSAC score in which cross-medium inliers weigh $2/3$.
+PCM~\cite{mangelson2018pcm}, grown from its 200 highest-degree pairs; each is refined by weighted
+4-DoF Kabsch~\cite{umeyama1991} and scored with a one-to-one MSAC score in which cross-medium
+inliers weigh $2/3$. A sonar landmark carries no measured footprint, so it is a candidate for every
+landmark of the other agent; with fewer seeds the cliques grew only in the densest part of the
+graph, missed the true hypothesis, and left the ambiguity test below without the competitor it
+needs.
 
 \subsection{Ambiguity and support tests}
 Regular pile rows induce shifted hypotheses. We reject an alignment if a distinct competitor

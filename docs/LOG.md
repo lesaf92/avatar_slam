@@ -5,6 +5,89 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo): 200 clique seeds on the held-out seeds, and the paper data (Claude)
+
+Branch `wp/T-F3-07-window-association`; tasks T-F3-06/07; **simulation**. 200 clique seeds are the
+default since `1c96113` (chosen on the development seeds, L41). Held-out seeds evaluated once, as
+part of `make -C experiments all-data JOBS=28` at `8eafe5c` (paper data committed as `adaf085`;
+previous paper data at `1666748`, 40 seeds).
+
+### L43. On fresh seeds 200 clique seeds hold: sonar-EKF G1 30 -> 34/60 and wrong alignments 123 -> 53; with ground-truth tracks fewer teams merge
+
+G1 (merged; wrong alignments), 40 -> 200 clique seeds:
+
+| Perception | development 0-19 | held out 20-79 |
+|---|---|---|
+| sonar images, EKF | 6 -> **11** (17 -> 17; 38/157 -> 13/163) | 30 -> **34** (51 -> 53; 123/502 -> 53/490) |
+| sonar images, ground-truth tracks | 19 -> 20 (20 -> 20) | 51 -> **49** (57 -> 52; 18/513 -> 7/495) |
+| proxy, EKF / ground-truth tracks | 19 / 20, unchanged | 55 / 58, unchanged |
+| UAV-LiDAR fleet (0-79), EKF / ground-truth tracks | 78 / 78, unchanged | |
+
+1. **The gain holds on fresh seeds** for the EKF on sonar images (+4 runs held-out, wrong
+   alignments more than halved), the perception it was chosen for.
+2. **It costs merges with ground-truth tracks on sonar**: held-out 57 -> 52 teams merged, G1 51 ->
+   49; wrong alignments 18 -> 7. More seeds find more competing hypotheses, and the ambiguity test
+   refuses more alignments (not traced run by run). Of the 11 held-out failures, 8 leave a robot
+   out of the team and 3 misalign one (1.4, 1.4 and 58 m).
+3. **Sonar-EKF failures** (26 held-out): 7 unmerged, 19 off (1-60 m); the worst robot is BlueROV2 1
+   in 16, as on the development seeds (L41).
+4. **Tier 1** moves by at most one run or a few millimetres: server ATE +0.001-0.002 m, cycle
+   check 833 -> 830 accepted of 1000, bandwidth 32 bit/s one cell 8/10 -> 7/10, drift -6 -> -7 %,
+   realism no-kernel and Huber columns (the GNC-TLS column the paper uses changes by 0.02 m in
+   one cell). Diagnostic NN and registration tiers move by one or two runs either way.
+5. Paper text updated (`62476cf`): the clique seeds and why (method), the sonar failures as they
+   are now (experiments), the sixth limitation (sparse fixes, the window's negative result, a
+   sensor as the remedy).
+
+**T-F3-06 stays open, blocked on a decision** (PLAN D14): its target (sonar-EKF G1 >= 16/20 on the
+development seeds) is not reached by software (11/20); the remaining failures are BlueROV2 1's
+sparse fixes, whose remedy for the Tarot was a sensor (D6).
+
+---
+
+## 2026-10-06 (luiz-predator-neo, late night): a window of keyframes for sparse fixes does not help (Claude)
+
+Branch `wp/T-F3-07-window-association`; task T-F3-07; development seeds 0-19 only; **simulation**.
+At `1c96113` (the window code of `499503f`, and 200 clique seeds by default):
+`tier2_study.py --runs results/tier2 --seeds 0 ... 19 --tiers T2ekf T2sekf --ekf window_frames=W`
+and the same with `--runs results/tier2_uavlidar --tiers T2ekf` (outputs in `results/l42/`).
+
+### L42. Joint pairing over a window of keyframes admits wrong matches; deferring alone does not help (negative result)
+
+**What was tried** (`EkfTrackerParams.window_frames`, `499503f`): a detection with landmarks in its
+gate but no confident match waits up to W keyframes, carried with the odometry into the current
+body frame with the odometry's variance added; each keyframe the pending and the undecided
+detections go into the joint pairing together (which then also takes fixes that do not beat
+"new" on their own); after W keyframes a pending detection is decided as before. With W = 0 the
+front-end is bit-identical to the code before it (three recordings); unit tests showed sparse
+fixes of an irregular row matched one per keyframe.
+
+G1 (merged; wrong alignments) on the development seeds:
+
+| Window | proxy, EKF | sonar, EKF | UAV-LiDAR fleet, EKF |
+|---|---|---|---|
+| 0 | 19 (20; 6/174) | 11 (17; 13/163) | 20 (20; 0/181) |
+| 3 | 14 (15; 21/167) | 7 (12; 37/154) | 18 (19; 13/173) |
+| 6 | 14 (17; 29/168) | 9 (14; 42/151) | 18 (19; 13/171) |
+| 10 | 13 (16; 29/167) | 5 (14; 46/150) | 18 (19; 13/171) |
+| 3, widened pairing for pending detections only | 15 (15; 20/167) | 7 (14; 35/156) | 18 (19; 8/174) |
+| 3, no widened pairing (deferral only) | 18 (19; 7/177) | 9 (17; 19/167) | 20 (20; 0/181) |
+
+(The last two rows used an exploratory switch on the widened criterion, not committed.)
+
+1. **Every variant is worse than no window**, also for the LiDAR fleet, whose frames are dense:
+   pairing fixes from several keyframes jointly admits wrong matches (wrong alignments triple),
+   and deferral alone loses runs. The relative geometry of fixes carried over a few keyframes is
+   less certain than the model assumed, and holding a detection back withholds its update from
+   the pose.
+2. **Reverted** (`1488623`): the code and its tests are gone, the front-end is bit-identical to
+   the code before it; the clique-seed default of L41 stays.
+3. Sparse fixes (BlueROV2 1 on sonar, the camera-only Tarot) remain the limit of the EKF tracker.
+   The Tarot's was removed by a sensor (L31, decision D6); BlueROV2 1's analogue is a wider or a
+   second sonar, or a path that keeps more piles in view, a decision for the PI.
+
+---
+
 ## 2026-10-06 (luiz-predator-neo, night): what the EKF's wrong alignments on sonar are made of (Claude)
 
 Branch `wp/T-F3-06-ekf-sonar`; task T-F3-06; development seeds 0-19 only; **simulation**. Defaults

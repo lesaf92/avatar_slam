@@ -87,7 +87,9 @@ class AssociationParams:
     inlier_z_min_m: float = 0.3
     inlier_z_max_m: float = 2.0
     cross_model_sigma_m: float = 0.15  # coaxial model error (pile rake / sway)
-    clique_seeds: int = 40
+    # Cliques grown from this many highest-degree candidates. Landmarks without a footprint
+    # (sonar) make every pair a candidate; 40 seeds then missed the true clique (LOG L41).
+    clique_seeds: int = 200
     max_candidates_per_landmark: int = 12
     footprint_ratio_max: float = 1.5
     height_ratio_max: float = 2.0

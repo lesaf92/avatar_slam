@@ -126,3 +126,27 @@ def test_landmark_meta_ignores_unmeasured_footprints() -> None:
     m.update(LandmarkFlags.SONAR, 0, np.array([0.0, 0.0, 0.05]), np.zeros(0))
     assert np.allclose(m.extent[:2], 0.6)  # the sonar's zeros do not pull it down
     assert np.isclose(m.extent[2], (0.05 + 1.0 + 0.05) / 3)
+
+
+def test_default_clique_seeds_find_the_true_hypothesis_in_a_dense_graph():
+    """LOG L41: sonar landmarks carry no footprint, so every pair is a candidate (864 here);
+    grown from 40 seeds the cliques miss the true hypothesis and a shifted one, turned by half a
+    revolution, passes unopposed. The default (200) finds the true one. Final maps of Tier-2
+    seed 18 (BlueROV2 0 and what it received from the Tarot; tools/gen_association_fixture.py)."""
+    import dataclasses
+    from pathlib import Path
+
+    from avatar.eval.metrics import frame_error
+
+    path = Path(__file__).resolve().parents[2] / "testdata/association/sonar_seed18_uuv0_uav0.npz"
+    z = np.load(path)
+    fields = ("ids", "positions", "sigma_xy", "sigma_z", "extents", "class_ids", "flags",
+              "descriptors")  # fmt: skip
+    mine = LandmarkSet(**{f: z[f"mine_{f}"] for f in fields})
+    remote = LandmarkSet(**{f: z[f"remote_{f}"] for f in fields})
+    few = align(mine, remote, dataclasses.replace(AssociationParams(), clique_seeds=40))
+    assert few is not None and frame_error(few.T_mine_from_remote, z["T_true"])[0] > 10.0
+    res = align(mine, remote, AssociationParams())
+    assert res is not None
+    exy, eyaw = frame_error(res.T_mine_from_remote, z["T_true"])
+    assert exy < 1.0 and eyaw < 0.05

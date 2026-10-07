@@ -146,12 +146,14 @@ On the BlueROV2s, the ray-cast proxy can then be replaced by DAVE's multibeam so
 (speckle, reverberation and side lobes; Tables~\ref{tab:tier2sonar} and~\ref{tab:tier2sonarheld});
 an image front-end extracts range-bearing blobs, and the other robots are unchanged. With
 ground-truth tracks G1 holds in \sonarTwoSGOne{} development runs and \sonarHeldTwoSGOne{} held-out
-runs (\sonarHeldTwoSWrong{} wrong alignments held-out); the failures are mostly wrong
-cross-medium alignments, with frame errors of tens of metres, or a robot left out of the team. The filter, tuned
-on the proxy, does not transfer: it reaches G1 in \sonarTwoSEKFGOne{} development and
-\sonarHeldTwoSEKFGOne{} held-out runs (\sonarHeldTwoSEKFWrong{} wrong alignments held-out), because
-echoes of the quay face and of hulls slide along those surfaces and become landmarks, and
-alignments on few inliers then go wrong (Sec.~\ref{sec:discussion}). On sonar images, cross-medium
+runs (\sonarHeldTwoSWrong{} wrong alignments held-out); most failures leave a robot out of the
+team (with more clique seeds the ambiguity test sees more competitors, and fewer teams merge than
+with fewer seeds, but far fewer wrong alignments are accepted). The filter, tuned on the proxy, reaches G1
+in \sonarTwoSEKFGOne{} development and \sonarHeldTwoSEKFGOne{} held-out runs
+(\sonarHeldTwoSEKFWrong{} wrong alignments held-out). Its failures are mostly the BlueROV2 that
+sees the fewest piles: between sparse fixes its pose is uncertain by about a pile spacing, the
+filter starts duplicates rather than risk wrong matches, and the duplicates cost the loop closures
+that keep its map consistent (Sec.~\ref{sec:discussion}). On sonar images, cross-medium
 association with ground-truth tracks mostly holds; intra-agent association does not yet.
 
 \begin{table}[t]
