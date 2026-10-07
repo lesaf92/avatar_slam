@@ -226,7 +226,8 @@ association with ground-truth tracks mostly holds; intra-agent association does 
 \paragraph{Acoustic rate and digest order}
 Table~\ref{tab:bandwidth} sweeps the raw modem rate (shared by the three acoustic nodes) for
 three digest orders. Below a few tens of bit/s the team cannot merge within the mission. From
-64\,bit/s up, the link budget, not the order, sets when frames connect.
+64\,bit/s up, the link budget, not the order, sets when frames connect; from 512\,bit/s to
+10\,kbit/s the link no longer limits merging.
 
 \begin{table}[t]
   \centering
@@ -237,6 +238,32 @@ three digest orders. Below a few tens of bit/s the team cannot merge within the 
   \scriptsize
   \setlength{\tabcolsep}{3pt}
   \IfFileExists{data/tab_bandwidth.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_bandwidth.tex}}}{\todo{run make -C experiments paper-data}}
+\end{table}
+
+\paragraph{Packet loss}
+\IfFileExists{data/loss_confirm.tex}{\input{data/loss_confirm.tex}}{%
+  \newcommand{\lossConfirmFifo}{?}\newcommand{\lossConfirmQuality}{?}\newcommand{\lossConfirmVoi}{?}%
+  \newcommand{\lossConfirmVoiFifoPairs}{?}\newcommand{\lossConfirmVoiFifoP}{?}%
+  \newcommand{\lossConfirmVoiQualityPairs}{?}\newcommand{\lossConfirmVoiQualityP}{?}}%
+Table~\ref{tab:loss} replaces the modem's range-dependent loss with the same packet loss at
+every range. At 1\,kbit/s every team still merges at 80\,\% loss, only later. At the M64's
+64\,bit/s merging fails as the loss grows from 40 to 80\,\%, and there the digest order matters.
+In a test fixed before it was run (200 fresh seeds at 50 and 60\,\% loss, 400 paired runs), the
+VoI order merged the team in \lossConfirmVoi{} runs and FIFO in \lossConfirmFifo{} (discordant
+pairs \lossConfirmVoiFifoPairs{}, two-sided sign test $p=\lossConfirmVoiFifoP$), but not more
+often than the quality order (\lossConfirmQuality{}; \lossConfirmVoiQualityPairs{},
+$p=\lossConfirmVoiQualityP$).
+
+\begin{table}[t]
+  \centering
+  \caption{Team merging vs.\ packet loss on the acoustic link (the same loss at every range),
+  for two modem rates and three digest orders (reference fleet, harbor, 600\,s, Tier-1
+  simulation): teams merged and, in parentheses, the median time [s] at which the anchor's
+  frame graph covers all four robots.}
+  \label{tab:loss}
+  \scriptsize
+  \setlength{\tabcolsep}{3pt}
+  \IfFileExists{data/tab_loss.tex}{\resizebox{\columnwidth}{!}{\input{data/tab_loss.tex}}}{\todo{run make -C experiments paper-data}}
 \end{table}
 
 \paragraph{Front-end errors}

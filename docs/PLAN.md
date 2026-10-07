@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho, ITA (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v2.4 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v2.5 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -356,7 +356,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 | G-1 | No work on one disk only | Every task branch on GitHub, CI green on the open PR, the sonar recordings (`results/tier2/*/sonar.npz`, 2.9 GB, not bit-reproducible) copied off the host | 2026-10-07 | T-I1-07 |
 | G-2 | Held-out results understood | The cause of the fresh-seed G1 gap named; a recommendation for D13 | 2026-10-20 | T-E3-02 |
 | G-3 | Realistic sonar front-end | DAVE sonar with the EKF tracker: G1 ≥ 16/20 development seeds, then one held-out evaluation | 2026-10-31 (M1) | T-F3-06 |
-| G-4 | H2 settled | Bandwidth and loss sweep (100 bit/s to 10 kbit/s) in `paper/data`; H2 kept, reworded or dropped | 2026-10-31 (M1) | T-C2-01, T-C5-01 |
+| G-4 | H2 settled | Bandwidth and loss sweep (100 bit/s to 10 kbit/s) in `paper/data`; H2 kept, reworded or dropped. **Evidence complete (LOG L47); rewording proposed, PI to confirm:** an informed order beats FIFO at equal bytes when few records get through; VoI adds nothing over the quality order | 2026-10-31 (M1) | T-C2-01, T-C5-01 |
 | G-5 | ROS 2 end to end in Gazebo | `unified.launch.py` runs the reference fleet (DAVE sonar) with agent nodes and the comm emulator; the same G1 as the offline Tier-2 pipeline on the same seeds | 2026-12-20 (M2) | T-S2-02, T-S3-01, T-I1-09 |
 | G-6 | Fair baselines | ≥ 2 external baselines (Swarm-SLAM on air/ground, DRACo-SLAM2 underwater) and the *A&B*-style server, on the same inputs | 2027-01-31 | T-E2-01 … T-E2-04 |
 | G-7 | Real data | ≥ 1 real sonar sequence through the front-end | 2027-02-10 (M3) | T-R1-05, T-E4-01 |
@@ -365,6 +365,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 
 ## 11. Changelog
 
+- **v2.5 (2026-10-07).** T-C5-01 (LOG L47): bandwidth to 10 kbit/s and packet-loss sweep in `paper/data` and the paper; a pre-registered test: VoI beats FIFO under heavy loss but not the quality order; H2 rewording proposed (G-4).
 - **v2.4 (2026-10-07).** T-X1-04 (LOG L46): strict "never hurt" is unattainable (the oracle is worse than solo on one seed); the harm comes from unmodelled odometry scale errors; new decision D15 (estimate them by default); the no-avoidable-harm criterion moves to T-X1-03.
 - **v2.3 (2026-10-07).** Ping360 in simulation (T-S1-11, LOG L45): evidence for D14 (sonar-EKF G1 held-out 34 -> 56/60, idealized sensor); new task T-S1-12 (DAVE-rendered Ping360). Bibliography verified (T-R1-04, L44).
 - **v2.2 (2026-10-07).** T-F3-06: 200 clique seeds by default (LOG L41, L43: sonar-EKF G1 held-out 30 -> 34/60, wrong alignments 123 -> 53); T-F3-07 negative (L42, reverted); paper data regenerated. New decision D14 (BlueROV2 with sparse sonar fixes).
