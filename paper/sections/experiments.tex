@@ -54,18 +54,26 @@ which produces the large error at 100\,bit/s.
 \end{table}
 
 \paragraph{Correcting a drifting AUV}
-\IfFileExists{data/drift_summary.tex}{\input{data/drift_summary.tex}}{\newcommand{\driftSmallRuns}{?}\newcommand{\driftSmallMeanChange}{?}}
+\IfFileExists{data/drift_summary.tex}{\input{data/drift_summary.tex}}{}%
+\providecommand{\driftSmallRuns}{?}\providecommand{\driftSmallMeanChange}{?}%
+\providecommand{\driftTeamAte}{?}\providecommand{\driftNoScaleSmallRuns}{?}%
+\providecommand{\driftNoScaleSmallMeanChange}{?}\providecommand{\driftNoScaleTeamAte}{?}%
 We claim collaboration only for small drift (Table~\ref{tab:drift}). A BlueROV2 makes a
 one-way transit through the sparse outer harbor, and both ends of the transit lie in water
 that another AUV surveys. Over the \driftSmallRuns{} runs whose solo drift stays below 1\,m,
 sharing changes the drifting vehicle's error by \driftSmallMeanChange\,\% on average. The gain
 is not uniform: some runs improve substantially, and a few get slightly worse. Metre-level
-drift is not yet corrected (Sec.~\ref{sec:discussion}).
+drift is not yet corrected (Sec.~\ref{sec:discussion}). Without the scale-error states of
+Sec.~\ref{sec:system}, so that the simulated DVL and gyro scale errors go unmodelled, the
+team ATE averages \driftNoScaleTeamAte\,m instead of \driftTeamAte\,m, and sharing changes
+the drifting vehicle's error by \driftNoScaleSmallMeanChange\,\% over the
+\driftNoScaleSmallRuns{} small-drift runs.
 
 \begin{table}[t]
   \centering
   \caption{Drifting AUV, one-way transit with both ends in surveyed water: ATE of the transit
-  vehicle alone, with \avatar{}, and in the oracle (Tier-1 simulation, 600\,s, M64). Runs are
+  vehicle alone, with \avatar{}, and in the oracle, each aligned on its own (Tier-1
+  simulation, 600\,s, M64). Runs are
   sorted by solo drift; $^\dagger$: solo drift above 1\,m, outside the claimed regime.}
   \label{tab:drift}
   \footnotesize

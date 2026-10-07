@@ -25,12 +25,17 @@ $\chi^2_3$ distribution. Because the local graph is re-solved at every exchange,
 warm-started: previous weights are kept, new observations first pull the estimate, and the
 surrogate then starts close to the truncated cost. Table~\ref{tab:realism} shows the effect.
 
-\subsection{Heading bias}
+\subsection{Odometry biases}
 Near steel structures the magnetometer of an underwater vehicle is unreliable, so its
 heading is effectively gyro-integrated and carries a slowly varying bias. Where a platform's
 heading is dead-reckoned, each agent estimates a heading bias $b$ [rad/m] with a prior from
 the platform specification, and its odometry factors subtract $b$ times the distance
-travelled. A reliable compass heading needs no such state.
+travelled. A reliable compass heading needs no such state. Where the specification also
+declares scale errors, such as a DVL's long-term velocity accuracy or a gyro's scale factor,
+the agent estimates them too, as states $s$ and $g$ with zero-mean priors of the specified
+size: the factor divides the measured translation by $1+s$ and the measured heading change,
+less the bias, by $1+g$. In the fused graph the heading bias is held at its local estimate:
+matches from one end of a long transit would otherwise retune this global parameter.
 
 \subsection{Condensed sharing without double counting}
 Each agent periodically broadcasts its landmark parts with marginal uncertainty computed from the

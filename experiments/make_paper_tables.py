@@ -208,21 +208,42 @@ def drift_correction() -> None:
         "Seed & Alone [m] & \\avatar{} [m] & Change & Oracle [m] \\\\",
         "\\midrule",
     ]
-    small = []
+    small = _small_drift_changes(rows, agent)
     for r in runs:
-        a, f, o = (_num(r[f"ate_{k}_{agent}_m"]) for k in ("alone", "fused", "oracle"))
+        a, f, o = (_num(r[f"ate_{k}_{agent}_m"]) for k in ("alone", "fused", "oracle_own"))
         change = 100.0 * (f - a) / a
         mark = "" if a <= 1.0 else "$^\\dagger$"
-        if a <= 1.0:
-            small.append(change)
         lines.append(f"{r['seed']}{mark} & {a:.2f} & {f:.2f} & {change:+.0f}\\,\\% & {o:.2f} \\\\")
     lines += ["\\bottomrule", "\\end{tabular}"]
     (DATA / "tab_drift.tex").write_text("\n".join(lines) + "\n")
     mean = f"{np.mean(small):+.0f}" if small else "--"
-    (DATA / "drift_summary.tex").write_text(
-        f"% generated from drift_anchored.csv\n\\newcommand{{\\driftSmallRuns}}{{{len(small)}}}\n"
-        f"\\newcommand{{\\driftSmallMeanChange}}{{{mean}}}\n"
-    )
+    team = np.mean([_num(r["team_ate_dec_m"]) for r in rows])
+    macros = [
+        "% generated from drift_anchored.csv (and drift_anchored_noscale.csv, D15)",
+        f"\\newcommand{{\\driftSmallRuns}}{{{len(small)}}}",
+        f"\\newcommand{{\\driftSmallMeanChange}}{{{mean}}}",
+        f"\\newcommand{{\\driftTeamAte}}{{{team:.2f}}}",
+    ]
+    if (DATA / "drift_anchored_noscale.csv").exists():  # estimator without the scale states
+        ns = _read("drift_anchored_noscale.csv")
+        small_ns = _small_drift_changes(ns, agent)
+        team_ns = np.mean([_num(r["team_ate_dec_m"]) for r in ns])
+        macros += [
+            f"\\newcommand{{\\driftNoScaleSmallRuns}}{{{len(small_ns)}}}",
+            f"\\newcommand{{\\driftNoScaleSmallMeanChange}}{{{np.mean(small_ns):+.0f}}}",
+            f"\\newcommand{{\\driftNoScaleTeamAte}}{{{team_ns:.2f}}}",
+        ]
+    (DATA / "drift_summary.tex").write_text("\n".join(macros) + "\n")
+
+
+def _small_drift_changes(rows: list[dict], agent: str) -> list[float]:
+    """Change [%] of ``agent``'s ATE, fused vs. alone, over the runs with solo ATE ≤ 1 m (D8)."""
+    out = []
+    for r in rows:
+        a, f = _num(r[f"ate_alone_{agent}_m"]), _num(r[f"ate_fused_{agent}_m"])
+        if a <= 1.0:
+            out.append(100.0 * (f - a) / a)
+    return out
 
 
 def realism() -> None:

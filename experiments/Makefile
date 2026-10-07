@@ -44,6 +44,8 @@ loss-confirm:
 drift:
 	$(PY) trajectory_study.py --presets fleet_transit_anchored --seeds $(SEEDS) \
 		--out $(DATA)/drift_anchored.csv
+	$(PY) trajectory_study.py --presets fleet_transit_anchored --seeds $(SEEDS) \
+		--no-odometry-scale --out $(DATA)/drift_anchored_noscale.csv  # ablation (D15)
 
 realism:
 	$(PY) realism_study.py --seeds 0 1 2 --workers $(JOBS) --out $(DATA)/realism.csv
