@@ -236,6 +236,10 @@ def test_build_tier2_sim_keeps_tier1_odometry(tmp_path):
     os.utime(tmp_path / "raw.npz", ns=(1, 1))  # a re-recording replaces raw.npz
     build_tier2_sim(tmp_path, params)
     assert pickle.loads(cache.read_bytes())["key"] != key0
+    # a non-default front-end variant gets its own file and leaves the default one alone
+    build_tier2_sim(tmp_path, params, FrontEndParams(ignore_sensors=("vlp16",)))
+    assert len(list(tmp_path.glob("detections_oracle_*.pkl"))) == 1
+    assert pickle.loads(cache.read_bytes())["key"] != key0
 
 
 def test_detection_cache_key_covers_frontend_imports():
@@ -256,3 +260,30 @@ def test_detection_cache_key_covers_frontend_imports():
 def test_body_to_world():
     p = body_to_world(np.array([1.0, 2.0, 3.0, np.pi / 2]), np.array([[1.0, 0.0, 0.0]]))
     np.testing.assert_allclose(p, [[1.0, 3.0, 3.0]], atol=1e-12)
+
+
+def test_ping360_sweeps_disjoint_sectors_that_cover_one_turn():
+    """T-S1-11: with a 4 s turn and 1 s keyframes, keyframes 1-4 keep four disjoint quarters of
+    the full-turn scan; together they are the whole turn, and keyframe 5 starts it again."""
+    from avatar.tier2.frontend import swept_sector
+
+    spec = GZ_SENSORS["ping360"]
+    scan = np.full((spec.v_samples, spec.h_samples), 10.0)
+    times = np.arange(6, dtype=float)
+    kept = [np.isfinite(swept_sector(spec, scan, times, k, 4.0)[0]) for k in range(1, 6)]
+    assert all(abs(m.sum() - spec.h_samples / 4) <= 2 for m in kept[:4])
+    assert not np.any(kept[0] & kept[1]) and np.all(kept[0] | kept[1] | kept[2] | kept[3])
+    np.testing.assert_array_equal(kept[4], kept[0])
+
+
+def test_harbor_fleet_ping360_option():
+    from avatar.sim.scenarios import harbor_fleet
+
+    plain = {a.name: a.sensors for a in harbor_fleet(np.random.default_rng(0)).agents}
+    with360 = {
+        a.name: a.sensors for a in harbor_fleet(np.random.default_rng(0), uuv_ping360=True).agents
+    }
+    assert "ping360" not in plain["uuv_1"]
+    assert with360["uuv_0"][-1] == with360["uuv_1"][-1] == "ping360"
+    assert with360["ugv_0"] == plain["ugv_0"]
+    assert {n for n, s in with360.items() if "ping360" in s} == {"uuv_0", "uuv_1"}

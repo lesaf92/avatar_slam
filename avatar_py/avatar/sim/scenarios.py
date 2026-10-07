@@ -232,6 +232,7 @@ def harbor_fleet(
     frontend_errors: dict | None = None,
     acoustic_bps: float | None = None,
     uav_lidar: bool = False,
+    uuv_ping360: bool = False,
 ) -> Scenario:
     """Harbour world with the PI's **reference fleet** (ADR-0006, docs/hardware.md).
 
@@ -243,6 +244,8 @@ def harbor_fleet(
       ``uav_lidar=True`` adds a VLP-16-class LiDAR (stand-in for the optional
       Livox-class unit of decision D6, docs/hardware.md), which sees many piles
       per keyframe (LOG L31).
+      ``uuv_ping360=True`` adds a Blue Robotics Ping360 360° scanning sonar to every BlueROV2
+      (an option of decision D14, T-S1-11).
     * ``uuv_k``: BlueROV2, Micron Gemini 720s imaging sonar + low-light camera +
       Bar30 depth, DVL A50 dead reckoning. SLAM traffic goes **only** over the
       acoustic modem (the tether is for safety/logging, never for SLAM data).
@@ -293,7 +296,8 @@ def harbor_fleet(
     ]  # fmt: skip
     for k in range(n_uuv):
         agents.append(
-            agent(2 + k, f"uuv_{k}", Domain.UNDERWATER, ("gemini_720s", "bluerov2_camera"),
+            agent(2 + k, f"uuv_{k}", Domain.UNDERWATER,
+                  ("gemini_720s", "bluerov2_camera", *(("ping360",) if uuv_ping360 else ())),
                   (AC,), absolute_z="bar30", odometry=odo["bluerov2_dvl"])
         )  # fmt: skip
     gw_id = 2 + n_uuv

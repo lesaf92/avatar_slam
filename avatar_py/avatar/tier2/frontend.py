@@ -59,7 +59,7 @@ from avatar.geometry import compose, transform_points
 from avatar.semantics import CLASS_NAMES, class_id, normalize
 from avatar.sim.agents import heading_bias_modelled
 from avatar.sim.sensors import SENSOR_LIBRARY, Detection, DetectionSensor
-from avatar.tier2.rays import sensor_points
+from avatar.tier2.rays import ray_angles, sensor_points
 from avatar.tier2.sdf import RaySensorSpec
 from avatar.tier2.sonar_image import SonarImage, SonarImageParams, detect_blobs
 from avatar.types import LandmarkFlags, Medium
@@ -141,6 +141,13 @@ class FrontEndParams:
     ekf_sonar: EkfTrackerParams | None = None
     # Sonar images (spec kind "sonar_image", DAVE's multibeam sonar, ADR-0008)
     sonar_image: SonarImageParams = field(default_factory=SonarImageParams)
+    # Ping360 (T-S1-11): seconds per 360° turn of the mechanical scanner; each keyframe keeps
+    # the sector swept since the previous one. 21 s interpolates the product page's 3.4-4.3 s
+    # at a 1 m range setting and 33 s at 50 m to the 30 m used here (UNVERIFIED). 0: the whole
+    # turn at every keyframe (an upper bound).
+    ping360_sweep_s: float = 21.0
+    # Sensors whose data are ignored (paired controls: the same recording without them).
+    ignore_sensors: tuple[str, ...] = ()
     # Semantic oracle: max distance [m] from a detection to a GT part's surface
     label_match_m: float = 1.5
 
@@ -527,6 +534,27 @@ def label_detection(
     return cls, desc
 
 
+def swept_sector(
+    spec: RaySensorSpec, scan: NDArray, times: FloatArray, k: int, sweep_s: float
+) -> NDArray:
+    """The part of a full-turn scan that a mechanical scanner swept up to keyframe ``k``.
+
+    The head turns at ``2π / sweep_s`` [rad/s] from azimuth ``-π`` at ``times[0]``; returns
+    ``scan`` (``(v, h)`` ranges) with the columns outside the azimuths swept since keyframe
+    ``k - 1`` set to ``inf`` (no return). The vehicle's motion during the sweep is neglected:
+    a keyframe lasts one second, the BlueROV2 moves 0.5 m in it.
+    """
+    t0 = times[k - 1] if k > 0 else times[0] - (times[1] - times[0] if len(times) > 1 else 1.0)
+    rate = 2.0 * np.pi / sweep_s
+    start = rate * (t0 - times[0])
+    width = rate * (times[k] - t0)
+    az, _ = ray_angles(spec)
+    keep = np.mod(az + np.pi - start, 2.0 * np.pi) < width
+    out = np.array(scan, dtype=np.float64, copy=True)
+    out[:, ~keep] = np.inf
+    return out
+
+
 def nearest_part(world, medium: Medium, p_world: FloatArray, max_dist_m: float) -> int:
     """Index of the ground-truth part a detection measures (evaluation / labels only).
 
@@ -592,9 +620,14 @@ def detections_for_agent(
         gt_pose = agent_data.gt[k]
         items = []  # (sensor, medium, cluster, sigmas, true part)
         for sname, spec in specs.items():
+            if sname in params.ignore_sensors:
+                continue
             sensor = SENSOR_LIBRARY[sname]
             medium = sensor.target_medium
-            for c in segment(spec, sensor_data[sname][k], z_a, world.seabed_z, params, rng):
+            scan = sensor_data[sname][k]
+            if sname == "ping360" and params.ping360_sweep_s > 0.0:
+                scan = swept_sector(spec, scan, agent_data.times, k, params.ping360_sweep_s)
+            for c in segment(spec, scan, z_a, world.seabed_z, params, rng):
                 if c.range_m > sensor.max_range_m or c.range_m < sensor.min_range_m:
                     continue
                 stats["clusters"] += 1
@@ -698,4 +731,5 @@ __all__ = [
     "label_detection",
     "nearest_part",
     "segment",
+    "swept_sector",
 ]
