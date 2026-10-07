@@ -51,7 +51,7 @@ Status values: `todo` · `in-progress` · `review` · `done` · `blocked`.
 | T-S4-04 | Trajectory library (10 kinds + CSV replay), per-agent start/height/heading/speed overrides, YAML presets, turn-dependent odometry error (PI request) | P0 | – | done | Claude · `claude/relaxed-ramanujan-bzrqyd` | `test_trajectories.py`; LOG L9 |
 | T-C6-01 | Modem-M64 driver + link adapter: fragment ≤ 64 B wire packets into modem frames, reassemble, drop incomplete (verify the M64 frame size) | P0 | – | todo | | Loopback test with the recorded frame format |
 | T-C7-01 | Gateway policy v1: VoI-based RF→acoustic selection (shares code with T-C2-01) | P1 | T-C2-01 | todo | | Beats the class-priority v0 on time-to-team-connection |
-| T-C5-01 | Bandwidth (100 bps–10 kbps) and loss sweep experiment → `paper/data/` | P1 | T-C2-01 | todo | | CSV + figure script |
+| T-C5-01 | Bandwidth (100 bps–10 kbps) and loss sweep experiment → `paper/data/` | P1 | T-C2-01 | in-progress | Claude · `wp/T-C5-01-bandwidth-loss-sweep` | CSV + figure script |
 | T-S1-06 | UAV sensing at altitude: a longer-range or nadir sensor option (e.g. downward mapping camera) so the UAV can join the team above ~5 m | P1 | – | todo | | `fleet_heights.yaml` connects (LOG L9) |
 | T-E2-06 | Server baseline fairness: landmark-only uplink and adaptive acoustic stride, swept | P1 | T-E2-05 | todo | | CSV over strides/policies in `paper/data/` |
 | T-S4-01 | Scenario YAML (world, team, links) shared by Tier 1 and Tier 2 | P0 | – | todo | | `harbor.yaml` reproduces current harbour |

@@ -148,3 +148,11 @@ def test_odometry_states_follow_the_platform_spec():
     assert odometry_states(FactorGraph(), cfgs["uuv_0"], AvatarParams()) == (("b",), None, None)
     assert odometry_states(FactorGraph(), cfgs["uuv_0"], on, 2) == (("b", 2), ("s", 2), ("g", 2))
     assert odometry_states(FactorGraph(), cfgs["ugv_0"], on) == (("b",), None, ("g",))  # LIO
+
+
+def test_acoustic_loss_override_is_flat_within_range():
+    from avatar.sim.scenarios import harbor_fleet
+    from avatar.types import LinkType
+
+    ch = harbor_fleet(np.random.default_rng(0), acoustic_loss=0.3).channels[LinkType.ACOUSTIC]
+    assert ch.loss_prob(0.0) == ch.loss_prob(150.0) == 0.3 and ch.loss_prob(1e4) == 1.0
