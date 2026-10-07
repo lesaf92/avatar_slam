@@ -101,19 +101,26 @@ flowchart LR
 |---|---|---|
 | RF link | 5 GHz Wi-Fi mesh (802.11s or a vendor mesh radio) between UGV, UAV, gateway, ground station | Commodity parts, Mbps rates, fine for inter-agent digests (≤ 1400 B packets) |
 | RF middleware | ROS 2 Jazzy with **Zenoh** (`rmw_zenoh_cpp`, binaries exist for Jazzy) for inter-robot traffic; only `/avatar/*` is shared between robots | DDS multicast discovery degrades on multi-robot Wi-Fi; Zenoh routes discovery through routers |
-| Acoustic modem (primary) | **Water Linked Modem-M64**: 64 bps, 200 m, 1.5–2.5 s latency, half duplex, UART; one per UUV plus one at the gateway | Same vendor as the DVL A50, native BlueROV2 integration, low cost. 64 bps is the hard regime that makes the paper's scheduling contribution matter |
+| Acoustic modem (primary) | **Water Linked Modem-M64**: 64 bps, 200 m, 1.5–2.5 s latency, half duplex; UART 115200 8-N-1 (3.3 V); **8-byte payload per acoustic packet**; modems sync **in pairs** (protocol roles `a`/`b`, channels 1-7; checked 2026-10-07, T-C6-01); one per UUV plus one at the gateway (see D16) | Same vendor as the DVL A50, native BlueROV2 integration, low cost. 64 bps is the hard regime that makes the paper's scheduling contribution matter |
 | Acoustic modem (upgrade) | **Blueprint Subsea SeaTrac X150**: ~100 baud data, 1000 m, USBL tracking of beacons | Adds inter-agent range/bearing (task T-B4-01) and longer range |
 | Underwater ground truth | **Water Linked UGPS G2** (SBL, 0.2 % / 1°, 100–300 m) | Used **only** for evaluation, never fed to the estimator (except in an explicit ablation) |
 | Tether policy | The BlueROV2 tether carries safety/teleoperation, rosbag logging, and pre-dive time sync. **It never carries Avatar traffic.** This is enforced by publishing `/avatar/*` from the UUV only to the modem bridge (Zenoh ACL / namespace) | Keeps the acoustic-communication claims honest. Without a modem, the ROS 2 comm emulator throttles traffic to the M64 profile, and the paper labels it "emulated acoustic" |
 | Relay | Surface gateway: store-and-forward (`avatar.comm.gateway`). Acoustic → RF forwards everything; RF → acoustic sends re-encoded, descriptor-free records of waterline-crossing classes first; `sender_id` = originator | Links differ by ~10⁵× in bit rate |
 | Time sync | chrony over Wi-Fi with GNSS-PPS at the gateway. UUVs sync over the tether before diving. Modem stamps carry mission time in ms | The wire format uses `stamp_ms` (spec §2) |
-| Wire packets on the M64 | ≤ 64 B (3 landmark records). Fragmentation into modem frames happens in the modem driver (T-C6-01; the M64 frame size is UNVERIFIED) | Losing one packet loses at most three records |
+| Wire packets on the M64 | ≤ 64 B (3 landmark records), cut into 8-byte modem packets by `avatar.comm.m64` (T-C6-01): 1 header byte + 7 data bytes each, the first starting with the packet length, so a 64 B wire packet is 10 modem packets (80 B on the air, +25 %). A wire packet missing any of its modem packets is dropped | Losing one modem packet loses one wire packet (at most three records) |
 
 **Capacity check (simulated).** Two BlueROV2s and the gateway share the M64
 channel through TDMA, so each node gets 21 bps. At 50 % utilization that is about
 1.3 kB per node per 10 minutes, or about 80 landmark records. In 600 s
 simulations (5 seeds, docs/LOG.md L6), the whole team shared one frame after
 280 s on the M64, a median of 220 s on an X150-class modem, and 120 s at 1 kbps.
+
+**What the simulation does not model yet (T-C6-02, decision D16).** (1) The 25 % framing
+overhead of 8-byte modem packets. (2) Pairing: an M64 syncs with *one* other modem (roles
+`a`/`b` on a channel), so three modems on one channel, as simulated, may not work at all;
+the gateway may then need one modem per BlueROV2 (two channels), with BlueROV2-to-BlueROV2
+traffic relayed through it. (3) Whether the 64 bps is shared by the two directions. Items 2
+and 3 are UNVERIFIED: a bench test with three modems settles them (T-H1-04).
 
 ## 4. Ground truth for field experiments (plan)
 
@@ -137,7 +144,7 @@ simulations (5 seeds, docs/LOG.md L6), the whole team shared one frame after
 
 | Item | Qty | Purpose | Priority |
 |---|---|---|---|
-| Water Linked Modem-M64 | n_UUV + 1 | Real acoustic Avatar traffic | P0 for field results |
+| Water Linked Modem-M64 | n_UUV + 1, or 2 n_UUV if modems only work in pairs (D16) | Real acoustic Avatar traffic | P0 for field results |
 | Water Linked UGPS G2 BlueROV2 kit | 1 per UUV | Underwater ground truth | P0 |
 | 5 GHz mesh radios | n_RF agents + gateway | Inter-robot RF | P0 |
 | RTK-GNSS base + rovers | 1 + 3 | Above-water ground truth | P0 |

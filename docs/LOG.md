@@ -5,6 +5,43 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo, continued): the Modem-M64 adapter (Claude)
+
+Branch `wp/T-C6-01-m64-driver`; task T-C6-01. `pytest avatar_py/tests/test_m64.py`.
+
+### L49. The M64 sends 8-byte packets and syncs in pairs; an adapter for Avatar's wire packets
+
+**Protocol** (docs.waterlinked.com, Modem-M64 protocol page, read 2026-10-07):
+- UART 115200 8-N-1, 3.3 V. Lines are `w` + `c`/`r` + command + `,`-fields + `*` + checksum.
+- **8 bytes of payload per acoustic packet**, which may be binary; an all-zero payload is
+  reserved for sync packets.
+- Two roles, `a` and `b`, on channels 1-7. The modem "tries to pair with another modem".
+- The checksum is CRC-8 with unstated parameters. A search over all CRC-8 variants (polynomial,
+  initial value, reflection, final XOR, coverage) finds exactly one that reproduces the six
+  examples of the page: polynomial 0x07, initial value 0, no reflection (CRC-8/SMBUS), over
+  everything before `*`.
+
+**Adapter** (`avatar/comm/m64.py`): commands with checksums; a parser that reads a received
+packet's binary payload by length; and fragmentation of a wire packet into modem packets of
+1 header byte (packet id, last flag, index) + 7 data bytes. A 64 B wire packet becomes 10
+modem packets (80 B on the air, +25 %), and no modem packet is ever all zeros. A wire packet
+missing any modem packet is dropped (the codec's CRC-16 also guards it). The loopback test is
+lossless at 0 % loss; at 10 % loss every delivered packet is intact, and the incomplete ones
+are dropped. No serial-port code yet: that comes with the hardware bring-up (T-H1-02).
+
+**Consequences for the simulation and the purchase (D16, T-C6-02).**
+1. The 25 % framing overhead is not modelled: every M64 number in the paper assumes 64 bps of
+   wire payload.
+2. If M64 modems only work in pairs, the simulated shared channel of two BlueROV2s and the
+   gateway does not exist. The gateway would then need one modem per BlueROV2, with
+   BlueROV2-to-BlueROV2 traffic relayed through it.
+3. Whether the 64 bps is shared by the two directions is not stated.
+
+Items 2 and 3 are UNVERIFIED (the page does not exclude three modems on a channel); a bench
+test with three modems settles them before the gateway's modems are bought.
+
+---
+
 ## 2026-10-07 (luiz-predator-neo): paper data with the scale-error states (D15) (Claude)
 
 Branch `wp/D15-scale-default`; decisions D14, D15 and H2 (PI, 2026-10-07); **simulation**

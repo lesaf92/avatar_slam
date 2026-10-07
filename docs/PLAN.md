@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho, ITA (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v2.6 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v2.7 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -324,6 +324,7 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 | D13 | What the paper reports: seed sets (0-39 or 0-79), estimator defaults (the veto rule of T-F3-05), reference fleet (camera-only or LiDAR UAV) | – | **Decided (PI, 2026-10-06), after the analysis of T-E3-02 (LOG L39):** Tier 2 is reported over every clean recording, seeds 0-79 (development 0-19, held out 20-79), for the proxy, the UAV-LiDAR fleet and DAVE's sonar; the veto rule (threshold 8) is the default. Implemented in T-E3-03. The reference fleet (camera-only or LiDAR UAV in the main tables) stays open: T-S4-05 |
 | D14 | BlueROV2 with sparse sonar fixes (LOG L41-L43): the EKF tracker splits piles when one BlueROV2 sees too few per frame; software (a keyframe window, L42) did not help | A wider-aperture or second imaging sonar on that vehicle, now concretely a Blue Robotics **Ping360** 360° scanning sonar (added to the fleet as an option by the PI, 2026-10-07; `hardware.md` §2, design implication 4); a survey path that keeps more piles in view; or accept and report the limit | **Decided (PI, 2026-10-07): a Ping360 on each BlueROV2** (bought). Evidence (LOG L45): with an idealized ray-cast Ping360 the EKF tracker on sonar images reaches G1 56/60 held-out against 34/60 without. Next: T-S1-12 renders it with DAVE; the paper's sonar results move to the Ping360 fleet once T-S1-12 confirms them |
 | D15 | Estimate the odometry's translation (DVL) and gyro scale errors by default (`model_odometry_scale`, T-X1-04) | Keep them unmodelled (today: a model-mismatch stress), or estimate them as the heading bias (D9), with priors from the platform spec | **Decided (PI, 2026-10-07): estimate them by default** (`model_odometry_scale = True`); all paper data regenerated (LOG L48); the estimator without them stays as a model-mismatch ablation in the drift paragraph (`drift_anchored_noscale.csv`). Evidence (LOG L46): team ATE −34 % decentralized / −22 % oracle on `fleet_transit_anchored`, −10 % / −8 % on `fleet_default` |
+| D16 | Acoustic network with the M64 (LOG L49): an M64 syncs with one other modem (roles `a`/`b` per channel), so the simulated shared channel of two BlueROV2s and the gateway may not exist | A bench test with three modems first (T-H1-04); if they only work in pairs, a second M64 at the gateway (one channel per BlueROV2, BlueROV2-to-BlueROV2 traffic relayed), or the X150 as the primary modem | **Open (PI).** Recommendation: bench-test before buying the gateway's modems; model the verified behaviour in T-C6-02 |
 
 ## 10. Joint project with `heterogeneous_slam` and goals (2026-10-06)
 
@@ -365,6 +366,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 
 ## 11. Changelog
 
+- **v2.7 (2026-10-07).** T-C6-01 (LOG L49): M64 protocol verified (8-byte packets, pairs); new decision D16 and task T-C6-02.
 - **v2.6 (2026-10-07).** PI decisions: D14 (a Ping360 on each BlueROV2; T-S1-12 to P0), D15 (odometry scale errors estimated by default; all paper data regenerated, LOG L48), H2 reworded (G-4 settled). Merged tasks moved from review to done.
 - **v2.5 (2026-10-07).** T-C5-01 (LOG L47): bandwidth to 10 kbit/s and packet-loss sweep in `paper/data` and the paper; a pre-registered test: VoI beats FIFO under heavy loss but not the quality order; H2 rewording proposed (G-4).
 - **v2.4 (2026-10-07).** T-X1-04 (LOG L46): strict "never hurt" is unattainable (the oracle is worse than solo on one seed); the harm comes from unmodelled odometry scale errors; new decision D15 (estimate them by default); the no-avoidable-harm criterion moves to T-X1-03.
