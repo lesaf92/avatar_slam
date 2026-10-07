@@ -215,6 +215,22 @@ SENSOR_LIBRARY: dict[str, DetectionSensor] = {
         label_correct_prob=0.5,
         extent_rel_noise=0.2,
     ),
+    "ping360": DetectionSensor(  # Blue Robotics Ping360 scanning sonar (optional, D14, T-S1-11)
+        "ping360",
+        LandmarkFlags.SONAR,
+        Medium.BELOW,
+        max_range_m=30.0,  # range setting used here; the sonar reaches 50 m
+        min_range_m=0.75,
+        hfov_rad=2 * np.pi,  # a full turn; Tier 2 also models the sweep time
+        vfov_rad=np.deg2rad(25.0),
+        sigma_h_base_m=0.05,
+        sigma_h_per_m=0.01,  # 2° beam: cross-range r*tan(1°)/sqrt(3); 0.08 % range resolution
+        sigma_z_base_m=0.1,
+        sigma_z_per_m=0.13,  # elevation ambiguity ≈ r*tan(12.5°)/sqrt(3)
+        detection_prob=0.7,
+        label_correct_prob=0.3,
+        extent_rel_noise=0.3,
+    ),
     "bluerov2_camera": DetectionSensor(  # BlueROV2 low-light HD camera, turbid harbour water
         "bluerov2_camera",
         LandmarkFlags.CAMERA,

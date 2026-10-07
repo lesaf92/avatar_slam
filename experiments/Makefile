@@ -9,7 +9,7 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data all-data tables tier2-sonar-heldout server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
+.PHONY: paper-data all-data tables tier2-sonar-heldout tier2-record-ping360 server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
 
 paper-data: server cycle bandwidth drift realism tables
 
@@ -50,6 +50,9 @@ JOBS        ?= 4
 T2DEV       ?= $(shell seq 0 19)
 HELDOUT     ?= $(shell seq 20 79)
 T2LIDAR     ?= $(shell seq 0 79)
+# PING360: the reference fleet with a Ping360 on each BlueROV2 (T-S1-11, D14), development seeds.
+T2PING360RUNS ?= ../results/tier2_ping360
+T2PING360     ?= $(T2DEV)
 
 tier2-record:
 	$(MAKE) -C gazebo
@@ -61,6 +64,15 @@ tier2-record-lidar:
 	for s in $(T2LIDAR); do \
 		$(PY) gazebo/record.py --seed $$s --duration 600 --scenario-arg uav_lidar=true \
 			--out $(T2LIDARRUNS)/harbor_fleet_seed$$s || exit 1; \
+	done
+
+# Range data with the Ping360 proxy; the Gemini's DAVE images are those of the reference fleet's
+# run (hard links: same world, poses and Gemini). Needs `tier2-record-sonar` on $(T2RUNS) first.
+tier2-record-ping360:
+	for s in $(T2PING360); do \
+		$(PY) gazebo/record.py --seed $$s --duration 600 --scenario-arg uuv_ping360=true \
+			--out $(T2PING360RUNS)/harbor_fleet_seed$$s || exit 1; \
+		ln -f $(T2RUNS)/harbor_fleet_seed$$s/sonar.npz $(T2PING360RUNS)/harbor_fleet_seed$$s/sonar.npz || exit 1; \
 	done
 
 tier2:

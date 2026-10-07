@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho, ITA (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v2.2 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v2.3 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -322,7 +322,7 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 | D11 | Hypothesis targets | Pass/fail thresholds vs. reference values | **Decided (PI, 2026-09-28):** numeric targets in H1–H3 are ideal reference values for comparison; the paper reports measured gains and their trend, step by step |
 | D12 | Host resources for the Docker route (DAVE, PX4, Clearpath) | ≥ 40 GB free on `/` (now 21 GB) or Docker `data-root` on another disk; user in group `docker` (or rootless `podman`) | **Resolved 2026-09-30 (PI).** The project moved to `luiz-predator-neo`: about 300 GB free, user in group `docker`, GPU in containers. T-I1-03 and T-S2-05 are unblocked |
 | D13 | What the paper reports: seed sets (0-39 or 0-79), estimator defaults (the veto rule of T-F3-05), reference fleet (camera-only or LiDAR UAV) | – | **Decided (PI, 2026-10-06), after the analysis of T-E3-02 (LOG L39):** Tier 2 is reported over every clean recording, seeds 0-79 (development 0-19, held out 20-79), for the proxy, the UAV-LiDAR fleet and DAVE's sonar; the veto rule (threshold 8) is the default. Implemented in T-E3-03. The reference fleet (camera-only or LiDAR UAV in the main tables) stays open: T-S4-05 |
-| D14 | BlueROV2 with sparse sonar fixes (LOG L41-L43): the EKF tracker splits piles when one BlueROV2 sees too few per frame; software (a keyframe window, L42) did not help | A wider-aperture or second imaging sonar on that vehicle, now concretely a Blue Robotics **Ping360** 360° scanning sonar (added to the fleet as an option by the PI, 2026-10-07; `hardware.md` §2, design implication 4); a survey path that keeps more piles in view; or accept and report the limit | **Open (PI).** Simulation can test the path and the Ping360 (T-S1-11) before any purchase |
+| D14 | BlueROV2 with sparse sonar fixes (LOG L41-L43): the EKF tracker splits piles when one BlueROV2 sees too few per frame; software (a keyframe window, L42) did not help | A wider-aperture or second imaging sonar on that vehicle, now concretely a Blue Robotics **Ping360** 360° scanning sonar (added to the fleet as an option by the PI, 2026-10-07; `hardware.md` §2, design implication 4); a survey path that keeps more piles in view; or accept and report the limit | **Open (PI). Evidence (LOG L45):** with a Ping360 on each BlueROV2 the EKF tracker on sonar images reaches G1 56/60 held-out against 34/60 without (paired, 23 runs gained, 1 lost), with an idealized ray-cast Ping360 (a DAVE-rendered one is T-S1-12). Recommendation: buy it for the BlueROV2s, as the VLP-16 for the Tarot (D6) |
 
 ## 10. Joint project with `heterogeneous_slam` and goals (2026-10-06)
 
@@ -364,6 +364,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 
 ## 11. Changelog
 
+- **v2.3 (2026-10-07).** Ping360 in simulation (T-S1-11, LOG L45): evidence for D14 (sonar-EKF G1 held-out 34 -> 56/60, idealized sensor); new task T-S1-12 (DAVE-rendered Ping360). Bibliography verified (T-R1-04, L44).
 - **v2.2 (2026-10-07).** T-F3-06: 200 clique seeds by default (LOG L41, L43: sonar-EKF G1 held-out 30 -> 34/60, wrong alignments 123 -> 53); T-F3-07 negative (L42, reverted); paper data regenerated. New decision D14 (BlueROV2 with sparse sonar fixes).
 - **v2.1 (2026-10-06).** T-E3-02 done (LOG L39: 22 late recordings, recorder fixed, fresh seeds not harder). PI decisions: D13 (Tier 2 over seeds 0-79, veto rule by default; T-E3-03) and ADR-0009 accepted (`rclpy` wrappers for simulation nodes, AGENTS.md §2 amended).
 - **v2.0 (2026-10-06).** Joint project: `heterogeneous_slam` becomes an archive that donates parts (§10), with the main and specific goals. PI decisions: authors and affiliation (D3, D7: Luiz Eugenio Santos Araujo Filho, ITA), the Tarot carries a Jetson Nano, a Pixhawk Cube and a D435i, plus a VLP-16 (D2, D6); paper content is decided after the analysis (D13). New risk R13 (Jetson Nano), new tasks T-E3-02 (fresh seeds fail G1 more often, LOG L38), T-I1-07, T-I1-09 (ADR-0009, proposed), T-E2-07, T-S4-05, T-H1-05. All task branches pushed to GitHub.

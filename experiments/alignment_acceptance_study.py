@@ -35,16 +35,24 @@ from avatar.tier2.dataset import build_tier2_sim, load_meta
 from avatar.tier2.frontend import FrontEndParams
 
 RESULTS = Path(__file__).resolve().parent.parent / "results"
-# (label, runs directory, tracking or None for Tier 1, sonar recording)
+# (label, runs directory, tracking or None for Tier 1, sonar recording, front-end overrides)
 CONFIGS = [
-    ("T1", "tier2", None, None),
-    ("proxy GT ids", "tier2", "oracle", None),
-    ("proxy EKF", "tier2", "ekf", None),
-    ("sonar GT ids", "tier2", "oracle", "sonar"),
-    ("sonar EKF", "tier2", "ekf", "sonar"),
-    ("LiDAR fleet GT ids", "tier2_uavlidar", "oracle", None),
-    ("LiDAR fleet EKF", "tier2_uavlidar", "ekf", None),
+    ("T1", "tier2", None, None, {}),
+    ("proxy GT ids", "tier2", "oracle", None, {}),
+    ("proxy EKF", "tier2", "ekf", None, {}),
+    ("sonar GT ids", "tier2", "oracle", "sonar", {}),
+    ("sonar EKF", "tier2", "ekf", "sonar", {}),
+    ("LiDAR fleet GT ids", "tier2_uavlidar", "oracle", None, {}),
+    ("LiDAR fleet EKF", "tier2_uavlidar", "ekf", None, {}),
+    # The fleet with a Ping360 on each BlueROV2 (T-S1-11, D14; runs in results/tier2_ping360,
+    # `make tier2-record-ping360`): the same recordings with the Ping360 ignored (control), with
+    # its sweep (21 s per turn), and with a full turn at every keyframe (upper bound).
+    ("Ping360 off, sonar EKF", "tier2_ping360", "ekf", "sonar", {"ignore_sensors": ("ping360",)}),
+    ("Ping360, sonar EKF", "tier2_ping360", "ekf", "sonar", {}),
+    ("Ping360 full turns, sonar EKF", "tier2_ping360", "ekf", "sonar", {"ping360_sweep_s": 0.0}),
+    ("Ping360, sonar GT ids", "tier2_ping360", "oracle", "sonar", {}),
 ]
+DEFAULT_CONFIGS = [c[0] for c in CONFIGS if c[1] != "tier2_ping360"]
 
 
 def _kind(a: str, b: str) -> str:
@@ -55,7 +63,7 @@ def _kind(a: str, b: str) -> str:
 
 def run_one(job: tuple[int, int, int, str, str, int]) -> dict:
     seed, ci, weak, results, policy, clique_seeds = job
-    label, runs, tracking, sonar = CONFIGS[ci]
+    label, runs, tracking, sonar, fe = CONFIGS[ci]
     run = Path(results) / runs / f"harbor_fleet_seed{seed}"
     base = AvatarParams()
     params = dataclasses.replace(
@@ -73,7 +81,7 @@ def run_one(job: tuple[int, int, int, str, str, int]) -> dict:
         )
     else:
         scenario, sim, _ = build_tier2_sim(
-            run, AvatarParams(), FrontEndParams(tracking=tracking), sonar=sonar
+            run, AvatarParams(), FrontEndParams(tracking=tracking, **fe), sonar=sonar
         )
     names = {a.agent_id: a.name for a in scenario.agents}
     m = run_decentralized(scenario, sim, params, seed).metrics
@@ -101,10 +109,10 @@ def run_one(job: tuple[int, int, int, str, str, int]) -> dict:
 
 def _build(job: tuple[int, int, str]) -> None:
     seed, ci, results = job
-    _, runs, tracking, sonar = CONFIGS[ci]
+    _, runs, tracking, sonar, fe = CONFIGS[ci]
     if tracking is not None:
         run = Path(results) / runs / f"harbor_fleet_seed{seed}"
-        build_tier2_sim(run, AvatarParams(), FrontEndParams(tracking=tracking), sonar=sonar)
+        build_tier2_sim(run, AvatarParams(), FrontEndParams(tracking=tracking, **fe), sonar=sonar)
 
 
 def main() -> None:
@@ -112,7 +120,7 @@ def main() -> None:
     ap.add_argument("--results", default=str(RESULTS))
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(20)))
     ap.add_argument("--weak", type=int, nargs="+", default=[0, 6, 8, 10, 13])
-    ap.add_argument("--configs", nargs="+", default=[c[0] for c in CONFIGS])
+    ap.add_argument("--configs", nargs="+", default=DEFAULT_CONFIGS)
     ap.add_argument("--policy", default="veto", choices=["confirm", "veto"])
     ap.add_argument("--clique-seeds", type=int, default=AvatarParams().association.clique_seeds)
     ap.add_argument("--jobs", type=int, default=8)

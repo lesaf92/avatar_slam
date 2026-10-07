@@ -89,7 +89,12 @@ def build_tier2_sim(
         if f is not None:
             st = f.stat()
             key += f"|{name}:{st.st_size}:{st.st_mtime_ns}"
-    cache_file = run / f"detections_{fe_params.tracking}{'_' + sonar if sonar else ''}.pkl"
+    # Non-default front-end parameters get their own file, so that variants of one run can be
+    # built side by side (in parallel) without overwriting each other's cache.
+    variant = ""
+    if fe_params != FrontEndParams(tracking=fe_params.tracking):
+        variant = "_" + hashlib.sha1(repr(fe_params).encode()).hexdigest()[:8]
+    cache_file = run / f"detections_{fe_params.tracking}{'_' + sonar if sonar else ''}{variant}.pkl"
     cached = None
     if cache and cache_file.exists():
         blob = pickle.loads(cache_file.read_bytes())

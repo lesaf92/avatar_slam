@@ -99,6 +99,10 @@ GZ_SENSORS: dict[str, RaySensorSpec] = {
     # Tritech Micron Gemini 720s: 90° horizontal, 128 beams, 50 m. Vertical
     # aperture 20° (UNVERIFIED, docs/hardware.md) sampled by 16 rays per beam.
     "gemini_720s": RaySensorSpec("sonar", 128, 16, np.deg2rad(90.0), np.deg2rad(20.0), 0.5, 50.0),
+    # Blue Robotics Ping360 (optional, D14): 360°, 2° x 25° beam, 0.9° steps, 0.75-50 m. A
+    # mechanical scanner: the whole turn is recorded at every keyframe and the front-end keeps
+    # the sector swept since the previous one (FrontEndParams.ping360_sweep_s).
+    "ping360": RaySensorSpec("sonar", 400, 16, 2 * np.pi, np.deg2rad(25.0), 0.75, 50.0),
 }
 
 
