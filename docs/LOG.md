@@ -5,6 +5,58 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo, night): does collaboration hurt the drifting AUV? (Claude)
+
+Branch `wp/T-X1-04-never-hurt`; task T-X1-04; **simulation (Tier 1)**, M64. At `590e02e`:
+`python experiments/never_hurt_study.py --presets fleet_transit_anchored fleet_default --seeds
+0 1 2 3 4 5 6 7 8 9 --out results/never_hurt.csv`. "Oracle" is the centralized oracle's own
+trajectory of the agent (all data, true associations), aligned per agent like solo and fused.
+
+### L46. Strict "never hurt" is unattainable; the harm comes from unmodelled scale errors
+
+`uuv_1` ATE [m], mean of 10 seeds, and the runs in which fused is worse than solo:
+
+| `fleet_transit_anchored` | solo | fused | oracle | fused > solo | team ATE dec / oracle |
+|---|---|---|---|---|---|
+| defaults | 0.586 | 0.549 | 0.182 | 4 (+1 … +18 %) | 0.486 / 0.138 |
+| simulation without scale errors | 0.574 | 0.437 | 0.113 | **0** | 0.335 / 0.111 |
+| scale-error states estimated | 0.520 | 0.476 | 0.114 | 6 (+0 … +18 %) | **0.322 / 0.108** |
+
+On `fleet_default` the same three rows give team ATE 0.120 / 0.084, 0.107 / 0.076 and
+0.108 / 0.077 m (fused worse than solo for `uuv_1` in 1, 2 and 3 runs, at most +6 %).
+
+1. **The acceptance criterion cannot be met by any estimator.** On seed 7 even the oracle is
+   worse than solo (0.078 m solo, 0.089 oracle; +9 % with the scale states): that solo run is
+   lucky. "Fused ≤ solo in every run" asks for more than the optimal estimator delivers.
+2. **Cause of the harm: the BlueROV2's systematic odometry errors that the estimator does not
+   model**, a 1 % DVL scale error and a 1 % gyro scale error. In a simulation without them
+   (the draws kept at σ = 1e-12, so all other noise is identical) fused ≤ solo in all 10 runs,
+   with larger gains (seed 1 −82 %, seed 6 −70 %).
+3. **Estimating them** (`AvatarParams.model_odometry_scale`, off by default: two scalar states
+   per platform with zero-mean priors of the spec σ, as for the heading bias, D9) recovers the
+   team accuracy of the error-free simulation: team ATE −34 % decentralized and −22 % oracle on
+   the transit, −10 % and −8 % on the default fleet. It does not remove the harm counts,
+   because solo improves too (it can partly estimate them on its own landmarks).
+4. **What is left is a gap, not a fault.** Where fused is worse than solo the oracle gains
+   43-91 %. These are diagnostics on seeds 3, 5, 6 and 7 (scratch scripts, not kept):
+   - every pair in `uuv_1`'s fused graph is correct (ground truth);
+   - the remote landmarks' σ are honest (NEES/dof ≤ 1.1);
+   - the solve has converged (200 iterations from cold give the same result);
+   - GNC cuts no extra own observation;
+   - holding b, s and g at their local values in the fused graph, or doubling the remote σ,
+     leaves the harm (seed 7 +15 … +18 % in every variant).
+
+   Decentralized fusion uses correct information poorly: one free frame per neighbour, and
+   remote landmarks as fixed measurements (L23). That is T-X1-03.
+
+**Outcome.** T-X1-04 as stated is closed as unattainable; the criterion that can be tested is
+"no avoidable harm": fused ≤ solo in every run where the oracle improves on solo, which moves
+to T-X1-03 together with the decentralized–oracle gap (`uuv_1` fused 0.476 m against oracle
+0.114 m with the scale states). Whether the scale states become the default is decision D15
+(PI): it changes every number in the paper.
+
+---
+
 ## 2026-10-07 (luiz-predator-neo, evening): a Ping360 on each BlueROV2 (Claude)
 
 Branch `wp/T-S1-11-ping360-sim`; task T-S1-11 (decision D14); **simulation**. At `2ea4d40`:
