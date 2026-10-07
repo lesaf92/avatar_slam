@@ -5,7 +5,7 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
-## 2026-10-08 (luiz-predator-neo): paper data with the scale-error states (D15) (Claude)
+## 2026-10-07 (luiz-predator-neo): paper data with the scale-error states (D15) (Claude)
 
 Branch `wp/D15-scale-default`; decisions D14, D15 and H2 (PI, 2026-10-07); **simulation**
 (Tier 1 and Tier 2). At `4285992` (clean): `make -C experiments all-data JOBS=40` regenerated
