@@ -32,8 +32,9 @@ others, and an alignment built on four or five of them can be turned by half a r
 moved the whole team until the reverse-estimate test of Sec.~\ref{sec:association}. Pairing over a window of
 keyframes is future work. In simulation, a light LiDAR on that robot removes the failure
 (Sec.~\ref{sec:experiments}).
-Sixth, the filter does not yet transfer to sonar images. Echoes of extended surfaces, such as
-the quay face and hulls, slide along them and pass its static-landmark test, so they become
-landmarks, and cross-medium alignments on few inliers then go wrong; with ground-truth tracks
-the same images mostly suffice (Sec.~\ref{sec:experiments}). Rejecting such clutter in the image
-front-end is ongoing work.
+Sixth, the filter does not yet transfer to sonar images. The BlueROV2 that sees the fewest piles
+has the Tarot's problem: under a pose uncertainty of the order of the pile spacing a single fix
+cannot separate a mapped pile from a new one, and the duplicates it starts cost loop closures;
+with ground-truth tracks the same images mostly suffice (Sec.~\ref{sec:experiments}). Pairing
+fixes over a window of keyframes admitted more wrong matches than it saved; for the Tarot the
+remedy was a sensor, and a wider or second sonar is the analogue here.
