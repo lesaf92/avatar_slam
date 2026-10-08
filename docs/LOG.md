@@ -5,6 +5,50 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo, late night): the Ping360 rendered by DAVE (Claude)
+
+Branch `wp/T-S1-12-ping360-dave`; task T-S1-12 (D14); **simulation (Tier 2)**. Code `87ef367`
+(rebased since; the recordings' `meta.json` say commit "unknown": in a git worktree the
+container cannot resolve `.git`, which points outside its mount). `make tier2-record-ping360-sonar`
+for seeds 0-79 (`results/tier2_ping360/*/sonar360.npz`: the Gemini's images copied from the
+run's `sonar.npz`, the Ping360 as four DAVE fans; two seeds re-recorded after the driver's
+frame-count guard caught an extra frame), then `alignment_acceptance_study.py --weak 8 --configs
+"Ping360 off, sonar EKF" "Ping360, sonar EKF" "Ping360 DAVE, sonar EKF" "Ping360 DAVE, sonar GT
+ids"` on seeds 0-19 and once on 20-79 (`results/l48_ping360_dave.jsonl`,
+`results/l51_ping360_dave_heldout.jsonl`), with the D15 default.
+
+### L51. A realistic Ping360 helps about half as much as the idealized one
+
+**Rendering.** DAVE's multibeam sonar ignores a sensor's `<pose>` and looks along its model's
+`x` axis: fans yawed inside one model all rendered the same view (read at yaw 0, each fan's
+detections matched the true piles as well as fan 0's). Each fan is therefore a model of its
+own, moved with the BlueROV2 at its pose turned by the fan's yaw. Check on seed 0, 30
+keyframes: read at its own yaw, each fan's detections lie within 1.5 m of the ray-cast proxy's
+returns in 87-100 % of cases, at any other yaw in 0-37 %. Behind the vehicles many detections
+are hulls and the quay face, not piles.
+
+G1 on sonar images, EKF tracker unless stated (merged; wrong cross / BlueROV2 pair):
+
+| | development 0-19 | held out 20-79 |
+|---|---|---|
+| Ping360 ignored (control) | 12 (18; 9/89, 1/40) | 34 (51; 20/246, 6/118) |
+| Ping360, ray-cast proxy (as in L45, re-run with D15) | 18 (18; 4/88, 0/40) | 54 (56; 6/268, 1/120) |
+| **Ping360 rendered by DAVE** | **16** (17; 4/92, 3/40) | **44** (52; 18/259, 6/120) |
+| Ping360 by DAVE, ground-truth tracks | 19 (19; 0/104, 0/40) | 53 (55; 2/266, 0/120) |
+
+1. **The DAVE Ping360 helps, less than the proxy.** Held out, paired against the control: 17
+   runs gained, 7 lost (sign test p = 0.06; the proxy: 22 and 2, p = 4e-5). On the development
+   seeds it meets T-F3-06's target (16/20).
+2. **The gap is intra-agent association on 360° images.** With ground-truth tracks the same
+   images give 53/60. With the EKF tracker, wrong cross alignments stay at the control's level
+   (18 against 20; the proxy 6). The full turn adds the hulls and the quay face around the
+   vehicle as compact-looking echoes, which become landmarks.
+3. **The decision stands** (D14: the Ping360 is bought). The next lever is clutter rejection
+   on the Ping360's images (T-F3-08). The paper still reports the Gemini-only fleet; whether its
+   sonar tables move to the Ping360 fleet is the PI's call.
+
+---
+
 ## 2026-10-07 (luiz-predator-neo, night): the realism study on 20 seeds (Claude)
 
 Branch `wp/T-S1-10-realism-20`; task T-S1-10; **simulation (Tier 1)**. At `6dbf59a`:
