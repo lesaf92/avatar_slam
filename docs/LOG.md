@@ -5,6 +5,31 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo, night): the realism study on 20 seeds (Claude)
+
+Branch `wp/T-S1-10-realism-20`; task T-S1-10; **simulation (Tier 1)**. At `6dbf59a`:
+`make -C experiments realism tables JOBS=24` (seeds 0-19; `paper/data/realism.csv`,
+`tab_realism`, now median / mean and the number of failed runs: not merged, or team ATE
+above 1 m).
+
+### L50. On 20 seeds GNC holds everywhere, Huber only at low error rates
+
+1. **GNC-TLS** keeps the team at its error-free accuracy at every error level and on both
+   presets (median and mean 0.11-0.13 m against 0.11 m without errors; no failed run).
+2. **Huber** contains low rates and bursts (median 0.13-0.44 m, at most 3 failed runs of 20)
+   but fails in all 20 runs at 15 % switches plus clutter. The 3-seed table (L48) hid this:
+   its means mixed a few lucky runs.
+3. **No kernel** fails in 19-20 of 20 runs at continuous errors, and in 8-11 with low-rate
+   bursts. Its median is far below its mean (15 %: 0.78 m against 6.1 m): a few diverged runs
+   dominate a mean, which is why the table now gives both (L33).
+4. **Split revisits:** half split costs little (median 0.13-0.14 m); all split fails in 10-12 of
+   20 runs whatever the kernel. A missing loop closure is not an outlier.
+
+The paper's paragraph now says "Huber limits the damage at low error rates but not at high
+ones" and "with any kernel the team fails in many runs".
+
+---
+
 ## 2026-10-07 (luiz-predator-neo, continued): the Modem-M64 adapter (Claude)
 
 Branch `wp/T-C6-01-m64-driver`; task T-C6-01. `pytest avatar_py/tests/test_m64.py`.

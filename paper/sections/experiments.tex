@@ -279,20 +279,20 @@ $p=\lossConfirmVoiQualityP$).
 \paragraph{Front-end errors}
 Table~\ref{tab:realism} injects identity switches (a detection attributed to a nearby part of
 the same medium) and clutter into every agent's front-end. Without a robust kernel the team
-falls apart; a Huber kernel limits the damage; graduated non-convexity keeps every agent,
-and the team, at its error-free accuracy. Errors that persist for a burst of keyframes, at the
-same rate of wrong attributions, are absorbed as well. What no kernel can repair is a missing
-loop closure: if the front-end gives every revisited pile a new identity, the drifting robots
-lose their corrections and the team with them, whereas missing half of the revisits costs
-little. The oracle keeps ground-truth association and is not shown.
+falls apart; a Huber kernel limits the damage at low error rates but not at high ones;
+graduated non-convexity keeps the team at its error-free accuracy in every run. Errors that
+persist for a burst of keyframes, at the same rate of wrong attributions, are absorbed as well.
+What no kernel can repair is a missing loop closure: if the front-end gives every revisited
+pile a new identity, the drifting robots lose their corrections, and with any kernel the team
+fails in many runs, whereas missing half of the revisits costs little. The oracle keeps ground-truth association and is not shown.
 
 \begin{table}[t]
   \centering
   \caption{Team ATE [m] of \avatar{} under front-end errors (identity-switch rate + clutter
   per keyframe and sensor; ``in bursts'': a switch lasts 25 keyframes; ``split'': a part seen
   again after 30 keyframes gets a new identity) for three kernels on the landmark
-  observations (Tier-1 simulation, 600\,s, M64). In parentheses: runs in which the whole team
-  merged, if not all.}
+  observations (Tier-1 simulation, 600\,s, M64, 20 seeds): median / mean; in brackets, runs
+  that failed (the team did not merge, or its ATE exceeds 1\,m).}
   \label{tab:realism}
   \footnotesize
   \IfFileExists{data/tab_realism.tex}{\input{data/tab_realism.tex}}{\todo{run make -C experiments paper-data}}

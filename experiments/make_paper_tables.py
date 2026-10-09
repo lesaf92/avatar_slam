@@ -249,7 +249,11 @@ def _small_drift_changes(rows: list[dict], agent: str) -> list[float]:
 
 
 def realism() -> None:
-    """Team ATE under front-end errors for each robust kernel (LOG L25)."""
+    """Team ATE under front-end errors for each robust kernel (LOG L25; 20 seeds, T-S1-10).
+
+    A cell is ``median / mean`` [m]; ``[n]``: runs that failed (the team did not merge, or its
+    ATE exceeds 1 m). Means alone are fragile: one diverged run dominates them (LOG L33).
+    """
     rows = _read("realism.csv")
     kernels = list(dict.fromkeys(r["kernel"] for r in rows))
     names = {"none": "None", "huber:3": "Huber ($k{=}3$)", "gnc:4.03": "GNC-TLS"}
@@ -278,10 +282,14 @@ def realism() -> None:
             for k in kernels:
                 sel = [r for r in rows if r["preset"] == p_ and r["errors"] == lv
                        and r["kernel"] == k]  # fmt: skip
-                ate = np.mean([_num(r["team_ate_dec_m"]) for r in sel])
-                merged = sum(int(r["n_connected_dec"]) == n_agents for r in sel)
-                note = "" if merged == len(sel) else f" ({merged}/{len(sel)})"
-                cells.append(f"{ate:.2f}{note}" if ate < 10 else f"{ate:.0f}{note}")
+                ate = np.array([_num(r["team_ate_dec_m"]) for r in sel])
+                failed = sum(
+                    int(r["n_connected_dec"]) < n_agents or a > 1.0
+                    for r, a in zip(sel, ate, strict=True)
+                )
+                med, mean = np.median(ate), np.mean(ate)
+                fmt = lambda v: f"{v:.2f}" if v < 10 else f"{v:.0f}"  # noqa: E731
+                cells.append(f"{fmt(med)} / {fmt(mean)}" + (f" [{failed}]" if failed else ""))
             name = p_.replace("fleet_", "").replace("_", "\\_") if j == 0 else ""
             lines.append(f"{name} & {levels.get(lv, lv)} & " + " & ".join(cells) + " \\\\")
         lines.append("\\midrule" if p_ != presets[-1] else "\\bottomrule")
