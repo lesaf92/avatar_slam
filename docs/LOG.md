@@ -5,6 +5,29 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-08 (luiz-predator-neo, evening): where the sonar tracker loses runs, with the Ping360 (Claude)
+
+Branch `wp/T-F3-09-ekf-sonar-tuning`; task T-F3-09; **simulation (Tier 2)**. At `49604b1`:
+`python experiments/sonar_tracker_study.py truth --runs results/tier2_ping360 --sonar sonar360
+--jobs 28` (development seeds 0-19, the Ping360 fleet, sonar images; `results/f309_truth.jsonl`).
+
+### L54. Association costs two development runs, the filter one: too few to tune on 20 seeds
+
+| Tracking | merged | G1 | wrong: cross / BlueROV2 pair / above |
+|---|---|---|---|
+| ground-truth ids | 19/20 | 19/20 | 1/105, 0/40, 1/39 |
+| EKF given ground-truth ids (duplicates only) | 18/20 | 18/20 | 1/101, 0/40, 2/37 |
+| EKF | 17/20 | 16/20 | 5/93, 3/40, 3/38 |
+
+With the Ping360 the filter itself costs one run (L41: three, without it) and association two.
+Three runs of headroom is within the ±2 runs that unrelated changes move a 20-seed count (L28),
+so tuning the sonar tracker on these seeds would fit noise; the held-out gap is larger (44 against
+53 of 60, L51) but must stay untouched. Tuning needs a larger development set for the Ping360
+fleet, e.g. 40 new seeds (80-119; about two hours of recording). The seed sets are the PI's
+decision (D13), so this is proposed as D17 and nothing is tuned yet.
+
+---
+
 ## 2026-10-08 (luiz-predator-neo, later): clutter on the Ping360's images (negative) (Claude)
 
 Branch `wp/T-F3-08-ping360-clutter`; task T-F3-08; **simulation (Tier 2)**, the Ping360 fleet's
