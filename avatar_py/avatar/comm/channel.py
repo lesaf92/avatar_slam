@@ -14,8 +14,8 @@ Sweeping these parameters is part of the experiment protocol (PLAN §6).
 ``docs/hardware.md``): a 5 GHz Wi-Fi mesh above water, and a Water Linked
 Modem-M64 (64 bps, 200 m, 1.5–2.5 s latency, half duplex) or a Blueprint Subsea
 SeaTrac X150 (100 bps class, 1000 m) under water. Wire packets on those modems
-are capped at 64 B; fragmentation into modem frames is the modem driver's job
-(task T-C6-01) and is modelled here only through the airtime.
+are capped at 64 B; the M64 cuts them into 8-byte modem packets (``avatar.comm.m64``,
+task T-C6-01, +25 % on the air), which is not modelled here yet (T-C6-02).
 """
 
 from __future__ import annotations
