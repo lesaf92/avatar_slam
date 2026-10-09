@@ -19,7 +19,8 @@ each runs the decentralized estimator and reports merges, gate G1 and wrong acce
 * ``truth``:      the EKF given ground-truth identities (``ekf_truth``), against the EKF and
                   ground-truth ids: what association costs and what the filter costs (L41).
 
-``--clique-seeds`` overrides ``AssociationParams.clique_seeds`` (LOG L41).
+``--clique-seeds`` overrides ``AssociationParams.clique_seeds`` (LOG L41); ``--sonar sonar360``
+with ``--runs results/tier2_ping360`` studies the fleet with a Ping360 on each BlueROV2 (L54).
 
     python experiments/sonar_tracker_study.py alignments --jobs 28
 """
@@ -164,6 +165,9 @@ def main() -> None:
     ap.add_argument("--jobs", type=int, default=8)
     ap.add_argument("--out", default=None, help="JSON lines of every run")
     ap.add_argument("--clique-seeds", type=int, default=AvatarParams().association.clique_seeds)
+    ap.add_argument(
+        "--sonar", default="sonar", help="sonar recording (sonar360: the Ping360 fleet)"
+    )
     args = ap.parse_args()
     if args.study == "tracks":
         with ProcessPoolExecutor(max_workers=args.jobs) as ex:
@@ -176,7 +180,7 @@ def main() -> None:
             Path(args.out).write_text("\n".join(json.dumps(r) for r in rows) + "\n")
         report_tracks(rows)
         return
-    cfgs = STUDIES[args.study]
+    cfgs = [(t, args.sonar if s == "sonar" else s, v) for t, s, v in STUDIES[args.study]]
     # fill the detection caches of the cached configurations first, one process per file
     cached = sorted({(t, s) for t, s, v in cfgs if not v.startswith("birth:")}, key=str)
     with ProcessPoolExecutor(max_workers=args.jobs) as ex:
