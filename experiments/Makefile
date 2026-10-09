@@ -9,7 +9,7 @@ PY     ?= python3
 DATA   := ../paper/data
 SEEDS  ?= 0 1 2 3 4 5 6 7 8 9
 
-.PHONY: paper-data all-data tables loss loss-confirm tier2-sonar-heldout tier2-record-ping360 server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
+.PHONY: paper-data all-data tables tier2-record-ping360-sonar loss loss-confirm tier2-sonar-heldout tier2-record-ping360 server cycle bandwidth drift realism tier2-record tier2-record-lidar tier2 tier2-heldout tier2-lidar tier2-record-sonar tier2-sonar sonar-diagnostics
 
 paper-data: server cycle bandwidth loss drift realism tables
 
@@ -86,6 +86,15 @@ tier2-record-ping360:
 		$(PY) gazebo/record.py --seed $$s --duration 600 --scenario-arg uuv_ping360=true \
 			--out $(T2PING360RUNS)/harbor_fleet_seed$$s || exit 1; \
 		ln -f $(T2RUNS)/harbor_fleet_seed$$s/sonar.npz $(T2PING360RUNS)/harbor_fleet_seed$$s/sonar.npz || exit 1; \
+	done
+
+# The Ping360 rendered by DAVE (T-S1-12): four 90° fans per BlueROV2, stitched; the Gemini's
+# images are copied from the run's `sonar.npz`. Writes `sonar360.npz`.
+tier2-record-ping360-sonar:
+	for s in $(T2PING360); do \
+		AVATAR_TIER2_IMAGE=avatar-dave ../docker/tier2.sh python experiments/gazebo/record_sonar.py \
+			--run-dir results/tier2_ping360/harbor_fleet_seed$$s --only ping360 --base sonar \
+			--name sonar360 --warmup-calls 200 || exit 1; \
 	done
 
 tier2:

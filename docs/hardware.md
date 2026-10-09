@@ -137,7 +137,7 @@ and 3 are UNVERIFIED: a bench test with three modems settles them (T-H1-04).
 |---|---|---|
 | Husky | `clearpath_simulator` (Jazzy + Harmonic packages exist) | gz `gpu_lidar` configured as VLP-16, `rgbd_camera` as D435i |
 | Tarot 680 | PX4 SITL hexacopter airframe (a generic hex, tuned to the 680 mm frame) | `rgbd_camera` pitched −30° |
-| BlueROV2 | DAVE / BlueROV2 Gazebo models (ROS 2 Jazzy branch) | DAVE multibeam sonar plugin configured to 90° × 20°, 128 beams, 50 m; DAVE DVL plugin; pressure; Ping360: ray-cast proxy with its sweep (T-S1-11, LOG L45); rendered by DAVE: T-S1-12 |
+| BlueROV2 | DAVE / BlueROV2 Gazebo models (ROS 2 Jazzy branch) | DAVE multibeam sonar plugin configured to 90° × 20°, 128 beams, 50 m; DAVE DVL plugin; pressure; Ping360: ray-cast proxy with its sweep (T-S1-11, LOG L45) and rendered by DAVE as four 90° fans, one Gazebo model each (T-S1-12, LOG L51) |
 | Gateway | static model at the quay | none; comm emulator node (T-S3-01) |
 
 ## 6. Suggested purchases (not yet approved)
@@ -150,7 +150,7 @@ and 3 are UNVERIFIED: a bench test with three modems settles them (T-H1-04).
 | RTK-GNSS base + rovers | 1 + 3 | Above-water ground truth | P0 |
 | BlueBoat + D435i + Micron Gemini | 1 | Sensing bridge; direct comparison with *Above and Below* | P1 |
 | Velodyne VLP-16 for the UAV | 1 | Makes the UAV a useful mapper (LOG L31) | **decided (D6)** |
-| Blue Robotics Ping360 | 1 per UUV | 360° 2-D scans against sparse fixes (D14); in simulation the EKF tracker on sonar images goes from 34 to 56 of 60 held-out runs (LOG L45, idealized sensor) | P1, **decided** (D14: the PI buys one per BlueROV2, 2026-10-07) |
+| Blue Robotics Ping360 | 1 per UUV | 360° 2-D scans against sparse fixes (D14); in simulation the EKF tracker on sonar images goes from 34 to 44 of 60 held-out runs with the Ping360 rendered by DAVE (LOG L51; 54 with the idealized ray-cast sensor) | P1, **decided** (D14: the PI buys one per BlueROV2, 2026-10-07) |
 
 ## Sources (checked 2026-09-28)
 

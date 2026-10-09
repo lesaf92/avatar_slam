@@ -146,3 +146,37 @@ def test_acoustic_world_holds_only_what_is_below_the_waterline() -> None:
     # the vertical rays are written at half the aperture (DAVE illuminates twice the SDF angle)
     v = re.search(r"<vertical><rays>\d+</rays><min_angle>(\S+)</min_angle>", sdf)
     assert abs(float(v.group(1)) + DAVE_SONARS["gemini_720s"].v_fov_rad / 4) < 1e-3
+
+
+def test_stitch_fans_makes_one_turn_without_repeated_columns():
+    """T-S1-12: four 90° fans (101 columns each, DAVE) at yaws 0, 90, 180, -90 deg."""
+    from avatar.tier2.sonar_image import stitch_fans
+
+    yaws = [0.0, 0.5 * np.pi, np.pi, -0.5 * np.pi]
+    az = np.linspace(-0.25 * np.pi, 0.25 * np.pi, 101)
+    imgs = [np.full((3, 5, 101), i, dtype=np.uint8) for i in range(4)]  # value = fan index
+    img, out = stitch_fans(imgs, [az] * 4, yaws)
+    assert img.shape == (3, 5, 400) and len(out) == 400
+    assert np.allclose(np.diff(out), 0.5 * np.pi / 100)  # one turn, uniform
+    assert img[0, 0, np.argmin(abs(out - 0.5 * np.pi))] == 1  # +90° is fan 1's boresight
+    assert img[0, 0, np.argmin(abs(out + 0.5 * np.pi))] == 3
+
+
+def test_ping360_image_sector_is_contiguous_across_the_seam():
+    from avatar.tier2.frontend import swept_sector
+    from avatar.tier2.sonar_image import SonarImage
+
+    az = np.linspace(-np.pi, np.pi, 400, endpoint=False) + np.pi / 400
+    img = SonarImage(np.tile(az, (6, 1)).astype(np.float32), np.arange(6.0), az)
+    times = np.arange(6.0)
+    margin = np.deg2rad(5.0)
+    first = swept_sector(None, img, times, 1, 4.0, margin)  # sweeps [-180°, -90°) + 5° margins
+    assert np.all(np.diff(first.azimuth_rad) > 0)
+    assert np.isclose(first.azimuth_rad[0], -np.pi - margin, atol=np.pi / 200)
+    assert np.isclose(first.azimuth_rad[-1], -0.5 * np.pi + margin, atol=np.pi / 200)
+    # the columns are the image's own: the stored value is the column's wrapped azimuth
+    assert np.allclose(
+        np.angle(np.exp(1j * first.db[0])), np.angle(np.exp(1j * first.azimuth_rad)), atol=1e-6
+    )
+    widths = [len(swept_sector(None, img, times, k, 4.0, 0.0).azimuth_rad) for k in range(1, 5)]
+    assert all(abs(w - 100) <= 1 for w in widths)

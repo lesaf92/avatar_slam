@@ -45,6 +45,28 @@ class SonarImage:
     azimuth_rad: FloatArray  # (beams,) ascending; 0 = boresight, positive = left
 
 
+def stitch_fans(
+    images: list[NDArray], azimuths: list[FloatArray], yaws: list[float]
+) -> tuple[NDArray, FloatArray]:
+    """Join fans rendered at yaw offsets into one image over azimuth (T-S1-12).
+
+    ``images[i]`` is ``(..., beams_i)`` with column azimuths ``azimuths[i]`` in its own fan
+    frame; returns the columns of all fans in the rig frame, sorted by azimuth in (-π, π], and
+    the azimuths. A column that repeats one of the neighbouring fan (within 1 mrad, also across
+    the ±π seam; DAVE's fan edges differ by a few µrad) is kept once.
+    """
+    az = np.concatenate(
+        [np.angle(np.exp(1j * (np.asarray(a) + y))) for a, y in zip(azimuths, yaws, strict=True)]
+    )
+    img = np.concatenate(images, axis=-1)
+    order = np.argsort(az, kind="stable")
+    az, img = az[order], img[..., order]
+    keep = np.r_[True, np.diff(az) > 1e-3]
+    if keep.sum() > 1 and az[keep][-1] - az[0] > 2.0 * np.pi - 1e-3:
+        keep[np.flatnonzero(keep)[-1]] = False  # the +π column repeats the -π one
+    return img[..., keep], az[keep]
+
+
 class SonarFrames:
     """Stored frames of one sonar (uint8 echo-level codes); ``frames[k]`` is an image."""
 
@@ -237,4 +259,5 @@ __all__ = [
     "SonarImage",
     "SonarImageParams",
     "detect_blobs",
+    "stitch_fans",
 ]
