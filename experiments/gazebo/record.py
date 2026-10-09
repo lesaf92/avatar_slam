@@ -69,7 +69,7 @@ def main() -> None:
     ap.add_argument("--scenario-file", default=None, help="YAML preset (experiments/scenarios)")
     ap.add_argument("--scenario-arg", action="append", default=[])
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--duration", type=float, default=600.0)
+    ap.add_argument("--duration", type=float, default=None, help="default: the preset's, or 600 s")
     ap.add_argument("--out", required=True)
     ap.add_argument("--timeout", type=float, default=10.0, help="per-keyframe sensor timeout [s]")
     ap.add_argument("--keep-sdf-only", action="store_true", help="write world/bridge and exit")
@@ -77,12 +77,15 @@ def main() -> None:
 
     kwargs = parse_kv(args.scenario_arg)
     scenario_name = args.scenario
+    duration = 600.0
     if args.scenario_file:
         import yaml
 
         doc = yaml.safe_load(Path(args.scenario_file).read_text())
         scenario_name = doc["scenario"]
         kwargs = {**doc.get("args", {}), **kwargs}
+        duration = float(doc.get("duration_s", duration))
+    args.duration = duration if args.duration is None else args.duration
     params = AvatarParams()
     scenario, sim = make_sim(scenario_name, args.seed, args.duration, params, **kwargs)
     out = Path(args.out)

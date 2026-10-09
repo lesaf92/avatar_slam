@@ -104,3 +104,33 @@ def test_harbor_scenario_is_deterministic():
     assert np.allclose(a.world.part_positions, b.world.part_positions)
     spanning = [s for s in a.world.structures if s.spans_waterline]
     assert len(spanning) >= 30  # piles, hulls, buoys
+
+
+def test_scenario_presets_build_in_both_tiers():
+    """T-S4-01: every preset of experiments/scenarios builds a Tier-1 simulation and a Tier-2
+    world, and fleet_default.yaml is the default reference fleet."""
+    from pathlib import Path
+
+    import yaml
+
+    from avatar.agent import AvatarParams
+    from avatar.runner import make_sim
+    from avatar.sim.scenarios import harbor_fleet
+    from avatar.tier2.sdf import rig_sensors, world_sdf
+
+    presets = sorted((Path(__file__).parents[2] / "experiments" / "scenarios").glob("*.yaml"))
+    assert len(presets) >= 5
+    for f in presets:
+        doc = yaml.safe_load(f.read_text())
+        sc, sim = make_sim(doc["scenario"], 0, 20.0, AvatarParams(), **doc["args"])
+        rigs = {n: s for n, s in rig_sensors(sc).items() if s}
+        gt = {a.config.name: a.gt for a in sim.agents.values()}
+        assert "<world" in world_sdf(sc, {n: gt[n][0] for n in rigs}, "w"), f.name
+    doc = yaml.safe_load((presets[0].parent / "fleet_default.yaml").read_text())
+    a, b = (
+        harbor_fleet(np.random.default_rng(0), **doc["args"]),
+        harbor_fleet(np.random.default_rng(0)),
+    )
+    assert [(x.name, x.sensors, x.comm) for x in a.agents] == [
+        (x.name, x.sensors, x.comm) for x in b.agents
+    ]
