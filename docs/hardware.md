@@ -40,11 +40,11 @@ The simulator uses speeds below these maxima: UGV 1.0 m/s, UAV 1.0 m/s, BlueROV2
 |---|---|---|---|
 | Velodyne VLP-16 | 16 ch, 100 m, ±3 cm, 360° × 30° (±15°) | sheet | `vlp16`: object-level range 40 m, vertical fan ±15°, σ = 4 cm + 0.2 %·r |
 | RealSense D435i | depth FOV 87° × 58°, ideal 0.3–3 m, error grows with range² | sheet | `d435i` / `d435i_down30` (UAV, pitched 30° down): 0.3–6 m, σ = 3 cm + 0.005·r² |
-| Tritech Micron Gemini 720s | 720 kHz, 90° horizontal, 50 m, 128 beams, 0.7° angular / 8 mm range resolution, ≤ 20 Hz, built-in pressure sensor | sheet | `gemini_720s`: object-level 0.5–30 m, 90° H; **vertical aperture 20° is UNVERIFIED**; σ_z = 0.1 + 0.1·r (elevation ambiguity) |
+| Tritech Micron Gemini 720s | 720 kHz, 90° horizontal, 0.2–50 m, 128 beams, **20° vertical (±10° about horizontal)**, 2.34° acoustic / 0.7° effective angular and 8 mm range resolution, 3–20 Hz (range dependent), depth sensor ±2 m | Tritech datasheet 0729-SOM-00001 issue 07 (checked 2026-10-07) | `gemini_720s`: object-level 0.5–30 m, 90° H, 20° vertical; σ_z = 0.1 + 0.1·r (elevation ambiguity) |
 | Blue Robotics Ping360 | mechanical scanning imaging sonar: 750 kHz; 0.75–50 m; beam 2° horizontal × 25° vertical; 0.9° mechanical resolution (1° steps); a full 360° turn takes 3.4–4.3 s at a 1 m range setting and 33 s at 50 m; range resolution 0.08 % of range (4.1 cm at 50 m); 300 m depth rating; 11–25 V, 5 W; 510 g in air, 175 g in water; USB, Ethernet (UDP) or RS-485 (Ping Protocol) | sheet (2026-10-07) | not modelled yet (T-S1-11): a 2-D 360° scan around the BlueROV2, one beam at a time |
 | Water Linked DVL A50 | 5 cm–50 m altitude, ≤ 3.75 m/s, ±1.01 % long-term (±0.1 % "Performance" version), 2–15 Hz | sheet | `bluerov2_dvl` odometry: 1 cm/√m random walk + a per-vehicle **1 % scale bias** + heading bias 1.5 mrad/m |
 | Cube (PX4) IMU/baro | tri-redundant IMU, barometer | – | `tarot_vio` odometry + `baro` absolute z (σ 0.3 m) |
-| BlueROV2 Bar30 | pressure depth | UNVERIFIED σ | `bar30` absolute z (σ 0.02 m) |
+| BlueROV2 Bar30 | pressure depth (MS5837-30BA): resolution 0.2 mbar (2 mm of fresh water), absolute accuracy ±200 mbar (±2 m) at 0–45 °C, to 300 m | Blue Robotics product page (checked 2026-10-07) | `bar30` absolute z, σ 0.02 m: the resolution plus waves and water density, after the ±2 m offset is zeroed at the surface before each dive (pre-dive checklist); a drift of that offset during a dive is not modelled |
 | BlueROV2 camera | low-light HD | – | `bluerov2_camera`: 3 m range (turbid harbour) |
 
 **Design implications**

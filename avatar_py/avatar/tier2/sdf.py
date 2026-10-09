@@ -97,7 +97,7 @@ GZ_SENSORS: dict[str, RaySensorSpec] = {
         "depth", 212, 128, np.deg2rad(87.0), np.deg2rad(58.0), 0.3, 10.0, np.deg2rad(30.0)
     ),
     # Tritech Micron Gemini 720s: 90° horizontal, 128 beams, 50 m. Vertical
-    # aperture 20° (UNVERIFIED, docs/hardware.md) sampled by 16 rays per beam.
+    # aperture 20° (datasheet, docs/hardware.md) sampled by 16 rays per beam.
     "gemini_720s": RaySensorSpec("sonar", 128, 16, np.deg2rad(90.0), np.deg2rad(20.0), 0.5, 50.0),
     # Blue Robotics Ping360 (optional, D14): 360°, 2° x 25° beam, 0.9° steps, 0.75-50 m. A
     # mechanical scanner: the whole turn is recorded at every keyframe and the front-end keeps
@@ -317,7 +317,7 @@ class DaveSonar:
 
 
 # Tritech Micron Gemini 720s (docs/hardware.md): 720 kHz, 90 deg x 128 beams, 8 mm range
-# resolution (bandwidth c / (2 * 8 mm)); the 20 deg vertical aperture is UNVERIFIED.
+# resolution (bandwidth c / (2 * 8 mm)), 20 deg vertical aperture (datasheet, docs/hardware.md).
 DAVE_SONARS: dict[str, DaveSonar] = {
     "gemini_720s": DaveSonar(128, 64, np.deg2rad(90.0), np.deg2rad(20.0), 0.5, 30.0, 720e3, 94e3),
 }
