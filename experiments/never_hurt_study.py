@@ -5,15 +5,17 @@ For each seed of a preset and each variant, runs the three modes on the same mea
 writes every agent's ATE alone (independent SLAM), fused (Avatar, its own fused graph) and in the
 centralized oracle (its own trajectory, aligned per agent like the other two), plus team ATE:
 
-- ``base``: the defaults.
-- ``scale``: the estimators also carry the translation and gyro scale-error states
-  (``AvatarParams.model_odometry_scale``).
+- ``base``: the defaults (the estimators carry the translation and gyro scale-error states,
+  decision D15).
+- ``noscale``: without those states (``AvatarParams.model_odometry_scale=False``), the
+  estimator before D15.
 - ``nosys``: the defaults on a simulation without the platforms' scale errors (the draws are
   kept, at σ = 1e-12, so every other random stream is unchanged): is the harm caused by them?
 
     python experiments/never_hurt_study.py --seeds 0 1 2 3 4 5 6 7 8 9 --out results/never_hurt.csv
 
-Scratch output goes to ``results/`` (LOG L46).
+Scratch output goes to ``results/`` (LOG L46; there, before D15, ``base`` was ``noscale`` and the
+scale states were the variant ``scale``).
 """
 
 from __future__ import annotations
@@ -40,7 +42,7 @@ from avatar.sim import agents as sim_agents
 HERE = Path(__file__).resolve().parent
 VARIANTS = {
     "base": AvatarParams(),
-    "scale": AvatarParams(model_odometry_scale=True),
+    "noscale": AvatarParams(model_odometry_scale=False),
     "nosys": AvatarParams(),
 }
 

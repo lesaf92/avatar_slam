@@ -144,8 +144,8 @@ def test_odometry_states_follow_the_platform_spec():
     from avatar.sim.scenarios import harbor_fleet
 
     cfgs = {a.name: a for a in harbor_fleet(np.random.default_rng(0)).agents}
-    on = AvatarParams(model_odometry_scale=True)
-    assert odometry_states(FactorGraph(), cfgs["uuv_0"], AvatarParams()) == (("b",), None, None)
+    on, off = AvatarParams(), AvatarParams(model_odometry_scale=False)  # on by default (D15)
+    assert odometry_states(FactorGraph(), cfgs["uuv_0"], off) == (("b",), None, None)
     assert odometry_states(FactorGraph(), cfgs["uuv_0"], on, 2) == (("b", 2), ("s", 2), ("g", 2))
     assert odometry_states(FactorGraph(), cfgs["ugv_0"], on) == (("b",), None, ("g",))  # LIO
 

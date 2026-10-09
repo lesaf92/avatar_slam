@@ -78,8 +78,8 @@ class AvatarParams:
     # (platform heading_source != "compass"); prior σ from the platform spec (D9, L24).
     model_heading_bias: bool = True
     # With the heading bias, also estimate the translation (DVL) and gyro scale errors when
-    # the platform spec declares them (T-X1-04, LOG L46).
-    model_odometry_scale: bool = False
+    # the platform spec declares them (T-X1-04, LOG L46; default by decision D15).
+    model_odometry_scale: bool = True
     fused_freeze_heading_bias: bool = True  # hold the bias at its local estimate in fused (L26)
     # Drift-tolerant association: also align sliding windows of this many own
     # keyframes (0 = whole map only). Recent sub-maps stay nearly rigid when the

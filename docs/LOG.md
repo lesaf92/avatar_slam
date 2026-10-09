@@ -5,6 +5,52 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-07 (luiz-predator-neo): paper data with the scale-error states (D15) (Claude)
+
+Branch `wp/D15-scale-default`; decisions D14, D15 and H2 (PI, 2026-10-07); **simulation**
+(Tier 1 and Tier 2). At `4285992` (clean): `make -C experiments all-data JOBS=40` regenerated
+every CSV in `paper/data`; tables and macros by `make_paper_tables.py`.
+
+### L48. With the scale-error states every team is more accurate; the conclusions stand
+
+Before (`8eafe5c` / `617db22`) -> after (`4285992`):
+
+| Result | Before | After |
+|---|---|---|
+| Team ATE, M64 / X150 / 1 kbit/s (Avatar) | 0.120 / 0.128 / 0.107 m | 0.108 / 0.122 / 0.095 m |
+| Team ATE, oracle | 0.084 m | 0.077 m |
+| Server at 1 kbit/s (stride 10) | 0.121 m | 0.103 m (Avatar still better, earlier) |
+| Drift: team ATE (scale states off -> on) | – | 0.49 -> 0.32 m |
+| Drift: small-drift runs, mean change | −6 % (9 runs) | −7 % (9 runs; also −7 % without the states) |
+| Drift: small-drift runs worse than solo | 4 | 5, up to +18 % |
+| Tier 2 proxy, true tracks, G1 dev / held out | 20/20, 58/60 | 20/20, 59/60 |
+| Tier 2 proxy, EKF, G1 dev / held out | 19/20, 55/60 | 19/20, 56/60 |
+| Tier 2 UAV LiDAR, EKF, G1 | 78/80 | 80/80 |
+| Tier 2 sonar images, true tracks, G1 dev / held out | 20/20, 49/60 | 19/20, 50/60 |
+| Tier 2 sonar images, EKF, G1 dev / held out | 11/20, 34/60 | 11/20, 32/60 (merged 53 -> 45) |
+| Loss test, VoI vs FIFO / vs quality (400 runs) | 212:173 (p = 0.0004) / 212:223 (p = 0.28) | 226:182 (p = 1e-4) / 226:214 (p = 0.22) |
+
+1. **Tier 1:** every team is more accurate (Avatar −4 … −11 %, the oracle −8 %); the server
+   comparison and the bandwidth and loss conclusions are unchanged. The pre-registered loss
+   test, re-run with the new estimator, gives the same answer (it was not re-specified: same
+   seeds, same test).
+2. **Drift (H1):** the average gain on the drifting AUV is unchanged (−7 % with or without the
+   states); the states lower the team's error by a third. The drift table's oracle column is
+   now the oracle's trajectory of the vehicle aligned on its own (it was its team-frame error),
+   like the solo and Avatar columns: on seed 7 it is no better than solo (L46).
+3. **Tier 2:** G1 counts move by one or two runs, within the ±2 runs that a NumPy version also
+   causes (L28). The exception is the EKF tracker on sonar images held out: G1 34 -> 32/60 and
+   fewer merged teams (53 -> 45); its failures are still the BlueROV2 with sparse fixes (22 of
+   28), which the Ping360 addresses (D14, T-S1-12).
+4. **Prose checked against the new data** (scripts in the session, not kept): the held-out
+   proxy failure is now one run (a BlueROV2 at 1.1 m); EKF failures are the Tarot in 2 of 4
+   held-out runs ("most often" -> "often"); "VoI no better than quality" -> "not significantly
+   better"; "missing half of the revisits costs nothing" -> "costs little" (GNC 0.113 vs 0.095 m);
+   the drift paragraph now gives the number of runs that got worse and the largest increase
+   from macros, and the discussion's second limitation follows L46.
+
+---
+
 ## 2026-10-07 (luiz-predator-neo, late): bandwidth to 10 kbit/s and packet loss; H2 (Claude)
 
 Branch `wp/T-C5-01-bandwidth-loss-sweep`; task T-C5-01 (goal G-4); **simulation (Tier 1)**,

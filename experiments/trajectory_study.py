@@ -28,6 +28,7 @@ import yaml
 from _provenance import commit
 
 from avatar.agent import AvatarParams
+from avatar.eval.metrics import ate_rmse
 from avatar.runner import make_sim, run_centralized, run_decentralized, run_independent
 
 HERE = Path(__file__).resolve().parent
@@ -49,12 +50,15 @@ def main() -> None:
     ap.add_argument("--align-window", type=int, default=0, help="AvatarParams.align_window_kf")
     ap.add_argument("--no-heading-bias", dest="heading_bias", action="store_false",
                     help="do not model the heading bias (default: modelled, D9)")  # fmt: skip
+    ap.add_argument("--no-odometry-scale", dest="odometry_scale", action="store_false",
+                    help="do not estimate the odometry scale errors (D15)")  # fmt: skip
     ap.add_argument("--gnc", type=float, default=4.03,
                     help="GNC-TLS bound on landmark obs (<= 0 disables)")  # fmt: skip
     args = ap.parse_args()
     params = AvatarParams(
         align_window_kf=args.align_window,
         model_heading_bias=args.heading_bias,
+        model_odometry_scale=args.odometry_scale,
         point_obs_gnc=args.gnc if args.gnc > 0 else None,
     )
     rev = commit()
@@ -66,12 +70,14 @@ def main() -> None:
             scenario, sim = make_sim(doc["scenario"], seed, duration, params, **doc["args"])
             ind = run_independent(scenario, sim, params, seed).metrics
             dec = run_decentralized(scenario, sim, params, seed).metrics
-            cen = run_centralized(scenario, sim, params, seed).metrics
+            cen_run = run_centralized(scenario, sim, params, seed)
+            cen = cen_run.metrics
             row = {
                 "commit": rev,
                 "preset": name,
                 "align_window_kf": args.align_window,
                 "heading_bias": args.heading_bias,
+                "odometry_scale": args.odometry_scale,
                 "gnc": args.gnc if args.gnc is not None else "",
                 "seed": seed,
                 "duration_s": duration,
@@ -86,6 +92,10 @@ def main() -> None:
                 row[f"ate_fused_{agent}_m"] = dec["ate_fused_m"][i]
                 row[f"ate_team_{agent}_m"] = dec["ate_team_per_agent_m"].get(i, float("nan"))
                 row[f"ate_oracle_{agent}_m"] = cen["ate_team_per_agent_m"].get(i, float("nan"))
+                # the oracle's trajectory of this agent aligned on its own, as alone and fused
+                row[f"ate_oracle_own_{agent}_m"] = ate_rmse(
+                    cen_run.trajectories_team[i], sim.agents[i].gt
+                )
             rows.append(row)
             alone = {a: round(ind["ate_local_m"][i], 3) for i, a in dec["agents"].items()}
             print(
