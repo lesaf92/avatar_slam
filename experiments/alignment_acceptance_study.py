@@ -54,6 +54,21 @@ CONFIGS = [
     # The Ping360 rendered by DAVE (T-S1-12, `make tier2-record-ping360-sonar`: sonar360.npz).
     ("Ping360 DAVE, sonar EKF", "tier2_ping360", "ekf", "sonar360", {}),
     ("Ping360 DAVE, sonar GT ids", "tier2_ping360", "oracle", "sonar360", {}),
+    # T-F3-08: detection on the whole turn, detections kept in the swept sector.
+    (
+        "Ping360 DAVE turn, sonar EKF",
+        "tier2_ping360",
+        "ekf",
+        "sonar360",
+        {"ping360_turn_context": True},
+    ),
+    (
+        "Ping360 DAVE turn, sonar GT ids",
+        "tier2_ping360",
+        "oracle",
+        "sonar360",
+        {"ping360_turn_context": True},
+    ),
 ]
 DEFAULT_CONFIGS = [c[0] for c in CONFIGS if c[1] != "tier2_ping360"]
 

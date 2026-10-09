@@ -150,6 +150,11 @@ class FrontEndParams:
     # so that a pile cut by one sector's border lies whole in the next one (the detector drops
     # echoes at the border of an image); 5° is 1 m at 11 m.
     ping360_margin_rad: float = float(np.deg2rad(5.0))
+    # A Ping360 image is detected on the whole turn (the previous turn's pings are at hand on
+    # the vehicle), rolled so that the swept sector lies in the middle, and only the detections
+    # in the sector are kept: the noise floor, the side-lobe arcs and the extent of a hull or
+    # the quay face are judged on the whole turn, not on a 20-30° cut (T-F3-08).
+    ping360_turn_context: bool = False
     # Sensors whose data are ignored (paired controls: the same recording without them).
     ignore_sensors: tuple[str, ...] = ()
     # Semantic oracle: max distance [m] from a detection to a GT part's surface
@@ -538,6 +543,13 @@ def label_detection(
     return cls, desc
 
 
+def sweep_window(times: FloatArray, k: int, sweep_s: float) -> tuple[float, float]:
+    """``(start, width)`` [rad] of the azimuths swept up to keyframe ``k``, from ``-π + start``."""
+    t0 = times[k - 1] if k > 0 else times[0] - (times[1] - times[0] if len(times) > 1 else 1.0)
+    rate = 2.0 * np.pi / sweep_s
+    return rate * (t0 - times[0]), rate * (times[k] - t0)
+
+
 def swept_sector(
     spec: RaySensorSpec,
     scan: NDArray | SonarImage,
@@ -555,10 +567,7 @@ def swept_sector(
     are unwrapped, ascending). The vehicle's motion during the sweep is neglected: a keyframe
     lasts one second, the BlueROV2 moves 0.5 m in it.
     """
-    t0 = times[k - 1] if k > 0 else times[0] - (times[1] - times[0] if len(times) > 1 else 1.0)
-    rate = 2.0 * np.pi / sweep_s
-    start = rate * (t0 - times[0])
-    width = rate * (times[k] - t0)
+    start, width = sweep_window(times, k, sweep_s)
     if isinstance(scan, SonarImage):
         lo = start - margin_rad
         rel = np.mod(scan.azimuth_rad + np.pi - lo, 2.0 * np.pi)
@@ -642,11 +651,23 @@ def detections_for_agent(
             sensor = SENSOR_LIBRARY[sname]
             medium = sensor.target_medium
             scan = sensor_data[sname][k]
+            in_sector = None
             if sname == "ping360" and params.ping360_sweep_s > 0.0:
+                sweep = params.ping360_sweep_s
                 margin = params.ping360_margin_rad if isinstance(scan, SonarImage) else 0.0
-                scan = swept_sector(spec, scan, agent_data.times, k, params.ping360_sweep_s, margin)
+                if isinstance(scan, SonarImage) and params.ping360_turn_context:
+                    start, width = sweep_window(agent_data.times, k, sweep)
+                    margin = np.pi - 0.5 * width  # the whole turn, the sector in the middle
+
+                    def in_sector(c, start=start, width=width):
+                        az = np.arctan2(c.p_body[1], c.p_body[0])
+                        return np.mod(az + np.pi - start, 2.0 * np.pi) < width
+
+                scan = swept_sector(spec, scan, agent_data.times, k, sweep, margin)
             for c in segment(spec, scan, z_a, world.seabed_z, params, rng):
                 if c.range_m > sensor.max_range_m or c.range_m < sensor.min_range_m:
+                    continue
+                if in_sector is not None and not in_sector(c):
                     continue
                 stats["clusters"] += 1
                 sig = sensor.sigmas(c.range_m).copy()
