@@ -5,6 +5,46 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-08 (luiz-predator-neo, later): clutter on the Ping360's images (negative) (Claude)
+
+Branch `wp/T-F3-08-ping360-clutter`; task T-F3-08; **simulation (Tier 2)**, the Ping360 fleet's
+development seeds 0-19, sonar images, EKF tracker. The whole-turn option is in `b03c538`
+(reverted in the next commit): `alignment_acceptance_study.py --configs "Ping360 DAVE turn, sonar
+EKF" "Ping360 DAVE turn, sonar GT ids"` at `b03c538`. The other diagnostics are scratch scripts
+(not kept).
+
+### L53. Clutter is not what keeps the tracker from true-track accuracy; a better detector gains at most one run
+
+1. **What the clutter is.** On seeds 0-4, of the Ping360 detections kept in the swept sectors, 70 %
+   lie within 1 m of a pile, 23 % on the quay face, 6 % on hulls and 1 % elsewhere. A wall seen
+   square-on gives one compact echo at its nearest point, and that point slides along the wall
+   as the vehicle moves.
+2. **Detecting on the whole turn** (the previous turn's pings are on the vehicle), with only the
+   detections in the swept sector kept, judges noise floor, side lobes and extent on the whole
+   turn. Spurious detections fall from 35 % to 31 % (`uuv_0`) and from 34 % to 28 % (`uuv_1`),
+   and wrong alignments from 7 to 4. G1, however, is 15/20 against 16/20 with the sector cut
+   (1 run gained, 2 lost), and 20/20 with ground-truth tracks. The option is reverted.
+3. **A wall test on one image does not separate the quay from piles.** I tested the echo on the
+   neighbouring beams at r0/cos(dθ), the range a plane at range r0 would have:
+   - with all beams within ±10-45° and thresholds of 3-20 dB, the statistic is as high for
+     piles as for the quay;
+   - with only the beams where a plane would lie more than 0.5 m beyond r0, it is equally low
+     for both.
+
+   DAVE's quay echo is specular (near normal incidence only), and dense pile fields fill the
+   neighbouring beams.
+4. **The ceiling (diagnostic, uses ground truth):** dropping every detection that matches no part
+   before the tracker leaves G1 at **17/20**, from 16/20. Wrong alignments fall to 0-1 (from 7)
+   when the Ping360's clutter, or all sonar clutter, is removed. The three failures are teams that
+   never merge. A perfect clutter filter gains about one run here; the gap to ground-truth tracks
+   (19/20) is how the tracker associates detections of real piles (duplicates, L41, T-F3-06).
+
+**Outcome.** T-F3-08 is closed as a negative result: no clutter filter is worth building for the
+G1 count. Clutter still costs wrong alignments, so a temporal test may matter for map quality
+later: a landmark whose world position slides with the vehicle is a wall, not a pile.
+
+---
+
 ## 2026-10-08 (luiz-predator-neo): both fleets in the paper (Claude)
 
 Branch `wp/T-E3-04-ping360-paper`; task T-E3-04 (PI, 2026-10-08: report both fleets; D16:
