@@ -5,6 +5,23 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-08 (luiz-predator-neo): both fleets in the paper (Claude)
+
+Branch `wp/T-E3-04-ping360-paper`; task T-E3-04 (PI, 2026-10-08: report both fleets; D16:
+bench-test three M64s first); **simulation (Tier 2)**. At `aa62590` (clean): `make -C experiments
+tier2-sonar-ping360 tables` (`paper/data/tier2_sonar_ping360.csv`, `..._heldout.csv`).
+
+### L52. The sonar tables show both fleets
+
+The sonar tables gain a block "with a Ping360 on each BlueROV2" (tiers `T2p` and `T2pekf`, its own
+recordings `results/tier2_ping360`); the sonar paragraph cites it from macros. G1 with the EKF
+tracker: 16/20 development, 44/60 held out (Gemini only: 11/20 and 32/60); with ground-truth
+tracks 19/20 and 53/60 (Gemini only: 19/20 and 50/60). These reproduce L51. The two fleets are
+different recordings (adding a sensor changes the simulated noise streams), so the comparison
+between them is not paired; L51's paired comparison within the Ping360 recordings is the evidence.
+
+---
+
 ## 2026-10-07 (luiz-predator-neo, late night): the Ping360 rendered by DAVE (Claude)
 
 Branch `wp/T-S1-12-ping360-dave`; task T-S1-12 (D14); **simulation (Tier 2)**. Code `87ef367`
