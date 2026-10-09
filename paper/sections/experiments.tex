@@ -6,7 +6,7 @@
 \draftnote{Reference fleet (docs/hardware.md): Clearpath Husky with a Velodyne VLP-16 and
 RealSense D435i; Tarot 680 hexacopter with a D435i, a Cube autopilot (PX4) and a Jetson Nano, to
 which a VLP-16 is being added (decision D6); BlueROV2 with a
-Water Linked DVL A50 and Tritech Micron Gemini 720s; quay-side gateway bridging a 5\,GHz Wi-Fi
+Water Linked DVL A50, Tritech Micron Gemini 720s and Blue Robotics Ping360 scanning sonar; quay-side gateway bridging a 5\,GHz Wi-Fi
 mesh and Water Linked M64 acoustic modems (64\,bit/s). The BlueROV2 tether never carries
 Avatar traffic.}
 
@@ -108,6 +108,8 @@ the drifting vehicle's error by \driftNoScaleSmallMeanChange\,\% over the
   \providecommand{\sonarHeldTwoSGOne}{?}\providecommand{\sonarHeldTwoSEKFGOne}{?}%
   \providecommand{\sonarHeldTwoSWrong}{?}\providecommand{\sonarHeldTwoSEKFWrong}{?}%
   \providecommand{\sonarHeldTwoSNNGOne}{?}}
+\providecommand{\sonarTwoPEKFGOne}{?}\providecommand{\sonarHeldTwoPEKFGOne}{?}%
+\providecommand{\sonarHeldTwoPGOne}{?}%
 The same scenario is rendered in Gazebo Harmonic. Each robot is a kinematic sensor rig placed at
 its ground-truth pose at every keyframe, with a VLP-16, a D435i depth camera, and a ray-cast
 proxy for the imaging sonar (no speckle, multipath, or shadows). Odometry, depth, and ground
@@ -163,8 +165,13 @@ in \sonarTwoSEKFGOne{} development and \sonarHeldTwoSEKFGOne{} held-out runs
 (\sonarHeldTwoSEKFWrong{} wrong alignments held-out). Its failures are mostly the BlueROV2 that
 sees the fewest piles: between sparse fixes its pose is uncertain by about a pile spacing, the
 filter starts duplicates rather than risk wrong matches, and the duplicates cost the loop closures
-that keep its map consistent (Sec.~\ref{sec:discussion}). On sonar images, cross-medium
-association with ground-truth tracks mostly holds; intra-agent association does not yet.
+that keep its map consistent (Sec.~\ref{sec:discussion}). A second sonar addresses this: with a
+Ping360 scanning sonar on each BlueROV2 (rendered by DAVE as four fans, of which each keyframe
+keeps the sector swept since the previous one), the filter reaches G1 in \sonarTwoPEKFGOne{}
+development and \sonarHeldTwoPEKFGOne{} held-out runs, against \sonarHeldTwoPGOne{} held-out
+with ground-truth tracks; the full turn also shows hulls and the quay face, which the detector
+does not yet reject. On sonar images, cross-medium association with ground-truth tracks mostly
+holds; intra-agent association does not yet.
 
 \begin{table}[t]
   \centering
@@ -216,7 +223,8 @@ association with ground-truth tracks mostly holds; intra-agent association does 
 \begin{table}[t]
   \centering
   \caption{DAVE's multibeam sonar images on the BlueROV2s, development seeds, columns as in
-  Table~\ref{tab:tier2}; the first row repeats the ray-cast proxy with ground-truth tracks.}
+  Table~\ref{tab:tier2}; the first row repeats the ray-cast proxy with ground-truth tracks, the
+  last block is the fleet with a Ping360 on each BlueROV2 (its own recordings).}
   \label{tab:tier2sonar}
   \scriptsize
   \setlength{\tabcolsep}{3pt}

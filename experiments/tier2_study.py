@@ -68,6 +68,10 @@ TIERS: dict[str, str | dict[str, str] | None] = {
     "T2s": "oracle+sonar",
     "T2snn": "nn+sonar",
     "T2sekf": "ekf+sonar",
+    # The fleet with a Ping360 on each BlueROV2 (D14), rendered by DAVE (T-S1-12): run on the
+    # recordings of results/tier2_ping360, whose sonar360.npz holds the Gemini and the Ping360.
+    "T2p": "oracle+sonar360",
+    "T2pekf": "ekf+sonar360",
     "T2nn-land": {"ugv": "nn", "uav": "nn", "*": "oracle"},
 }
 
