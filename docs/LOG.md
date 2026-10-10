@@ -5,6 +5,34 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-09 (luiz-predator-neo): the ROS 2 comm emulator (Claude)
+
+Branch `wp/T-S3-01-comm-emulator`; task T-S3-01 (goal G-5). `colcon test --base-paths ros2
+--packages-select avatar_sim` (ROS 2 Jazzy, `PYTHONPATH=avatar_py`).
+
+### L55. The comm emulator node reproduces Tier 1's links exactly
+
+`ros2/avatar_sim` (new, `ament_python`) holds simulation-only `rclpy` nodes (ADR-0009). Its
+`comm_emulator` node:
+- wraps the Tier-1 link model, now one function shared with the runner
+  (`avatar.runner.make_network`: channels, memberships, ground-truth positions, losses drawn from
+  seed + 20000);
+- takes every agent's wire packets on one topic, `/avatar/comm/tx`, so they arrive in one order
+  and the loss draws follow that order;
+- publishes each delivery on `/avatar/<agent>/rx` once `/clock` passes its arrival time.
+
+**Test** (the task's acceptance): a 300 s Tier-1 decentralized run records its transmissions; the
+same packets, in order, go to the node, and `/clock` jumps to the run's end. The node's link
+statistics equal the run's exactly (packets and bytes sent, deliveries, bytes delivered, losses,
+per link), and every delivery is a packet its sender sent. CI's ROS job now installs SciPy and
+puts `avatar_py` on `PYTHONPATH` for `colcon test`.
+
+Not yet: positions come from the scenario's ground truth (right for the kinematic rigs, ADR-0007;
+vehicles with dynamics need a pose topic), and the gateway's relaying is a node of its own (next,
+with the agent nodes, T-S2-02).
+
+---
+
 ## 2026-10-08 (luiz-predator-neo, evening): where the sonar tracker loses runs, with the Ping360 (Claude)
 
 Branch `wp/T-F3-09-ekf-sonar-tuning`; task T-F3-09; **simulation (Tier 2)**. At `49604b1`:
