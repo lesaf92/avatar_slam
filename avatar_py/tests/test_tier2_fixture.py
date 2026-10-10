@@ -65,41 +65,44 @@ def test_ekf_tracker_is_no_worse_than_the_nearest_neighbour_tracker(runs):
     assert sum(v["wrong_track"] for v in ekf.values()) <= sum(v["wrong_track"] for v in nn.values())
 
 
-def test_online_release_with_an_unbounded_delay_is_the_batch_front_end():
-    """T-S3-03: AgentFrontEnd keyframe by keyframe, released online (DelayedRelease), equals the
-    batch pass when the delay outlasts the run; a short delay can only drop detections."""
+def test_late_release_delivers_the_batch_front_end():
+    """T-S3-03: AgentFrontEnd keyframe by keyframe with LateRelease (a detection leaves when its
+    landmark is released, late ones as amendments) delivers the batch pass's detections, plus
+    only those of landmarks that failed their static test after release."""
     import numpy as np
 
     from avatar.runner import make_sim
     from avatar.tier2.dataset import TRACK_ID_STRIDE, load_meta
-    from avatar.tier2.frontend import AgentFrontEnd, DelayedRelease, detections_for_agent
+    from avatar.tier2.frontend import AgentFrontEnd, LateRelease, detections_for_agent
     from avatar.tier2.sdf import GZ_SENSORS
 
     meta = load_meta(FIXTURE)
     _, sim = make_sim(meta["scenario"], meta["seed"], meta["duration_s"], AvatarParams(),
                       **meta["scenario_args"])  # fmt: skip
     raw = np.load(FIXTURE / "raw.npz")
-    aid = next(i for i, a in sim.agents.items() if a.config.name == "ugv_0")
-    ad, sensors = sim.agents[aid], meta["rigs"]["ugv_0"]
-    specs = {s: GZ_SENSORS[s] for s in sensors}
-    data = {s: raw[f"ugv_0/{s}"] for s in sensors}
-    offset = len(sim.world.parts) + TRACK_ID_STRIDE * (aid + 1)
-    args = (specs, sim.world, sim.instance_descriptors, offset, FrontEndParams(tracking="ekf"))
-    batch, _ = detections_for_agent(ad, data, *args, np.random.default_rng(5))
-
-    def online(delay):
+    for name in ("ugv_0", "uav_0"):
+        aid = next(i for i, a in sim.agents.items() if a.config.name == name)
+        ad, sensors = sim.agents[aid], meta["rigs"][name]
+        specs = {s: GZ_SENSORS[s] for s in sensors}
+        data = {s: raw[f"{name}/{s}"] for s in sensors}
+        offset = len(sim.world.parts) + TRACK_ID_STRIDE * (aid + 1)
+        args = (specs, sim.world, sim.instance_descriptors, offset, FrontEndParams(tracking="ekf"))
+        batch, _ = detections_for_agent(ad, data, *args, np.random.default_rng(5))
         fe = AgentFrontEnd(ad, *args, np.random.default_rng(5))
-        rel, out = DelayedRelease(fe, delay), []
+        rel, sent = LateRelease(fe), [[] for _ in ad.keyframes]
+        n_late = 0
         for k in range(len(ad.keyframes)):
-            out += rel.push(k, fe.step(k, {s: data[s][k] for s in sensors}))
-        return out + rel.flush()
+            out = rel.push(k, fe.step(k, {s: data[s][k] for s in sensors}))
+            assert out[0][0] == k and all(j < k for j, _ in out[1:])  # this one, then amendments
+            n_late += sum(len(d) for _, d in out[1:])
+            for j, dets in out:
+                sent[j] += dets
 
-    def key(dets):
-        return [(d.part_index, d.p_body.tobytes()) for d in dets]
+        def key(dets):
+            return {(d.part_index, d.p_body.tobytes()) for d in dets}
 
-    full = online(10_000)
-    assert [k for k, _ in full] == list(range(len(ad.keyframes)))
-    assert [key(d) for _, d in full] == [key(d) for d in batch]
-    short = online(3)
-    assert all(set(key(s)) <= set(key(f)) for (_, s), (_, f) in zip(short, full, strict=True))
-    assert sum(map(len, (d for _, d in short))) < sum(map(len, batch))
+        for k in range(len(ad.keyframes)):
+            assert key(batch[k]) <= key(sent[k])
+            assert all(not fe.released(d) for d in sent[k] if (d.part_index, d.p_body.tobytes())
+                       not in key(batch[k]))  # fmt: skip
+        assert n_late > 0, name  # some detections are released late

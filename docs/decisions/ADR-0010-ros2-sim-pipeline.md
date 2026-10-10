@@ -28,6 +28,10 @@ Agent and gateway nodes come next. Two questions decide their shape:
    id). It is published by front-end nodes on `/avatar/<agent>/keyframe` and consumed by the
    agent node.
 
+   A `Keyframe` that repeats an index the agent already has is an *amendment*: detections of
+   that keyframe sent late, once their landmark has proved static; the agent adds them to its
+   graph retroactively (T-S3-03, LOG L57).
+
    The first front-end node *replays* a Tier-2 run, publishing the detections the offline
    front-end computed, so the backbone, the network and the gateway are tested in ROS 2 before
    the front-end itself moves there. A live front-end node (Gazebo sensor topics in, keyframes

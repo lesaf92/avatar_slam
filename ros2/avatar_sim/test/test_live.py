@@ -19,11 +19,11 @@ from rclpy.parameter import Parameter  # noqa: E402
 from avatar.agent import AvatarParams  # noqa: E402
 from avatar.runner import make_sim  # noqa: E402
 from avatar.tier2.dataset import TRACK_ID_STRIDE, load_meta  # noqa: E402
-from avatar.tier2.frontend import AgentFrontEnd, DelayedRelease, FrontEndParams  # noqa: E402
+from avatar.tier2.frontend import AgentFrontEnd, FrontEndParams, LateRelease  # noqa: E402
 from avatar.tier2.sdf import GZ_SENSORS  # noqa: E402
 
 FIXTURE = Path(__file__).resolve().parents[3] / "testdata" / "tier2"
-AGENT, DELAY = "ugv_0", 10
+AGENT = "uav_0"  # the sparse sensor: many detections leave late
 
 
 def _expected() -> list:
@@ -38,10 +38,10 @@ def _expected() -> list:
                        sim.instance_descriptors, len(sim.world.parts) + TRACK_ID_STRIDE * (aid + 1),
                        FrontEndParams(tracking="ekf"),
                        np.random.default_rng(meta["seed"] + 40_000 + aid))  # fmt: skip
-    rel, out = DelayedRelease(fe, DELAY), []
+    rel, out = LateRelease(fe), []
     for k in range(len(ad.keyframes)):
         out += rel.push(k, fe.step(k, {s: raw[f"{AGENT}/{s}"][k] for s in sensors}))
-    return out + rel.flush()
+    return out
 
 
 def test_live_front_end_gives_the_direct_pass():
@@ -53,9 +53,7 @@ def test_live_front_end_gives_the_direct_pass():
     rclpy.init()
     try:
         ex = SingleThreadedExecutor()
-        live = FrontendLive(
-            parameter_overrides=[*params, Parameter("release_delay_kf", value=DELAY)]
-        )
+        live = FrontendLive(parameter_overrides=params)
         sensors = SensorReplay(parameter_overrides=params)
         got = []
         sink = rclpy.create_node("sink")
@@ -66,18 +64,22 @@ def test_live_front_end_gives_the_direct_pass():
         ])  # fmt: skip
         for n in (live, sensors, sink, clock):
             ex.add_node(n)
-        n_kf = len(live.ad.keyframes)
+        want = _expected()
         deadline = time.monotonic() + 300
-        while len(got) < n_kf:
+        while len(got) < len(want):
             assert time.monotonic() < deadline, f"timed out with {len(got)} keyframes"
             ex.spin_once(timeout_sec=0.05)
     finally:
         rclpy.try_shutdown()
-    want = _expected()
-    assert [m.index for m in got] == [k for k, _ in want] == list(range(n_kf))
+    assert [m.index for m in got] == [k for k, _ in want]  # keyframes, then amendments
     for m, (_, dets) in zip(got, want, strict=True):
         back = keyframe_data(m)
         assert [(d.part_index, d.p_body.tolist()) for d in back.detections] == [
             (d.part_index, d.p_body.tolist()) for d in dets
         ]
-    assert sum(len(m.detections) for m in got) > 50
+    seen, amended = set(), 0
+    for m in got:  # an amendment carries no odometry, a new keyframe does (but the first)
+        amended += m.index in seen
+        assert (m.index in seen) == (not m.has_odom and m.index > 0) or m.index == 0
+        seen.add(m.index)
+    assert amended > 0

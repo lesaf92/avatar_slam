@@ -758,31 +758,35 @@ class AgentFrontEnd:
         return stats
 
 
-class DelayedRelease:
-    """Online release of a front-end's detections (T-S3-03): keyframe ``k`` leaves once keyframe
-    ``k + delay_kf`` has been processed, with the detections whose landmark is released by then
-    (:meth:`AgentFrontEnd.released`). Offline, :func:`detections_for_agent` waits until the end of
-    the run instead; a landmark released later than ``delay_kf`` keyframes after a detection loses
-    that detection online."""
+class LateRelease:
+    """Online release of a front-end's detections (T-S3-03, ADR-0010).
 
-    def __init__(self, fe: AgentFrontEnd, delay_kf: int) -> None:
-        self.fe, self.delay = fe, delay_kf
-        self._buf: list[tuple[int, list[Detection]]] = []
+    Keyframe ``k`` leaves at once with the detections whose landmark is already released
+    (:meth:`AgentFrontEnd.released`); a detection whose landmark is released later leaves then, as
+    an amendment of its own keyframe, which the agent adds to its graph retroactively
+    (``AvatarAgent.add_detections``). Over a run this delivers the batch pass of
+    :func:`detections_for_agent`, except the detections of a landmark that fails its static test
+    after its release (they have already left).
+    """
+
+    def __init__(self, fe: AgentFrontEnd) -> None:
+        self.fe = fe
+        self._pending: dict[int, list[tuple[int, Detection]]] = {}  # track id -> (keyframe, det)
 
     def push(self, k: int, dets: list[Detection]) -> list[tuple[int, list[Detection]]]:
-        """Add keyframe ``k``'s detections; returns the keyframes that leave now, in order."""
-        self._buf.append((k, dets))
-        n = sum(1 for kk, _ in self._buf if kk <= k - self.delay)
-        return [self._release(*self._buf.pop(0)) for _ in range(n)]
-
-    def flush(self) -> list[tuple[int, list[Detection]]]:
-        """Every keyframe still held (after the last one)."""
-        out = [self._release(*kd) for kd in self._buf]
-        self._buf = []
-        return out
-
-    def _release(self, k: int, dets: list[Detection]) -> tuple[int, list[Detection]]:
-        return k, [d for d in dets if self.fe.released(d)]
+        """Add keyframe ``k``'s detections; returns ``(keyframe, detections)`` to send, in order:
+        keyframe ``k`` itself, then amendments of earlier keyframes."""
+        now = []
+        for d in dets:
+            if self.fe.released(d):
+                now.append(d)
+            else:
+                self._pending.setdefault(d.part_index, []).append((k, d))
+        late: dict[int, list[Detection]] = {}
+        for tid in [tid for tid, held in self._pending.items() if self.fe.released(held[0][1])]:
+            for j, d in self._pending.pop(tid):
+                late.setdefault(j, []).append(d)
+        return [(k, now), *sorted(late.items())]
 
 
 def detections_for_agent(
@@ -797,8 +801,8 @@ def detections_for_agent(
 ) -> tuple[list[list[Detection]], dict]:
     """Detections per keyframe for one agent over a whole recording, and front-end statistics
     (:class:`AgentFrontEnd` keyframe by keyframe). With the EKF tracker a detection is kept if
-    its landmark is released by the end of the run; online, a front-end can only wait a fixed
-    number of keyframes (``frontend_live``)."""
+    its landmark is released by the end of the run; online, :class:`LateRelease` sends it when it
+    is released."""
     fe = AgentFrontEnd(agent_data, specs, world, inst_desc, id_offset, params, rng)
     out = [
         fe.step(k, {s: sensor_data[s][k] for s in specs}) for k in range(len(agent_data.keyframes))
@@ -814,8 +818,8 @@ def detections_for_agent(
 __all__ = [
     "AgentFrontEnd",
     "Cluster",
-    "DelayedRelease",
     "FrontEndParams",
+    "LateRelease",
     "Tracker",
     "detections_for_agent",
     "label_detection",

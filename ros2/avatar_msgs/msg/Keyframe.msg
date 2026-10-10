@@ -1,5 +1,7 @@
 # Everything one agent measures at one keyframe (ADR-0010): front-end -> agent node.
 # Semantic mirror of avatar.sim.measurements.KeyframeData.
+# A Keyframe whose index the agent has already received is an amendment: more detections of
+# that keyframe, sent once their landmark has proved static (no odometry, no depth).
 
 std_msgs/Header header            # stamp = keyframe time
 uint32 index                      # keyframe number, from 0

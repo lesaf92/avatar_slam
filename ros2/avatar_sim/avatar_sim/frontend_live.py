@@ -2,11 +2,14 @@
 
 Subscribes to ``/avatar/<agent>/<sensor>/image`` for each of its rig's sensors (``sensor_replay``
 or the Gazebo rigs), runs :class:`avatar.tier2.frontend.AgentFrontEnd` on each keyframe once all
-its images are in, and publishes ``/avatar/<agent>/keyframe``. With the EKF tracker a keyframe
-leaves ``release_delay_kf`` keyframes later, with the detections whose landmark has proved static
-by then (:class:`~avatar.tier2.frontend.DelayedRelease`). Odometry and depth are those of the
-Tier-1 simulation of the run, as offline; ground truth only labels detections (the simulated
-classifier). Simulation only: on a robot, odometry comes from its own nodes.
+its images are in, and publishes ``/avatar/<agent>/keyframe``. With the EKF tracker a detection
+counts once its landmark has proved static: a keyframe leaves at once with the detections already
+released, and the others follow when they are, as amendments (a ``Keyframe`` with an earlier
+index and no odometry; :class:`~avatar.tier2.frontend.LateRelease`).
+
+Odometry and depth are those of the Tier-1 simulation of the run, as offline; ground truth only
+labels detections (the simulated classifier). Simulation only: on a robot, odometry comes from
+its own nodes.
 """
 
 from __future__ import annotations
@@ -19,7 +22,7 @@ from sensor_msgs.msg import Image
 
 from avatar.sim.measurements import KeyframeData
 from avatar.tier2.dataset import TRACK_ID_STRIDE, load_meta
-from avatar.tier2.frontend import AgentFrontEnd, DelayedRelease, FrontEndParams
+from avatar.tier2.frontend import AgentFrontEnd, FrontEndParams, LateRelease
 from avatar.tier2.sdf import GZ_SENSORS
 from avatar_sim.common import QOS, image_array, keyframe_msg, scenario_of, seconds
 
@@ -31,7 +34,6 @@ class FrontendLive(Node):
         run_dir = self.get_parameter("run_dir").value
         tracking = self.get_parameter("tracking").value
         name = self.declare_parameter("agent", "").value
-        delay = int(self.declare_parameter("release_delay_kf", 10).value)
         aid = next(a.agent_id for a in scenario.agents if a.name == name)
         self.ad = sim.agents[aid]
         sensors = load_meta(run_dir)["rigs"][name]
@@ -41,9 +43,9 @@ class FrontendLive(Node):
             np.random.default_rng(seed + 40_000 + aid),
         )  # fmt: skip
         self.fe = fe
-        self.release = DelayedRelease(fe, delay if tracking in ("ekf", "ekf_truth") else 0)
+        self.release = LateRelease(fe)
         self.frames: dict[int, dict[str, np.ndarray]] = {}
-        self.sensors, self.next_k, self.outbox = sensors, 0, []
+        self.sensors, self.next_k, self.outbox, self.sent = sensors, 0, [], 0
         self.pub = self.create_publisher(Keyframe, f"/avatar/{name}/keyframe", QOS)
         for s in sensors:
             self.create_subscription(
@@ -58,8 +60,6 @@ class FrontendLive(Node):
             k = self.next_k
             self.outbox += self.release.push(k, self.fe.step(k, self.frames.pop(k)))
             self.next_k += 1
-            if self.next_k == len(self.ad.keyframes):
-                self.outbox += self.release.flush()
         self._send()
 
     def _send(self) -> None:
@@ -67,9 +67,12 @@ class FrontendLive(Node):
             return  # hold the keyframes until the agent listens: each is relative to the last
         for k, dets in self.outbox:
             kf = self.ad.keyframes[k]
-            self.pub.publish(keyframe_msg(KeyframeData(
-                kf.t, kf.odom, kf.odom_sigmas, dets, kf.abs_z, kf.abs_z_sigma
-            ), k))  # fmt: skip
+            if k < self.sent:  # an amendment: detections of a keyframe already sent
+                data = KeyframeData(kf.t, None, None, dets, None, None)
+            else:
+                data = KeyframeData(kf.t, kf.odom, kf.odom_sigmas, dets, kf.abs_z, kf.abs_z_sigma)
+                self.sent = k + 1
+            self.pub.publish(keyframe_msg(data, k))
         self.outbox = []
 
 
