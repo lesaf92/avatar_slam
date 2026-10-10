@@ -5,6 +5,58 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-10 (luiz-predator-neo, later): live front-ends in ROS 2 (Claude)
+
+Branch `wp/T-S3-03-live-frontend`; task T-S3-03 (G-5; PI 2026-10-10: LiDAR and depth robots
+first, sonar on replay); **simulation (Tier 2)**. At `0fc2761`: `python experiments/ros2_parity.py
+--ws <install> --runs results/tier2 --tracking ekf --live ugv_0,uav_0 --seeds 0 ... 19 --jobs 4
+--rate 5` (`results/ros2_parity_live.csv`).
+
+### L57. With live front-ends the team in ROS 2 passes G1 on the same runs as offline
+
+**Front-end, keyframe by keyframe.** The Tier-2 front-end's batch loop becomes
+`AgentFrontEnd.step(k, scans)`; `detections_for_agent` loops over it, with bit-identical
+detections and statistics (EKF and ground-truth tracking, Tier-2 seed 3).
+
+**Nodes:**
+- `sensor_replay` publishes a recording's LiDAR scans and depth images as `32FC1`
+  `sensor_msgs/Image`. The frames are stored as float16, so float32 carries them exactly.
+- `frontend_live` runs `AgentFrontEnd` on those images.
+
+**Release of detections, online.** Offline, an EKF track's detections count if its landmark
+proves static at any time before the end of the run. Online, a keyframe cannot wait that long.
+
+A fixed delay (10 or 30 keyframes) fails:
+- it dropped about a fifth of the Tarot's detections (Tier-2 seed 6: 119 against 151 with no
+  limit). Its depth camera sees a pile for one to three frames, and most of its landmarks prove
+  static only on a revisit;
+- live G1 fell to 15/20 (seeds 0, 6, 10 and 14 lost).
+
+The fix uses what the back-end is, a factor graph:
+- a keyframe leaves at once with the detections already released;
+- a landmark released later sends its earlier detections as an *amendment*, a `Keyframe` that
+  repeats an index, which the agent adds to its graph retroactively
+  (`AvatarAgent.add_detections`; the default path is bit-identical).
+
+Over a run this delivers the batch pass's detections: on the fixture both robots receive late
+detections, and the only extras are those of landmarks that failed their static test after
+release. The node test checks the message sequence against a direct pass.
+
+**Parity** (development seeds 0-19, proxy, EKF tracker; the BlueROV2s on replay):
+
+| | G1 | frame error, ROS 2 − offline |
+|---|---|---|
+| offline | 19/20 | – |
+| ROS 2, every front-end replayed (L56) | 18/20 | within 0.20 m |
+| **ROS 2, the Husky and the Tarot live** | **19/20, the same runs** | median 0.008 m, at most 0.15 m |
+
+**Left for G-5:**
+- a node that drives the Gazebo rigs and publishes these image topics live;
+- the sonar robots' front-ends live (DAVE renders at about 1.3 s per keyframe; the clock must
+  then run slower).
+
+---
+
 ## 2026-10-10 (luiz-predator-neo): the team in ROS 2 (Claude)
 
 Branch `wp/T-S3-02-agent-nodes`; task T-S3-02 (goal G-5; ADR-0010 accepted with free-running

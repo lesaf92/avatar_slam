@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho, ITA (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v2.14 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v2.15 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -360,7 +360,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 | G-2 | Held-out results understood | The cause of the fresh-seed G1 gap named; a recommendation for D13 | 2026-10-20 | T-E3-02 |
 | G-3 | Realistic sonar front-end | DAVE sonar with the EKF tracker: G1 ≥ 16/20 development seeds, then one held-out evaluation | 2026-10-31 (M1) | T-F3-06 |
 | G-4 | H2 settled | Bandwidth and loss sweep (100 bit/s to 10 kbit/s) in `paper/data`; H2 kept, reworded or dropped. **Settled (PI, 2026-10-07): H2 reworded** (RQ2 row; LOG L47) | 2026-10-31 (M1) | T-C2-01, T-C5-01 |
-| G-5 | ROS 2 end to end in Gazebo | `unified.launch.py` runs the reference fleet (DAVE sonar) with agent nodes and the comm emulator; the same G1 as the offline Tier-2 pipeline on the same seeds. **2026-10-10 (LOG L56):** the team runs in ROS 2 on replayed Tier-2 front-end output (agent, gateway, emulator, clock nodes; `replay.launch.py`) and matches the offline pipeline statistically; left: a live front-end node on Gazebo sensor topics (T-S2-02) | 2026-12-20 (M2) | T-S2-02, T-S3-01, T-I1-09 |
+| G-5 | ROS 2 end to end in Gazebo | `unified.launch.py` runs the reference fleet (DAVE sonar) with agent nodes and the comm emulator; the same G1 as the offline Tier-2 pipeline on the same seeds. **2026-10-10 (LOG L56):** the team runs in ROS 2 on replayed Tier-2 front-end output (agent, gateway, emulator, clock nodes; `replay.launch.py`) and matches the offline pipeline statistically; **L57:** with live front-ends for the Husky and the Tarot (sensor frames as ROS 2 images) G1 19/20 as offline; left: the Gazebo rigs publishing those images live, and the sonar front-ends live (T-S2-02, T-S3-03) | 2026-12-20 (M2) | T-S2-02, T-S3-01, T-I1-09 |
 | G-6 | Fair baselines | ≥ 2 external baselines (Swarm-SLAM on air/ground, DRACo-SLAM2 underwater) and the *A&B*-style server, on the same inputs | 2027-01-31 | T-E2-01 … T-E2-04 |
 | G-7 | Real data | ≥ 1 real sonar sequence through the front-end | 2027-02-10 (M3) | T-R1-05, T-E4-01 |
 | G-8 | Paper A submitted | No UNVERIFIED cited entry; Reviewer-2 checklist ticked | ≈ 2027-03-01 (M4) | T-R1-04, T-P* |
@@ -368,6 +368,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 
 ## 11. Changelog
 
+- **v2.15 (2026-10-10).** T-S3-03 (LOG L57): live front-end nodes on sensor topics, late detections as keyframe amendments; G1 19/20 as offline with the Husky and the Tarot live.
 - **v2.14 (2026-10-10).** T-S3-02 (LOG L56): the team in ROS 2 (agent, gateway, replay front-end, clock nodes) matches the offline pipeline statistically; G-5 progress.
 - **v2.13 (2026-10-10).** D18 decided (ADR-0010 accepted: `Keyframe` message, free-running time); G-1: the recordings stay on the host; T-S3-02 unblocked.
 - **v2.12 (2026-10-09).** T-S3-01 (LOG L55): the ROS 2 comm emulator; the runner's exchange factored for nodes; ADR-0010 proposed (D18), task T-S3-02.
