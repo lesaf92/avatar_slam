@@ -5,6 +5,50 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-10 (luiz-predator-neo): the team in ROS 2 (Claude)
+
+Branch `wp/T-S3-02-agent-nodes`; task T-S3-02 (goal G-5; ADR-0010 accepted with free-running
+time, D18); **simulation (Tier 2, replayed)**. At `d71d72d`, with a colcon install of `ros2/`:
+`python experiments/ros2_parity.py --ws <install> --runs results/tier2 --tracking ekf [--sonar
+sonar] --seeds 0 ... 19 --jobs 4 --rate 5` (`results/ros2_parity_ekf.csv`, `..._sonar.csv`).
+
+### L56. The team in ROS 2 matches the offline pipeline, at most a few marginal runs worse
+
+**Pipeline.** `avatar_msgs` v0.2 adds `Keyframe` and `Detection`. `avatar_sim` gains five nodes:
+- `frontend_replay`: an offline front-end's keyframes, published as the clock reaches them;
+- `agent_node`: `AvatarAgent` with the runner's exchange code;
+- `gateway_node`;
+- `comm_emulator`: L55;
+- `sim_clock`: free-running, starting once every node listens.
+
+`replay.launch.py` runs the team, one process per node.
+
+**Two bugs found on the way, both fixed:**
+- **Start-up race.** A keyframe published before its agent had subscribed was lost, and every
+  later one was then refused (each is relative to the last). The clock now waits for all its
+  listeners, and a front-end holds its keyframes until its agent listens.
+- **Shutdown race.** The anchor (the Husky, the largest map) was interrupted in its last solve and
+  wrote nothing; 16 of 20 runs lost their estimate. An agent now marks itself done only once
+  its estimate is written, and gets 60 s before SIGTERM.
+
+**Parity** (development seeds 0-19; G1 from the anchor's estimate of every frame):
+
+| Front-end | G1 offline | G1 ROS 2 | passed by both | frame error, ROS 2 − offline |
+|---|---|---|---|---|
+| proxy, EKF tracker | 19/20 | 18/20 | 18 | median −0.02 m, at most 0.20 m |
+| DAVE sonar, EKF tracker | 11/20 | 9/20 | 9 | median +0.10 m (12 seeds below 5 m in both) |
+
+ROS 2 never passes a run that offline fails. Three runs pass offline only (proxy seed 17: 0.90
+against 1.04 m; sonar seeds 0 and 1). Three to none over 40 runs is not significant (sign test
+p = 0.25), but the direction is consistent with free time. A packet that arrives as an agent
+exchanges can be read after the exchange and wait 20 s for the next one, which matters where an
+alignment is marginal (sonar images). That is the cost of the choice in ADR-0010, not a defect.
+
+**Left for G-5:** a live front-end node on Gazebo's sensor topics, in place of the replay
+(T-S2-02).
+
+---
+
 ## 2026-10-09 (luiz-predator-neo): the ROS 2 comm emulator (Claude)
 
 Branch `wp/T-S3-01-comm-emulator`; task T-S3-01 (goal G-5). `colcon test --base-paths ros2
