@@ -591,47 +591,58 @@ def nearest_part(world, medium: Medium, p_world: FloatArray, max_dist_m: float) 
     return best
 
 
-def detections_for_agent(
-    agent_data,
-    sensor_data: dict[str, NDArray],
-    specs: dict[str, RaySensorSpec],
-    world,
-    inst_desc: FloatArray,
-    id_offset: int,
-    params: FrontEndParams,
-    rng: np.random.Generator,
-) -> tuple[list[list[Detection]], dict]:
-    """Detections per keyframe for one agent, and front-end statistics.
+class AgentFrontEnd:
+    """The Tier-2 front-end of one agent, one keyframe at a time (``step``).
 
-    ``agent_data`` is the Tier-1 :class:`~avatar.sim.measurements.AgentData`
-    of the same seed (its odometry drives the tracker, its ground truth is
-    used only to label detections for evaluation and the semantic oracle).
+    ``agent_data`` is the Tier-1 :class:`~avatar.sim.measurements.AgentData` of the same seed:
+    its odometry drives the tracker, its ground truth only labels detections for evaluation and
+    the semantic oracle. :func:`detections_for_agent` runs it over a recording; a ROS 2 front-end
+    node runs it on sensor messages as they come (T-S3-03).
     """
-    part_classes = [p.class_name for p in world.parts]
-    tracker = Tracker(id_offset, params)
-    noise = agent_data.config.odometry_noise
-    sonar = any(spec.kind == "sonar_image" for spec in specs.values())
-    ekf = EkfTracker(
-        id_offset,
-        params.ekf_sonar if sonar and params.ekf_sonar is not None else params.ekf,
-        PlatformPrior(
-            noise.yaw_bias_std_rad_per_m if heading_bias_modelled(agent_data.config) else 0.0,
-            noise.scale_bias_std,
-            noise.yaw_scale_bias_std,
-        ),
-    )
-    dr = np.array([0.0, 0.0, 0.0, 0.0])
-    n_kf = len(agent_data.keyframes)
-    out: list[list[Detection]] = []
-    stats = {"clusters": 0, "matched": 0, "spurious": 0, "wrong_track": 0}
-    track_truth: dict[int, int] = {}
-    n_clutter = 0
-    for k in range(n_kf):
+
+    def __init__(
+        self,
+        agent_data,
+        specs: dict[str, RaySensorSpec],
+        world,
+        inst_desc: FloatArray,
+        id_offset: int,
+        params: FrontEndParams,
+        rng: np.random.Generator,
+    ) -> None:
+        self.agent_data, self.specs, self.world = agent_data, specs, world
+        self.inst_desc, self.id_offset, self.params, self.rng = inst_desc, id_offset, params, rng
+        self.part_classes = [p.class_name for p in world.parts]
+        self.tracker = Tracker(id_offset, params)
+        noise = agent_data.config.odometry_noise
+        sonar = any(spec.kind == "sonar_image" for spec in specs.values())
+        self.ekf = EkfTracker(
+            id_offset,
+            params.ekf_sonar if sonar and params.ekf_sonar is not None else params.ekf,
+            PlatformPrior(
+                noise.yaw_bias_std_rad_per_m if heading_bias_modelled(agent_data.config) else 0.0,
+                noise.scale_bias_std,
+                noise.yaw_scale_bias_std,
+            ),
+        )
+        self.dr = np.array([0.0, 0.0, 0.0, 0.0])
+        self.stats = {"clusters": 0, "matched": 0, "spurious": 0, "wrong_track": 0}
+        self.track_truth: dict[int, int] = {}
+        self.n_clutter = 0
+
+    def step(self, k: int, scans: dict[str, NDArray | SonarImage]) -> list[Detection]:
+        """Detections of keyframe ``k`` from its scans (sensor name -> scan, image or sonar
+        image). With the EKF tracker, a detection counts only once :meth:`released`."""
+        agent_data, specs, world, params = self.agent_data, self.specs, self.world, self.params
+        id_offset, rng, tracker, ekf, stats = (
+            self.id_offset, self.rng, self.tracker, self.ekf, self.stats,
+        )  # fmt: skip
         kf = agent_data.keyframes[k]
         if k > 0 and kf.odom is not None:
-            dr = compose(dr, kf.odom)
+            self.dr = compose(self.dr, kf.odom)
             tracker.step(float(np.linalg.norm(kf.odom[:3])))
             ekf.predict(kf.odom, kf.odom_sigmas)
+        dr = self.dr
         z_a = kf.abs_z if kf.abs_z is not None else float(agent_data.gt[0, 2] + dr[2])
         pose_dr = np.array([dr[0], dr[1], z_a, dr[3]])
         gt_pose = agent_data.gt[k]
@@ -641,7 +652,7 @@ def detections_for_agent(
                 continue
             sensor = SENSOR_LIBRARY[sname]
             medium = sensor.target_medium
-            scan = sensor_data[sname][k]
+            scan = scans[sname]
             if sname == "ping360" and params.ping360_sweep_s > 0.0:
                 margin = params.ping360_margin_rad if isinstance(scan, SonarImage) else 0.0
                 scan = swept_sector(spec, scan, agent_data.times, k, params.ping360_sweep_s, margin)
@@ -673,9 +684,9 @@ def detections_for_agent(
                     obj = world.parts[it[4]].object_id
                     ids.append((id_offset + it[4], id_offset + len(world.parts) + obj))
                 else:
-                    cid = id_offset + 2 * TRACK_SPAN + n_clutter
+                    cid = id_offset + 2 * TRACK_SPAN + self.n_clutter
                     ids.append((cid, cid))  # one-off: its own object
-                    n_clutter += 1
+                    self.n_clutter += 1
         elif params.tracking == "nn":
             taken: set[int] = set()
             ids = [
@@ -701,10 +712,10 @@ def detections_for_agent(
             if tid_okey is None:  # ambiguous association: no detection is emitted
                 continue
             tid, okey = tid_okey
-            first = track_truth.setdefault(tid, true_idx)
+            first = self.track_truth.setdefault(tid, true_idx)
             if first != true_idx:
                 stats["wrong_track"] += 1
-            cls, desc = label_detection(sensor, true_idx, part_classes, inst_desc, rng)
+            cls, desc = label_detection(sensor, true_idx, self.part_classes, self.inst_desc, rng)
             ext = np.array([c.footprint[0], c.footprint[1], c.height_m])
             dets.append(
                 Detection(
@@ -720,28 +731,61 @@ def detections_for_agent(
                     object_key=okey,
                 )
             )
-        out.append(dets)
+        return dets
+
+    def released(self, det: Detection) -> bool:
+        """Whether a detection is released: with the EKF tracker, once its landmark has proved
+        static (``EkfTracker.released``); otherwise at once."""
+        if self.params.tracking in ("ekf", "ekf_truth"):
+            return self.ekf.released(det.part_index - self.id_offset)
+        return True
+
+    def final_stats(self) -> dict:
+        """Front-end statistics after the last keyframe."""
+        stats, ekf, tracker = dict(self.stats), self.ekf, self.tracker
+        if self.params.tracking in ("ekf", "ekf_truth"):
+            status = ekf._status[: ekf.n_landmarks]
+            stats["tracks"] = sum(ekf.released(j) for j in range(ekf.n_landmarks))
+            stats["landmarks_confirmed"] = int(np.sum(status == CONFIRMED))
+            stats["landmarks_bad"] = int(np.sum(status == BAD))
+            stats["registrations"] = ekf.n_updates
+            stats["dropped_ambiguous"] = ekf.n_dropped
+        else:
+            stats["tracks"] = len(tracker.tracks)
+            stats["registrations"] = tracker.n_registrations
+            stats["dropped_ambiguous"] = tracker.n_dropped
+        stats["ambiguous_registrations"] = tracker.n_ambiguous
+        return stats
+
+
+def detections_for_agent(
+    agent_data,
+    sensor_data: dict[str, NDArray],
+    specs: dict[str, RaySensorSpec],
+    world,
+    inst_desc: FloatArray,
+    id_offset: int,
+    params: FrontEndParams,
+    rng: np.random.Generator,
+) -> tuple[list[list[Detection]], dict]:
+    """Detections per keyframe for one agent over a whole recording, and front-end statistics
+    (:class:`AgentFrontEnd` keyframe by keyframe). With the EKF tracker a detection is kept if
+    its landmark is released by the end of the run; online, a front-end can only wait a fixed
+    number of keyframes (``frontend_live``)."""
+    fe = AgentFrontEnd(agent_data, specs, world, inst_desc, id_offset, params, rng)
+    out = [
+        fe.step(k, {s: sensor_data[s][k] for s in specs}) for k in range(len(agent_data.keyframes))
+    ]
+    stats = fe.final_stats()
     if params.tracking in ("ekf", "ekf_truth"):
-        # Detections are released once their landmark has proved static (a delay of
-        # ``confirm_frames`` keyframes online; applied after the pass here).
         n_before = sum(len(d) for d in out)
-        out = [[d for d in dets if ekf.released(d.part_index - id_offset)] for dets in out]
+        out = [[d for d in dets if fe.released(d)] for dets in out]
         stats["unreleased"] = n_before - sum(len(d) for d in out)
-        status = ekf._status[: ekf.n_landmarks]
-        stats["tracks"] = sum(ekf.released(j) for j in range(ekf.n_landmarks))
-        stats["landmarks_confirmed"] = int(np.sum(status == CONFIRMED))
-        stats["landmarks_bad"] = int(np.sum(status == BAD))
-        stats["registrations"] = ekf.n_updates
-        stats["dropped_ambiguous"] = ekf.n_dropped
-    else:
-        stats["tracks"] = len(tracker.tracks)
-        stats["registrations"] = tracker.n_registrations
-        stats["dropped_ambiguous"] = tracker.n_dropped
-    stats["ambiguous_registrations"] = tracker.n_ambiguous
     return out, stats
 
 
 __all__ = [
+    "AgentFrontEnd",
     "Cluster",
     "FrontEndParams",
     "Tracker",
