@@ -12,6 +12,8 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/FrameAlignment.msg"
   "msg/EncodedPacket.msg"
   "msg/RangeMeasurement.msg"
+  "msg/Detection.msg"
+  "msg/Keyframe.msg"
   DEPENDENCIES std_msgs geometry_msgs
 )
 

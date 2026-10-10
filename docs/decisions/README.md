@@ -15,6 +15,6 @@ accepted ADRs, except to add a "Superseded by" line.
 | [0007](ADR-0007-tier2-kinematic-rigs.md) | Tier 2 v0: kinematic sensor rigs and a ray-cast sonar proxy (amends 0003) | Accepted (v0) |
 | [0008](ADR-0008-tier2-docker-dave-sonar.md) | Tier 2 v1: recording in Docker and DAVE's multibeam sonar (amends 0007) | Proposed |
 | [0009](ADR-0009-rclpy-sim-nodes.md) | Python (`rclpy`) agent nodes for simulation experiments (amends AGENTS.md §2) | Accepted |
-| [0010](ADR-0010-ros2-sim-pipeline.md) | The ROS 2 simulation pipeline: keyframes as messages, a lockstep clock | Proposed |
+| [0010](ADR-0010-ros2-sim-pipeline.md) | The ROS 2 simulation pipeline: keyframes as messages, free-running time | Accepted (amended) |
 
 Template: copy `ADR-template.md`.

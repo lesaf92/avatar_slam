@@ -7,7 +7,7 @@ underwater robot teams.*
 |---|---|
 | **PI / sole confirmed author** | Luiz Eugenio Santos Araujo Filho, ITA (repository owner) |
 | **Started** | 2026-09-28 |
-| **Plan version** | v2.12 (update the version and the changelog at the bottom whenever you change scope) |
+| **Plan version** | v2.13 (update the version and the changelog at the bottom whenever you change scope) |
 | **Goal** | A journal paper accepted at **IEEE RA-L or T-RO** (PI decision D1), with open code and an open benchmark |
 | **Reference fleet** | Husky UGV · Tarot 680 UAV · BlueROV2 UUVs · surface gateway ([`hardware.md`](hardware.md), ADR-0006) |
 
@@ -326,7 +326,7 @@ same files: S2, X2, C2, C3, B2, R1, P2.
 | D15 | Estimate the odometry's translation (DVL) and gyro scale errors by default (`model_odometry_scale`, T-X1-04) | Keep them unmodelled (today: a model-mismatch stress), or estimate them as the heading bias (D9), with priors from the platform spec | **Decided (PI, 2026-10-07): estimate them by default** (`model_odometry_scale = True`); all paper data regenerated (LOG L48); the estimator without them stays as a model-mismatch ablation in the drift paragraph (`drift_anchored_noscale.csv`). Evidence (LOG L46): team ATE −34 % decentralized / −22 % oracle on `fleet_transit_anchored`, −10 % / −8 % on `fleet_default` |
 | D16 | Acoustic network with the M64 (LOG L49): an M64 syncs with one other modem (roles `a`/`b` per channel), so the simulated shared channel of two BlueROV2s and the gateway may not exist | A bench test with three modems first (T-H1-04); if they only work in pairs, a second M64 at the gateway (one channel per BlueROV2, BlueROV2-to-BlueROV2 traffic relayed), or the X150 as the primary modem | **Decided (PI, 2026-10-08): bench-test three M64s first** (T-H1-04), then buy the gateway's modems and model what the test shows (T-C6-02) |
 | D17 | A larger development set for the Ping360 fleet (LOG L54): on seeds 0-19 the sonar tracker is 3 runs from ground-truth ids, within the noise of a 20-seed count, so it cannot be tuned there; the held-out seeds 20-79 must stay untouched | Record 40 new development seeds (80-119) for the Ping360 fleet (about two hours) and tune on 0-19 + 80-119, held out once on 20-79; or leave the tracker as is and report the gap | **Decided (PI, 2026-10-09): leave the tracker as it is and report the gap** (no new seeds; the paper's discussion states the gap to ground-truth tracks, 44 against 53/60 held out with the Ping360) |
-| D18 | The ROS 2 simulation pipeline (ADR-0010): where agent nodes get keyframes, how simulated time advances | A `Keyframe` message (contract v0.2) with a replay front-end first, and a lockstep clock so the ROS 2 pipeline must match the offline one run by run; or agents read their keyframes from the run's files and time runs free (parity only statistical) | **Open (PI).** Recommendation: ADR-0010 as proposed (the message is the front-end → backbone interface the robots need; an exact parity test catches bugs a ±2-run count cannot) |
+| D18 | The ROS 2 simulation pipeline (ADR-0010): where agent nodes get keyframes, how simulated time advances | A `Keyframe` message (contract v0.2) with a replay front-end first, and a lockstep clock so the ROS 2 pipeline must match the offline one run by run; or agents read their keyframes from the run's files and time runs free (parity only statistical) | **Decided (PI, 2026-10-10):** the `Keyframe` message (as proposed) and **free-running time** (closer to real robots): parity with the offline pipeline is statistical. ADR-0010 accepted with that change |
 
 ## 10. Joint project with `heterogeneous_slam` and goals (2026-10-06)
 
@@ -356,7 +356,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 
 | # | Specific goal | Measure | Due | Tasks |
 |---|---|---|---|---|
-| G-1 | No work on one disk only | Every task branch on GitHub, CI green on the open PR, the sonar recordings (`results/tier2/*/sonar.npz`, 2.9 GB, not bit-reproducible) copied off the host | 2026-10-07 | T-I1-07 |
+| G-1 | No work on one disk only | Every task branch on GitHub, CI green on the open PR, the sonar recordings (`results/tier2*/*/sonar*.npz`, not bit-reproducible) stay in `results/` on the host (PI, 2026-10-10: the disk has room) | 2026-10-07 | T-I1-07 |
 | G-2 | Held-out results understood | The cause of the fresh-seed G1 gap named; a recommendation for D13 | 2026-10-20 | T-E3-02 |
 | G-3 | Realistic sonar front-end | DAVE sonar with the EKF tracker: G1 ≥ 16/20 development seeds, then one held-out evaluation | 2026-10-31 (M1) | T-F3-06 |
 | G-4 | H2 settled | Bandwidth and loss sweep (100 bit/s to 10 kbit/s) in `paper/data`; H2 kept, reworded or dropped. **Settled (PI, 2026-10-07): H2 reworded** (RQ2 row; LOG L47) | 2026-10-31 (M1) | T-C2-01, T-C5-01 |
@@ -368,6 +368,7 @@ T-RO (≈ 2027-11), with open code and an open benchmark.
 
 ## 11. Changelog
 
+- **v2.13 (2026-10-10).** D18 decided (ADR-0010 accepted: `Keyframe` message, free-running time); G-1: the recordings stay on the host; T-S3-02 unblocked.
 - **v2.12 (2026-10-09).** T-S3-01 (LOG L55): the ROS 2 comm emulator; the runner's exchange factored for nodes; ADR-0010 proposed (D18), task T-S3-02.
 - **v2.11 (2026-10-09).** D17 decided: the sonar tracker stays as it is and the paper reports its gap to ground-truth tracks; T-F3-09 closed.
 - **v2.10 (2026-10-08).** T-F3-08 negative (L53: clutter is not the tracker's problem); L54: the sonar tracker with the Ping360 loses 3 development runs to ground-truth ids, too few to tune on; new decision D17 (a larger development set), task T-F3-09.
