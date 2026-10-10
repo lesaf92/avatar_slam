@@ -15,28 +15,20 @@ seed the losses are those of the Tier-1 run that sent the same packets (``test/`
         -p scenario_args:="{acoustic: m64}" -p use_sim_time:=true
 
 Parameters: ``scenario`` (default ``harbor_fleet``), ``scenario_args`` (a YAML mapping, as the
-``args`` of ``experiments/scenarios/*.yaml``), ``seed``, ``duration_s``.
+``args`` of ``experiments/scenarios/*.yaml``), ``seed``, ``duration_s``; or ``run_dir``, a Tier-2
+recording (``avatar_sim.common.scenario_of``).
 """
 
 from __future__ import annotations
 
 import rclpy
-import yaml
 from avatar_msgs.msg import EncodedPacket
 from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
 from rosgraph_msgs.msg import Clock
 
-from avatar.agent import AvatarParams
-from avatar.runner import make_network, make_sim
+from avatar.runner import make_network
 from avatar.types import LinkType
-
-# Reliable and deep: a dropped tx message would be a loss the channel model did not draw.
-QOS = QoSProfile(depth=10_000, reliability=ReliabilityPolicy.RELIABLE)
-
-
-def seconds(stamp) -> float:
-    return stamp.sec + 1e-9 * stamp.nanosec
+from avatar_sim.common import QOS, scenario_of, seconds, set_stamp
 
 
 class CommEmulator(Node):
@@ -44,11 +36,7 @@ class CommEmulator(Node):
 
     def __init__(self, **kwargs) -> None:
         super().__init__("comm_emulator", **kwargs)
-        name = self.declare_parameter("scenario", "harbor_fleet").value
-        args = yaml.safe_load(self.declare_parameter("scenario_args", "{}").value) or {}
-        seed = int(self.declare_parameter("seed", 0).value)
-        duration = float(self.declare_parameter("duration_s", 600.0).value)
-        scenario, sim = make_sim(name, seed, duration, AvatarParams(), **args)
+        scenario, sim, seed = scenario_of(self)
         self.net = make_network(scenario, sim, seed)
         self.received = 0
         self.dropped = 0  # transmissions the scenario does not allow (no such link, too long)
@@ -71,9 +59,7 @@ class CommEmulator(Node):
     def _on_clock(self, msg: Clock) -> None:
         for d in self.net.pop_until(seconds(msg.clock)):
             out = EncodedPacket()
-            t = float(d.t_arrival)
-            out.header.stamp.sec = int(t)
-            out.header.stamp.nanosec = round((t - int(t)) * 1e9) % 10**9
+            set_stamp(out.header.stamp, d.t_arrival)
             out.sender_id = d.sender
             out.link_type = int(d.link_type)
             out.payload = list(d.payload)
