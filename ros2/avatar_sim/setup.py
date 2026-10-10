@@ -21,6 +21,7 @@ setup(
             "sim_clock = avatar_sim.sim_clock:main",
             "sensor_replay = avatar_sim.sensor_replay:main",
             "frontend_live = avatar_sim.frontend_live:main",
+            "gazebo_rigs = avatar_sim.gazebo_rigs:main",
         ]
     },
 )

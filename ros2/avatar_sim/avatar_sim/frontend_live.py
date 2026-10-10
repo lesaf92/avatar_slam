@@ -21,9 +21,9 @@ from rclpy.node import Node
 from sensor_msgs.msg import Image
 
 from avatar.sim.measurements import KeyframeData
-from avatar.tier2.dataset import TRACK_ID_STRIDE, load_meta
+from avatar.tier2.dataset import TRACK_ID_STRIDE
 from avatar.tier2.frontend import AgentFrontEnd, FrontEndParams, LateRelease
-from avatar.tier2.sdf import GZ_SENSORS
+from avatar.tier2.sdf import GZ_SENSORS, rig_sensors
 from avatar_sim.common import QOS, image_array, keyframe_msg, scenario_of, seconds
 
 
@@ -31,12 +31,11 @@ class FrontendLive(Node):
     def __init__(self, **kwargs) -> None:
         super().__init__("frontend_live", **kwargs)
         scenario, sim, seed = scenario_of(self)
-        run_dir = self.get_parameter("run_dir").value
         tracking = self.get_parameter("tracking").value
         name = self.declare_parameter("agent", "").value
         aid = next(a.agent_id for a in scenario.agents if a.name == name)
         self.ad = sim.agents[aid]
-        sensors = load_meta(run_dir)["rigs"][name]
+        sensors = rig_sensors(scenario)[name]
         fe = AgentFrontEnd(
             self.ad, {s: GZ_SENSORS[s] for s in sensors}, sim.world, sim.instance_descriptors,
             len(sim.world.parts) + TRACK_ID_STRIDE * (aid + 1), FrontEndParams(tracking=tracking),

@@ -2,7 +2,8 @@
 """The team in ROS 2 against the offline pipeline, seed by seed (T-S3-02, ADR-0010, goal G-5).
 
 For each seed, ``ros2 launch avatar_sim replay.launch.py`` runs the team (one process per node,
-free-running clock; ``--live``: those agents' front-ends run live on the sensor frames, T-S3-03)
+free-running clock; ``--live``: those agents' front-ends run live on the sensor frames, rendered
+by Gazebo with ``--gazebo``, T-S3-03)
 on a Tier-2 recording (``--runs``, ``--tracking``, ``--sonar``) or on a Tier-1
 scenario (``--runs ''``); the anchor's estimate of every robot's frame gives gate G1 (frame error
 below 1 m). The offline decentralized run on the same seed and detections gives the reference.
@@ -83,6 +84,8 @@ def run_one(args, seed: int, domains: queue.Queue) -> dict:
         launch.append(f"sonar:={args.sonar}")
     if args.live:
         launch.append(f"live:={args.live}")
+    if args.gazebo:
+        launch.append("gazebo:=true")
     if args.runs:
         launch.append(f"run_dir:={Path(args.runs) / f'harbor_fleet_seed{seed}'}")
     else:
@@ -127,6 +130,7 @@ def main() -> None:
     ap.add_argument("--tracking", default="oracle")
     ap.add_argument("--sonar", default="")
     ap.add_argument("--live", default="", help="agents with a live front-end, e.g. ugv_0,uav_0")
+    ap.add_argument("--gazebo", action="store_true", help="their frames rendered live by Gazebo")
     ap.add_argument("--scenario-args", type=json.loads, default={}, help="Tier 1, as JSON")
     ap.add_argument("--duration", type=float, default=600.0, help="Tier 1")
     ap.add_argument("--seeds", type=int, nargs="+", default=list(range(20)))
@@ -143,6 +147,7 @@ def main() -> None:
     with ThreadPoolExecutor(args.jobs) as ex:
         futs = [ex.submit(run_one, args, s, domains) for s in args.seeds]
         rows = [{"commit": rev, "tracking": args.tracking, "sonar": args.sonar, "live": args.live,
+                 "gazebo": args.gazebo,
                  **f.result()} for f in futs]  # fmt: skip
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
