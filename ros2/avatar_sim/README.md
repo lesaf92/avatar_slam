@@ -11,6 +11,7 @@ Simulation-only ROS 2 nodes of Avatar SLAM: thin `rclpy` wrappers around `avatar
 | `gateway_node` | its `rx`, `/clock` | `/avatar/comm/tx` | The quay-side relay (`avatar.runner.gateway_packets`) |
 | `sim_clock` | — | `/clock` | Free-running clock (simulated seconds per wall second); starts once every node listens |
 | `sensor_replay` (T-S3-03) | `/clock` | `/avatar/<agent>/<sensor>/image` | A Tier-2 recording's LiDAR scans and depth images as `32FC1` `sensor_msgs/Image`, like a rosbag |
+| `gazebo_rigs` (T-S3-03) | `/clock` | `/avatar/<agent>/<sensor>/image` | The rigs rendered live by Gazebo (the recorder's stream mode in the `avatar-tier2` image, `experiments/gazebo/stream.sh`); needs Docker and a GPU |
 | `frontend_live` | its sensor images | `/avatar/<agent>/keyframe` | The Tier-2 front-end (`AgentFrontEnd`) keyframe by keyframe; detections released late go out as amendments (a `Keyframe` repeating an index) |
 
 ```bash
@@ -20,6 +21,9 @@ ros2 launch avatar_sim replay.launch.py run_dir:=results/tier2/harbor_fleet_seed
 # the Husky and the Tarot with live front-ends on the recorded sensor frames
 ros2 launch avatar_sim replay.launch.py run_dir:=results/tier2/harbor_fleet_seed0 \
     tracking:=ekf live:=ugv_0,uav_0
+# ... rendered live by Gazebo
+ros2 launch avatar_sim replay.launch.py run_dir:=results/tier2/harbor_fleet_seed0 \
+    tracking:=ekf live:=ugv_0,uav_0 gazebo:=true
 # a Tier-1 scenario
 ros2 launch avatar_sim replay.launch.py seed:=1 duration_s:=150.0 \
     scenario_args:="{acoustic: acoustic_generic}"

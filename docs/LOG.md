@@ -5,6 +5,48 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-10 (luiz-predator-neo, evening): Gazebo rendering live for ROS 2 (Claude)
+
+Branch `wp/T-S3-03-live-frontend`; task T-S3-03 (G-5); **simulation (Tier 2, rendered live)**.
+At `c0e8a8f`: `python experiments/ros2_parity.py --ws <install> --runs results/tier2 --tracking
+ekf --live ugv_0,uav_0 --gazebo --seeds 0 ... 19 --jobs 4 --rate 5`
+(`results/ros2_parity_gazebo.csv`).
+
+### L58. The Gazebo rigs render live on the ROS 2 clock and give the recorded frames
+
+**Stream mode.** `gz_recorder` gains a stream mode: after "RDY", each keyframe's rig poses
+come in on stdin and its frames go out on stdout. It shares the keyframe step (stamp checks,
+four physics steps; L28, L39) with the batch mode. A batch re-recording of Tier-2 seed 0 with
+the new binary is **bit-identical** to the stored one: Gazebo's ray casts are deterministic.
+
+**Node.** `experiments/gazebo/stream.sh` starts Gazebo and the streaming recorder in the
+`avatar-tier2` image. On the host, the node `gazebo_rigs` writes the world and the plan, feeds
+the rigs' ground-truth poses as `/clock` reaches each keyframe, and publishes the frames on the
+image topics `sensor_replay` uses. It subscribes to `/clock` only once Gazebo is up, so the
+clock cannot start without it.
+
+**Checks:**
+- **Frames:** 30 keyframes of seed 0, live, equal the recording at its float16 precision
+  (VLP-16, both D435i).
+- **Parity**, the Husky and the Tarot rendered and processed live (the BlueROV2s on replay):
+
+| | G1 | frame error, ROS 2 − offline |
+|---|---|---|
+| offline | 19/20 | – |
+| ROS 2, recorded frames (L57) | 19/20 | median 0.008 m, at most 0.15 m |
+| **ROS 2, Gazebo live** | **18/20** | median −0.015 m, at most 0.12 m |
+
+**Seed 6.** The one difference ran completely (every keyframe and exchange, no error); the
+anchor never linked `uuv_1`, which offline and on recorded frames it did. The live frames are
+float32, not the recording's float16, and time runs free, so a marginal run can go either way.
+Over the three ROS 2 variants against offline, 3 runs are lost and none gained: the small cost of
+free-running time noted in L56.
+
+**Left for G-5:** the sonar robots live. DAVE renders at about 1.3 s per keyframe, so the clock
+must run below real time.
+
+---
+
 ## 2026-10-10 (luiz-predator-neo, later): live front-ends in ROS 2 (Claude)
 
 Branch `wp/T-S3-03-live-frontend`; task T-S3-03 (G-5; PI 2026-10-10: LiDAR and depth robots
