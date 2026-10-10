@@ -8,6 +8,7 @@ from avatar_msgs.msg import Detection as DetectionMsg
 from avatar_msgs.msg import Keyframe
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import Image
 
 from avatar.agent import AvatarParams
 from avatar.runner import make_sim
@@ -111,3 +112,20 @@ def keyframe_data(m: Keyframe) -> KeyframeData:
         abs_z=m.abs_z if m.has_abs_z else None,
         abs_z_sigma=m.abs_z_sigma if m.has_abs_z else None,
     )
+
+
+def image_msg(arr, t: float) -> Image:
+    """A range scan or depth image [m] as a ``32FC1`` ``sensor_msgs/Image`` (rows, columns as
+    stored: a LiDAR scan is (vertical, horizontal) rays, ``avatar.tier2.rays``)."""
+    a = np.ascontiguousarray(arr, dtype=np.float32)
+    m = Image()
+    set_stamp(m.header.stamp, t)
+    m.height, m.width = a.shape
+    m.encoding, m.is_bigendian, m.step = "32FC1", 0, 4 * a.shape[1]
+    m.data = a.tobytes()
+    return m
+
+
+def image_array(m: Image) -> np.ndarray:
+    """``32FC1`` ``sensor_msgs/Image`` -> (rows, columns) float32."""
+    return np.frombuffer(bytes(m.data), dtype=np.float32).reshape(m.height, m.width)

@@ -758,6 +758,33 @@ class AgentFrontEnd:
         return stats
 
 
+class DelayedRelease:
+    """Online release of a front-end's detections (T-S3-03): keyframe ``k`` leaves once keyframe
+    ``k + delay_kf`` has been processed, with the detections whose landmark is released by then
+    (:meth:`AgentFrontEnd.released`). Offline, :func:`detections_for_agent` waits until the end of
+    the run instead; a landmark released later than ``delay_kf`` keyframes after a detection loses
+    that detection online."""
+
+    def __init__(self, fe: AgentFrontEnd, delay_kf: int) -> None:
+        self.fe, self.delay = fe, delay_kf
+        self._buf: list[tuple[int, list[Detection]]] = []
+
+    def push(self, k: int, dets: list[Detection]) -> list[tuple[int, list[Detection]]]:
+        """Add keyframe ``k``'s detections; returns the keyframes that leave now, in order."""
+        self._buf.append((k, dets))
+        n = sum(1 for kk, _ in self._buf if kk <= k - self.delay)
+        return [self._release(*self._buf.pop(0)) for _ in range(n)]
+
+    def flush(self) -> list[tuple[int, list[Detection]]]:
+        """Every keyframe still held (after the last one)."""
+        out = [self._release(*kd) for kd in self._buf]
+        self._buf = []
+        return out
+
+    def _release(self, k: int, dets: list[Detection]) -> tuple[int, list[Detection]]:
+        return k, [d for d in dets if self.fe.released(d)]
+
+
 def detections_for_agent(
     agent_data,
     sensor_data: dict[str, NDArray],
@@ -787,6 +814,7 @@ def detections_for_agent(
 __all__ = [
     "AgentFrontEnd",
     "Cluster",
+    "DelayedRelease",
     "FrontEndParams",
     "Tracker",
     "detections_for_agent",
