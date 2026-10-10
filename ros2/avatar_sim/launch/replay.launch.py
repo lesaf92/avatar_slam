@@ -74,8 +74,10 @@ def _nodes(context):
             nodes += [
                 Node(package="avatar_sim", executable="frontend_replay", name=f"frontend_{ag.name}",
                      parameters=[common, {"agent": ag.name}]),
+                # the last solve of a large map takes seconds: let it end before SIGTERM
                 Node(package="avatar_sim", executable="agent_node", name=f"agent_{ag.name}",
-                     parameters=[common, {"agent": ag.name, "out": out, "end_s": end_s}]),
+                     parameters=[common, {"agent": ag.name, "out": out, "end_s": end_s}],
+                     sigterm_timeout="60"),
             ]  # fmt: skip
         elif ag.role == "gateway":
             gw = Node(package="avatar_sim", executable="gateway_node", name=f"gateway_{ag.name}",

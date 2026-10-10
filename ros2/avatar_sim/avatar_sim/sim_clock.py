@@ -23,7 +23,7 @@ class SimClock(Node):
         self.step = float(self.declare_parameter("step_s", 0.5).value)
         rate = float(self.declare_parameter("rate", 5.0).value)
         self.stop = float(self.declare_parameter("end_s", 600.0).value) + float(
-            self.declare_parameter("tail_s", 5.0).value
+            self.declare_parameter("tail_s", 30.0).value
         )
         self.subscribers = int(self.declare_parameter("subscribers", 0).value)
         self.t = 0.0

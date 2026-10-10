@@ -88,10 +88,10 @@ class AgentNode(Node):
         self.ag.solve_fused()
 
     def finish(self) -> None:
-        """Last solve; write the estimate (once)."""
+        """Last solve; write the estimate (once). ``done`` is set only once it is written, so a
+        shutdown that interrupts the solve has ``main`` solve and write again."""
         if self.done or self.ag.k < 0:
             return
-        self.done = True
         self._solve()
         if self.out:
             est = {
@@ -107,6 +107,7 @@ class AgentNode(Node):
             }
             Path(self.out).parent.mkdir(parents=True, exist_ok=True)
             Path(self.out).write_text(json.dumps(est))
+        self.done = True
 
 
 def main() -> None:
