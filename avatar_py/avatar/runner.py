@@ -24,6 +24,7 @@ from numpy.typing import NDArray
 
 from avatar.agent import DEFAULT_LINK_RECEIVERS, AvatarAgent, AvatarParams, odometry_states
 from avatar.backend.graph import FactorGraph, VarType
+from avatar.comm.channel import ChannelModel
 from avatar.comm.gateway import Gateway
 from avatar.comm.network import Network
 from avatar.eval.metrics import ate_rmse, frame_error, team_ate
@@ -123,6 +124,71 @@ def link_receivers(scenario: Scenario, sender_id: int) -> dict[LinkType, tuple[D
     return out
 
 
+@dataclass
+class TokenBuckets:
+    """One node's send budget per link: each exchange adds its allowance, and unused bytes carry
+    over, capped at four exchanges' worth (or one MTU)."""
+
+    channels: dict[LinkType, ChannelModel]
+    shares: dict[LinkType, float]  # the node's fraction of each link's bit rate
+    period_s: float
+    carry: dict[LinkType, float] = field(default_factory=dict)
+
+    def budget(self, link: LinkType) -> tuple[float, float]:
+        """This exchange's allowance plus the carry-over, and the cap of the carry-over [B]."""
+        ch = self.channels[link]
+        tick = ch.budget_B(self.period_s, self.shares[link])
+        return tick + self.carry.get(link, 0.0), max(4.0 * tick, float(ch.mtu_B))
+
+
+def _fit(packets: list[bytes], avail: float) -> list[bytes]:
+    """The leading packets whose bytes fit in ``avail``."""
+    out, used = [], 0
+    for pkt in packets:
+        if used + len(pkt) > avail:
+            break
+        out.append(pkt)
+        used += len(pkt)
+    return out
+
+
+def agent_packets(
+    ag: AvatarAgent, buckets: TokenBuckets, t: float, z_now: float
+) -> list[tuple[LinkType, bytes]]:
+    """An agent's packets of one exchange, per link: landmark digests, then frame alignments,
+    within the budget (``z_now``: its depth, which tells it which media it can reach)."""
+    out = []
+    for link in ag.cfg.comm:
+        ch = buckets.channels[link]
+        avail, cap = buckets.budget(link)
+        if not ch.medium_ok(z_now, z_now):
+            # e.g. RF while submerged: the vehicle knows its depth and stays silent; its budget
+            # keeps accruing for the next surfacing window.
+            buckets.carry[link] = min(avail, cap)
+            continue
+        digests = _fit(ag.build_digests(t, link, int(avail), ch.mtu_B), avail)
+        used = sum(map(len, digests))
+        aligns = _fit(ag.build_alignment_messages(t), avail - used)
+        used += sum(map(len, aligns))
+        buckets.carry[link] = min(avail - used, cap)
+        out += [(link, pkt) for pkt in digests + aligns]
+    return out
+
+
+def gateway_packets(
+    gw: Gateway, comm: tuple[LinkType, ...], buckets: TokenBuckets, t: float
+) -> list[tuple[LinkType, bytes]]:
+    """A gateway's relayed packets of one exchange, per link, within the budget."""
+    out = []
+    for link in comm:
+        ch = buckets.channels[link]
+        avail, cap = buckets.budget(link)
+        relayed = _fit(gw.build_packets(t, link, int(avail), ch.mtu_B), avail)
+        buckets.carry[link] = min(avail - sum(map(len, relayed)), cap)
+        out += [(link, pkt) for pkt in relayed]
+    return out
+
+
 def make_network(scenario: Scenario, sim: SimData, seed: int) -> Network:
     """The links of a decentralized run: the scenario's channels and memberships, ground-truth
     positions at keyframe times, losses drawn from ``seed + 20000`` (also the ROS 2 comm
@@ -177,7 +243,12 @@ def run_decentralized(
     gateways = {a.agent_id: Gateway(a.agent_id) for a in scenario.agents if a.role == "gateway"}
     period = params.exchange_period_s
     next_exchange = period
-    carry: dict[tuple[int, LinkType], float] = {}
+    shares = {link: net.share(link) for link in scenario.channels}
+    buckets = {
+        a.agent_id: TokenBuckets(scenario.channels, shares, period)
+        for a in scenario.agents
+        if a.agent_id in agents or a.agent_id in gateways
+    }
     first_align: dict[int, dict[int, float]] = {i: {} for i in agents}
     team_connected_s: float | None = None
     slam_ids = set(agents)
@@ -188,21 +259,6 @@ def run_decentralized(
                 gateways[dlv.receiver].on_packet(dlv.link_type, dlv.payload)
             else:
                 agents[dlv.receiver].on_packet(dlv.payload)
-
-    def budget(node: int, link: LinkType) -> tuple[float, float]:
-        """Token bucket: this tick's allowance plus capped carry-over [B]."""
-        ch = scenario.channels[link]
-        tick = ch.budget_B(period, net.share(link))
-        return tick + carry.get((node, link), 0.0), max(4.0 * tick, float(ch.mtu_B))
-
-    def send_all(t_now: float, node: int, link: LinkType, pkts: list[bytes], avail: float) -> float:
-        used = 0.0
-        for pkt in pkts:
-            if used + len(pkt) > avail:
-                break
-            net.send(t_now, node, link, pkt)
-            used += len(pkt)
-        return used
 
     for k, t in enumerate(times):
         for i, ag in agents.items():
@@ -222,26 +278,11 @@ def run_decentralized(
                 if slam_ids <= set(agents[anchor_id].team_frames(fuse=False)):
                     team_connected_s = float(t)
             for i, ag in agents.items():
-                z_now = float(sim.agents[i].gt[k, 2])
-                for link in ag.cfg.comm:
-                    ch = scenario.channels[link]
-                    avail, cap = budget(i, link)
-                    if not ch.medium_ok(z_now, z_now):
-                        # e.g. RF while submerged: the vehicle knows its depth and stays
-                        # silent; its budget keeps accruing for the next surfacing window.
-                        carry[(i, link)] = min(avail, cap)
-                        continue
-                    digests = ag.build_digests(t, link, int(avail), ch.mtu_B)
-                    used = send_all(t, i, link, digests, avail)
-                    used += send_all(t, i, link, ag.build_alignment_messages(t), avail - used)
-                    carry[(i, link)] = min(avail - used, cap)
+                for link, pkt in agent_packets(ag, buckets[i], t, float(sim.agents[i].gt[k, 2])):
+                    net.send(t, i, link, pkt)
             for g, gw in gateways.items():
-                for link in scenario.agent(g).comm:
-                    ch = scenario.channels[link]
-                    avail, cap = budget(g, link)
-                    relayed = gw.build_packets(t, link, int(avail), ch.mtu_B)
-                    used = send_all(t, g, link, relayed, avail)
-                    carry[(g, link)] = min(avail - used, cap)
+                for link, pkt in gateway_packets(gw, scenario.agent(g).comm, buckets[g], t):
+                    net.send(t, g, link, pkt)
     deliver(float(times[-1]))
     for ag in agents.values():
         ag.solve_local()
