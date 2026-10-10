@@ -10,6 +10,8 @@
   <exec_depend>rclpy</exec_depend>
   <exec_depend>avatar_msgs</exec_depend>
   <exec_depend>rosgraph_msgs</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
   <!-- avatar_py (repository root) must be importable: pip install -e avatar_py, or PYTHONPATH -->
   <exec_depend>python3-numpy</exec_depend>
   <exec_depend>python3-scipy</exec_depend>

@@ -1,6 +1,7 @@
-# ADR-0010: The ROS 2 simulation pipeline: keyframes as messages, a lockstep clock
+# ADR-0010: The ROS 2 simulation pipeline: keyframes as messages, free-running time
 
-- **Status:** Proposed
+- **Status:** Accepted with a change (PI, 2026-10-10): item 1 as proposed; item 2 **free-running time**,
+  closer to real robots, instead of the lockstep clock
 - **Date:** 2026-10-09
 - **Deciders:** PI; proposed by Claude
 
@@ -21,7 +22,7 @@ Agent and gateway nodes come next. Two questions decide their shape:
    fixed order: keyframes, then deliveries up to t, then the exchange at t. ROS 2 nodes run
    concurrently, and Python nodes are not real-time (ADR-0009).
 
-## Decision (proposed)
+## Decision
 1. **A `Keyframe` message** (`avatar_msgs` v0.2): odometry increment and its σ, absolute depth if
    measured, and the detections (body-frame point, σ, medium, class, extent, descriptor, track
    id). It is published by front-end nodes on `/avatar/<agent>/keyframe` and consumed by the
@@ -31,7 +32,12 @@ Agent and gateway nodes come next. Two questions decide their shape:
    front-end computed, so the backbone, the network and the gateway are tested in ROS 2 before
    the front-end itself moves there. A live front-end node (Gazebo sensor topics in, keyframes
    out) follows, and on the robots a C++ front-end publishes the same message.
-2. **A lockstep clock for experiments.** A clock node publishes `/clock` one keyframe at a time
+2. **Free-running time** (the PI's choice, 2026-10-10). A clock node publishes `/clock` at a
+   fixed rate (simulated seconds per wall second), or Gazebo does; every node acts on what has
+   arrived by then, as robots do. Parity with the offline pipeline is statistical: G1 counts and
+   frame errors over the development seeds, not run by run.
+
+   *Proposed, not adopted:* **A lockstep clock for experiments.** A clock node publishes `/clock` one keyframe at a time
    and advances only when every node has reported the step done. Each step has two phases:
    - the emulator's deliveries up to t;
    - then the agents' keyframes and exchange, then the gateways'.
@@ -41,15 +47,17 @@ Agent and gateway nodes come next. Two questions decide their shape:
    are C++.
 
 ## Consequences
-- **New contract:** `avatar_msgs` v0.2 with `Keyframe` and `Detection`, and a step-done message
-  for the lockstep. The C++ side gets the same interface the hardware needs (front-end →
+- **New contract:** `avatar_msgs` v0.2 with `Keyframe` and `Detection` (no step-done message:
+  time runs free). The C++ side gets the same interface the hardware needs (front-end →
   backbone).
-- **Parity becomes an exact test:** the ROS 2 pipeline on seed s must give the offline run's frame
-  errors, which catches ordering and serialization bugs that a statistical comparison would hide.
-- **Cost:** the lockstep makes the pipeline as slow as its slowest node. That's fine for
-  simulation, but its timing says nothing about real robots.
-- **Tasks:** T-S3-02 (agent, gateway and clock nodes; replay front-end; launch file; parity on
-  the development seeds) and T-S2-02 (the fleet in Gazebo) build on this; live front-end nodes
+- **Parity is statistical** (free-running time): the ROS 2 pipeline is compared with the offline
+  one on G1 counts and frame errors over the development seeds. A count that moves by about two
+  runs between the two cannot by itself show a bug (L28, L54), so the comparison also checks the
+  pieces that are deterministic: the comm emulator's replay (L55) and a keyframe round trip.
+- **Timing:** Python nodes are not real-time (ADR-0009). The clock's rate must be low enough that
+  every node keeps up, and timing results stay out of the paper until the nodes are C++.
+- **Tasks:** T-S3-02 (agent, gateway and clock nodes; replay front-end; launch file; statistical
+  parity on the development seeds) and T-S2-02 (the fleet in Gazebo) build on this; live front-end nodes
   follow.
 
 ## Alternatives considered
