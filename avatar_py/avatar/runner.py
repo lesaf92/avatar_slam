@@ -123,6 +123,24 @@ def link_receivers(scenario: Scenario, sender_id: int) -> dict[LinkType, tuple[D
     return out
 
 
+def make_network(scenario: Scenario, sim: SimData, seed: int) -> Network:
+    """The links of a decentralized run: the scenario's channels and memberships, ground-truth
+    positions at keyframe times, losses drawn from ``seed + 20000`` (also the ROS 2 comm
+    emulator's, T-S3-01)."""
+    times = sim.agents[scenario.agents[0].agent_id].times
+
+    def position(agent_id: int, t: float) -> FloatArray:
+        k = int(np.clip(np.searchsorted(times, t, side="right") - 1, 0, len(times) - 1))
+        return sim.agents[agent_id].gt[k, :3]
+
+    return Network(
+        channels=scenario.channels,
+        memberships={a.agent_id: a.comm for a in scenario.agents},
+        position_fn=position,
+        rng=np.random.default_rng(seed + 20_000),
+    )
+
+
 def run_independent(scenario: Scenario, sim: SimData, params: AvatarParams, seed: int) -> RunResult:
     """Single-agent SLAM for every agent (no communication).
 
@@ -155,17 +173,7 @@ def run_decentralized(
     if anchor_id not in agents:
         raise ValueError("the anchor must be a SLAM agent")
     times = sim.agents[scenario.agents[0].agent_id].times
-
-    def position(agent_id: int, t: float) -> FloatArray:
-        k = int(np.clip(np.searchsorted(times, t, side="right") - 1, 0, len(times) - 1))
-        return sim.agents[agent_id].gt[k, :3]
-
-    net = Network(
-        channels=scenario.channels,
-        memberships={a.agent_id: a.comm for a in scenario.agents},
-        position_fn=position,
-        rng=np.random.default_rng(seed + 20_000),
-    )
+    net = make_network(scenario, sim, seed)
     gateways = {a.agent_id: Gateway(a.agent_id) for a in scenario.agents if a.role == "gateway"}
     period = params.exchange_period_s
     next_exchange = period
