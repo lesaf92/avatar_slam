@@ -41,4 +41,8 @@ has the Tarot's problem: under a pose uncertainty of the order of the pile spaci
 cannot separate a mapped pile from a new one, and the duplicates it starts cost loop closures;
 with ground-truth tracks the same images mostly suffice (Sec.~\ref{sec:experiments}). Pairing
 fixes over a window of keyframes admitted more wrong matches than it saved; for the Tarot the
-remedy was a sensor, and a wider or second sonar is the analogue here.
+remedy was a sensor, and a second sonar is the analogue here. With a Ping360 on each BlueROV2
+the filter reaches G1 in \sonarHeldTwoPEKFGOne{} held-out runs, against \sonarHeldTwoPGOne{}
+with ground-truth tracks: the sensor closes part of the gap, and what remains is intra-agent
+association. Tuning the filter for this sensor would need more development missions than the
+twenty used here, so we report the gap rather than tune on the held-out missions.
