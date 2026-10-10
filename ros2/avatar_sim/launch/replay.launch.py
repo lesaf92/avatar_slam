@@ -7,7 +7,8 @@ a gateway node per gateway. Ends when the clock does. Tier 1 (``scenario``, ``sc
 (comma-separated) whose front-end runs live on the recording's sensor frames (``sensor_replay`` ->
 ``frontend_live``, T-S3-03) instead of replaying the offline front-end's output; with
 ``gazebo:=true`` their sensor frames are rendered live by Gazebo (``gazebo_rigs``, needs Docker
-and the ``avatar-tier2`` image) instead of read from the recording.
+and the ``avatar-tier2`` image) instead of read from the recording, and a live robot's DAVE
+sonars by DAVE (``gazebo_sonar``, the ``avatar-dave`` image; T-S3-04).
 
     ros2 launch avatar_sim replay.launch.py run_dir:=results/tier2/harbor_fleet_seed0 \\
         tracking:=ekf rate:=5.0 out_dir:=results/ros2/seed0
@@ -40,6 +41,7 @@ def _nodes(context):
     from avatar.agent import AvatarParams
     from avatar.runner import make_sim
     from avatar.tier2.dataset import load_meta
+    from avatar.tier2.sdf import sonar_rigs
 
     a = {k: LaunchConfiguration(k).perform(context) for k in ARGS}
     if a["run_dir"]:
@@ -67,8 +69,12 @@ def _nodes(context):
     # every node but the clock and the live front-ends listens to /clock: the emulator, a
     # front-end (or a sensor replay) and an agent per SLAM agent, a gateway node per gateway
     n_listen = 1 + sum(2 if g.role == "slam" else 1 for g in scenario.agents)
-    if gazebo and live:  # one gazebo_rigs node for the live agents in place of their replays
-        n_listen += 1 - len(live)
+    # in Gazebo, a live robot with a DAVE sonar has it rendered by gazebo_sonar, the others'
+    # rigs by gazebo_rigs: one node each in place of the live robots' replays
+    sonar_live = {n for n in live if n in sonar_rigs(scenario)} if gazebo else set()
+    rigs_live = live - sonar_live
+    if gazebo and live:
+        n_listen += bool(rigs_live) + bool(sonar_live) - len(live)
     clock_params = {"end_s": end_s, "rate": float(a["rate"]), "subscribers": n_listen}
     clock = Node(package="avatar_sim", executable="sim_clock", name="sim_clock",
                  parameters=[clock_params])  # fmt: skip
@@ -88,9 +94,9 @@ def _nodes(context):
                     nodes.append(Node(package="avatar_sim", executable="sensor_replay",
                                       name=f"sensors_{ag.name}",
                                       parameters=[common, {"agent": ag.name}]))  # fmt: skip
+                fe = {"agent": ag.name, "sonar_live": ag.name in sonar_live}
                 nodes.append(Node(package="avatar_sim", executable="frontend_live",
-                                  name=f"frontend_{ag.name}",
-                                  parameters=[common, {"agent": ag.name}]))  # fmt: skip
+                                  name=f"frontend_{ag.name}", parameters=[common, fe]))  # fmt: skip
             else:
                 nodes.append(
                     Node(package="avatar_sim", executable="frontend_replay",
@@ -106,11 +112,14 @@ def _nodes(context):
             gw = Node(package="avatar_sim", executable="gateway_node", name=f"gateway_{ag.name}",
                       parameters=[common, {"agent": ag.name}])  # fmt: skip
             nodes.append(gw)
-    if gazebo and live:
-        work = f"{a['out_dir']}/gazebo" if a["out_dir"] else f"results/ros2_gazebo/seed{seed}"
+    base = a["out_dir"] or f"results/ros2_gazebo/seed{seed}"
+    if rigs_live and gazebo:
+        rp = {"work_dir": f"{base}/gazebo", "agents": ",".join(sorted(rigs_live))}
         nodes.append(Node(package="avatar_sim", executable="gazebo_rigs", name="gazebo_rigs",
-                          parameters=[common, {"work_dir": work,
-                                               "agents": ",".join(sorted(live))}]))  # fmt: skip
+                          parameters=[common, rp]))  # fmt: skip
+    if sonar_live:
+        nodes.append(Node(package="avatar_sim", executable="gazebo_sonar", name="gazebo_sonar",
+                          parameters=[common, {"work_dir": f"{base}/sonar"}]))  # fmt: skip
     return nodes
 
 

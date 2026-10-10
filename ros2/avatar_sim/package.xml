@@ -11,6 +11,7 @@
   <exec_depend>avatar_msgs</exec_depend>
   <exec_depend>rosgraph_msgs</exec_depend>
   <exec_depend>sensor_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
   <!-- avatar_py (repository root) must be importable: pip install -e avatar_py, or PYTHONPATH -->

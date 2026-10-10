@@ -495,6 +495,60 @@ def sonar_world_sdf(
 """
 
 
+def sonar_pass_plan(
+    scenario: Scenario,
+    gt: dict[str, np.ndarray],
+    n_keyframes: int,
+    warmup_calls: int,
+    timeout_s: float,
+    only: list[str] | None = None,
+    world_name: str = "avatar_sonar",
+) -> tuple[str, dict]:
+    """World SDF and ``sonar_driver.py`` plan of a DAVE sonar pass.
+
+    ``gt``: agent name -> ground-truth poses. The plan lists the models (``rigs``, with their agent
+    and yaw offset in ``models``), the sensors (one per fan) and the poses of the first
+    ``n_keyframes`` keyframes; with ``n_keyframes = 0`` they come one keyframe at a time (the
+    driver's stream mode, the ROS 2 node ``gazebo_sonar``, T-S3-04).
+    """
+    rigs = sonar_rigs(scenario, only)
+    models = sonar_models(scenario, only)
+    if not rigs:
+        raise ValueError("no rig has a DAVE sonar emulation")
+    sensors = [
+        {
+            "key": f"{n}/{fan}",
+            "topic": sensor_topic(n, fan),
+            "raw_bins": DAVE_SONARS[s].raw_range_bins,
+            "beams": DAVE_SONARS[s].image_beams,
+        }
+        for n, ss in rigs.items()
+        for s in ss
+        for fan, _ in DAVE_SONARS[s].fans(s)
+    ]
+    plan = {
+        "world": world_name,
+        "rigs": [m for m, *_ in models],
+        "models": [[m, a, float(yaw)] for m, a, yaw, _ in models],
+        "sensors": sensors,
+        "pool": SONAR_RANGE_POOL,
+        "frames_per_keyframe": SONAR_FRAMES_PER_KEYFRAME,
+        "db_min": SONAR_DB_MIN,
+        "db_max": SONAR_DB_MAX,
+        "timeout_s": timeout_s,
+        "warmup_calls": warmup_calls,  # simulation time before keyframe 0: 2 ms each
+        "poses": [
+            [
+                [*(float(v) for v in gt[a][k][:3]), float(gt[a][k][3] + yaw)]
+                for _, a, yaw, _ in models
+            ]
+            for k in range(n_keyframes)
+        ],
+    }
+    world = sonar_world_sdf(scenario, {n: gt[n][0] for n in rigs}, world_name, only)
+    return world, plan
+
+
 def bridge_yaml(scenario: Scenario, world_name: str) -> str:
     """``ros_gz_bridge`` parameter file: sensor topics (gz → ROS) and world services."""
     lines = []
