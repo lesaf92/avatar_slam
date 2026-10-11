@@ -12,6 +12,7 @@ Simulation-only ROS 2 nodes of Avatar SLAM: thin `rclpy` wrappers around `avatar
 | `sim_clock` | — | `/clock` | Free-running clock (simulated seconds per wall second); starts once every node listens |
 | `sensor_replay` (T-S3-03) | `/clock` | `/avatar/<agent>/<sensor>/image` | A Tier-2 recording's LiDAR scans and depth images as `32FC1` `sensor_msgs/Image`, like a rosbag |
 | `gazebo_rigs` (T-S3-03) | `/clock` | `/avatar/<agent>/<sensor>/image` | The rigs rendered live by Gazebo (the recorder's stream mode in the `avatar-tier2` image, `experiments/gazebo/stream.sh`); needs Docker and a GPU |
+| `gazebo_sonar` (T-S3-04) | `/clock` | `/avatar/<agent>/<sensor>/sonar`, `.../sonar_geometry` (latched) | The BlueROV2s' DAVE sonars rendered live (`sonar_driver.py --stream` in the `avatar-dave` image, `experiments/gazebo/sonar_stream.sh`); `frontend_live sonar_live:=true` reads them; needs Docker and a GPU |
 | `frontend_live` | its sensor images | `/avatar/<agent>/keyframe` | The Tier-2 front-end (`AgentFrontEnd`) keyframe by keyframe; detections released late go out as amendments (a `Keyframe` repeating an index) |
 
 ```bash
