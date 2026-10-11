@@ -45,12 +45,9 @@ from avatar.tier2.sdf import (
     DAVE_SONARS,
     SONAR_DB_MAX,
     SONAR_DB_MIN,
-    SONAR_FRAMES_PER_KEYFRAME,
     SONAR_RANGE_POOL,
-    sensor_topic,
-    sonar_models,
+    sonar_pass_plan,
     sonar_rigs,
-    sonar_world_sdf,
 )
 from avatar.tier2.sonar_image import stitch_fans
 
@@ -81,47 +78,18 @@ def main() -> None:
     names = {a.agent_id: a.name for a in scenario.agents}
     gt = {names[i]: ad.gt for i, ad in sim.agents.items()}
     rigs = sonar_rigs(scenario, args.only)
-    models = sonar_models(scenario, args.only)
     if not rigs:
         raise SystemExit("no rig has a DAVE sonar emulation")
     n_kf = len(next(iter(gt.values())))
     if args.keyframes:
         n_kf = min(n_kf, args.keyframes)
-    sensors = [
-        {
-            "key": f"{n}/{fan}",
-            "topic": sensor_topic(n, fan),
-            "raw_bins": DAVE_SONARS[s].raw_range_bins,
-            "beams": DAVE_SONARS[s].image_beams,
-        }
-        for n, ss in rigs.items()
-        for s in ss
-        for fan, _ in DAVE_SONARS[s].fans(s)
-    ]
     out_path = run / f"{args.name}.npz"
     if out_path.exists():
         out_path.unlink()  # never write through a hard link to another run's recording
-    plan = {
-        "world": WORLD_NAME,
-        "rigs": [m for m, *_ in models],
-        "sensors": sensors,
-        "pool": SONAR_RANGE_POOL,
-        "frames_per_keyframe": SONAR_FRAMES_PER_KEYFRAME,
-        "db_min": SONAR_DB_MIN,
-        "db_max": SONAR_DB_MAX,
-        "timeout_s": args.timeout,
-        "warmup_calls": args.warmup_calls,  # simulation time before keyframe 0: 2 ms each
-        "poses": [
-            [
-                [*(float(v) for v in gt[a][k][:3]), float(gt[a][k][3] + yaw)]
-                for _, a, yaw, _ in models
-            ]
-            for k in range(n_kf)
-        ],
-    }
-    (run / f"{args.name}_world.sdf").write_text(
-        sonar_world_sdf(scenario, {n: gt[n][0] for n in rigs}, WORLD_NAME, args.only)
+    world, plan = sonar_pass_plan(
+        scenario, gt, n_kf, args.warmup_calls, args.timeout, args.only, WORLD_NAME
     )
+    (run / f"{args.name}_world.sdf").write_text(world)
     (run / f"{args.name}_plan.json").write_text(json.dumps(plan))
 
     env = dict(os.environ)

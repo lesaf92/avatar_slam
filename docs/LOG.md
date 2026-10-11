@@ -5,6 +5,69 @@ Newest entries first. Every result gives the command that reproduces it.
 
 ---
 
+## 2026-10-10 (luiz-predator-neo, night): the sonar robots live in ROS 2 (Claude)
+
+Branch `wp/T-S3-04-live-sonar`; task T-S3-04 (G-5); **simulation (Tier 2, rendered live)**.
+At `56a1d6e`: `python experiments/ros2_parity.py --ws <install> --runs results/tier2 --tracking
+ekf --sonar sonar --live ugv_0,uav_0,uuv_0,uuv_1 --gazebo --seeds 0 ... 19 --jobs 4 --rate 1`
+(`results/ros2_parity_sonar_live.csv`).
+
+### L59. With every robot rendered live, DAVE sonar included, the team in ROS 2 passes G1 on 8/20 (offline 11/20, n.s.)
+
+**Stream mode.** `sonar_driver.py --stream` (in the `avatar-dave` image,
+`experiments/gazebo/sonar_stream.sh`) writes each sonar's range and azimuth geometry once, then one
+image of echo-level codes per sensor for each line of poses on stdin. Between keyframes the world
+idles and DAVE may publish, so the stream mode counts a keyframe's frames from just before its
+steps (the batch mode counts from the warm-up). `sonar_pass_plan` (`avatar.tier2.sdf`) builds the
+world and plan for both modes; `record_sonar.py` uses it unchanged.
+
+**Nodes.** The host node `gazebo_sonar` feeds the BlueROV2s' ground-truth poses as `/clock`
+reaches each keyframe and publishes the codes on `/avatar/<agent>/<sensor>/sonar` (`mono8`; a
+Ping360's fans stitched into one turn) and the geometry on a latched `sonar_geometry` topic.
+`frontend_live sonar_live:=true` turns them into sonar images and runs the same front-end as
+offline. `replay.launch.py` starts `gazebo_sonar` for live robots with a DAVE sonar and
+`gazebo_rigs` for the others.
+
+**Checks:**
+- **Plumbing** (`test_live.py`, local only: needs the DAVE recording of seed 0). Recorded codes
+  and geometry published as `gazebo_sonar` does give the direct pass's keyframes and amendments
+  exactly. The images wait for the geometry.
+- **Images.** DAVE is not reproducible run to run, so live codes cannot equal the recording.
+  On the first 40 keyframes of seed 0, blob detections within 0.5 m of the stored recording's:
+
+  | | `uuv_0` | `uuv_1` |
+  |---|---|---|
+  | a fresh batch recording | 74 % | 44 % |
+  | live | 73 % | 48 % |
+
+  The geometry is identical, and so is the number of detections (184 vs 183, 68 vs 69).
+  Live is as close to the stored recording as a second recording is.
+- **Parity.** All four robots processed and rendered live; the Gemini fleet. Every robot
+  processed all 601 keyframes on every seed, and no launch failed.
+
+  | | G1 | lost / gained vs offline |
+  |---|---|---|
+  | offline, stored sonar | 11/20 | – |
+  | ROS 2, replayed front-ends (L56) | 9/20 | 3 / 1 |
+  | **ROS 2, all live** | **8/20** | 4 / 1 (seeds 0, 1, 3, 17 / 13); sign test p = 0.38 |
+
+  Against the replayed front-ends, live loses 2 runs and gains 1 (p = 1). On the 7 runs that
+  pass both, the frame error is a median 0.07 m higher (at most 0.28 m). The runs that fail
+  ran to the end: a BlueROV2 never linked, or linked wrongly. Two Geminis render at about
+  0.5 s per keyframe, so the clock ran at real time.
+
+**Reading.** Rendering the sonar live costs nothing measurable beyond what free-running time
+already costs (L56). The 11 → 8 drop is within the run-to-run spread of a marginal sonar fleet:
+DAVE's images differ between recordings as much as live differs from the stored one. Paired
+tests on 20 seeds cannot separate the two. G-5's pipeline is complete; its gate ("the same G1
+as offline on the same seeds") holds statistically for the LiDAR and depth robots (L57, L58)
+and is not rejected for the sonar fleet.
+
+**Not run:** the Ping360 fleet live. The stitching path is in `gazebo_sonar`, but DAVE renders
+four fans per robot, so the clock must run slower than real time.
+
+---
+
 ## 2026-10-10 (luiz-predator-neo, evening): Gazebo rendering live for ROS 2 (Claude)
 
 Branch `wp/T-S3-03-live-frontend`; task T-S3-03 (G-5); **simulation (Tier 2, rendered live)**.
