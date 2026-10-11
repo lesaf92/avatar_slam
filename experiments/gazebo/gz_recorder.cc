@@ -10,6 +10,12 @@
 //   float32 (little endian). Scan: gz LaserScan ranges (row-major: vertical, horizontal);
 //   depth: R_FLOAT32 image (row-major). +inf = no return.
 //
+// Stream mode (T-S3-03, a ROS 2 node drives it): gz_recorder --stream <plan.txt> <timeout_s>.
+// The plan has n_keyframes = 0 and no poses; once the world is quiescent the recorder writes
+// "RDY\n" to stdout, then for every n_rigs pose lines read from stdin it steps one keyframe and
+// writes the sensors' frames to stdout (float32, sensors in plan order). Ends at end of input.
+// Messages go to stderr.
+//
 // For each keyframe: set every rig pose (/world/<w>/set_pose), step kStepsPerKeyframe
 // physics iterations (/world/<w>/control), and keep, for every sensor, the first message
 // whose sim-time stamp reaches the last iteration. The control service replies
@@ -72,15 +78,93 @@ bool Step(gz::transport::Node& node, const std::string& world, unsigned int step
   return ok && result && rep.data();
 }
 
+const int64_t kStepNs = 1000000;  // physics step of the generated world (1 ms)
+
+// One keyframe: set the rig poses (n_rigs x [x, y, z, yaw]), step, and wait until every sensor
+// has rendered the last iteration; sim_ns advances. False (with a message) on any failure.
+bool StepKeyframe(gz::transport::Node& node, const std::string& world,
+                  const std::vector<std::string>& rigs, const double* poses,
+                  std::vector<std::unique_ptr<Sensor>>& sensors, int64_t& sim_ns,
+                  double timeout_s, size_t k) {
+  // Every sensor must sit at the expected sim time before the keyframe's steps. If the world
+  // ran ahead (a step still queued), the renders of the previous keyframe would already meet
+  // the target below and be stored as this keyframe's (LOG L39).
+  for (auto& s : sensors) {
+    std::lock_guard<std::mutex> lk(s->mu);
+    if (s->stamp_ns != sim_ns) {
+      std::cerr << "gz_recorder: " << s->topic << " stamped " << s->stamp_ns
+                << " ns before keyframe " << k << ", expected " << sim_ns << "\n";
+      return false;
+    }
+  }
+  for (size_t r = 0; r < rigs.size(); ++r) {
+    const double* p = &poses[r * 4];
+    gz::msgs::Pose req;
+    req.set_name(rigs[r]);
+    req.mutable_position()->set_x(p[0]);
+    req.mutable_position()->set_y(p[1]);
+    req.mutable_position()->set_z(p[2]);
+    req.mutable_orientation()->set_x(0.0);
+    req.mutable_orientation()->set_y(0.0);
+    req.mutable_orientation()->set_z(std::sin(0.5 * p[3]));
+    req.mutable_orientation()->set_w(std::cos(0.5 * p[3]));
+    gz::msgs::Boolean rep;
+    bool result = false;
+    if (!node.Request("/world/" + world + "/set_pose", req, 5000, rep, result) || !result ||
+        !rep.data()) {
+      std::cerr << "gz_recorder: set_pose failed for " << rigs[r] << " at keyframe " << k << "\n";
+      return false;
+    }
+  }
+  const int64_t target_ns = sim_ns + kStepsPerKeyframe * kStepNs;
+  if (!Step(node, world, kStepsPerKeyframe)) {
+    std::cerr << "gz_recorder: step failed at keyframe " << k << "\n";
+    return false;
+  }
+  // The render of the last iteration is after the pose update, with margin.
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_s);
+  for (;;) {
+    bool all = true;
+    for (auto& s : sensors) {
+      std::lock_guard<std::mutex> lk(s->mu);
+      all = all && s->stamp_ns >= target_ns;
+    }
+    if (all) break;
+    if (std::chrono::steady_clock::now() > deadline) {
+      std::cerr << "gz_recorder: sensor timeout at keyframe " << k << "\n";
+      return false;
+    }
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  sim_ns = target_ns;
+  for (auto& s : sensors) {
+    std::lock_guard<std::mutex> lk(s->mu);
+    if (s->stamp_ns != target_ns) {  // the world ran ahead of the plan
+      std::cerr << "gz_recorder: " << s->topic << " stamped " << s->stamp_ns << " ns at keyframe "
+                << k << ", expected " << target_ns << "\n";
+      return false;
+    }
+    if (s->data.size() != s->n_values) {
+      std::cerr << "gz_recorder: " << s->topic << " has " << s->data.size()
+                << " values, expected " << s->n_values << "\n";
+      return false;
+    }
+  }
+  return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
+  const bool stream = argc == 4 && std::string(argv[1]) == "--stream";
   if (argc != 4) {
-    std::cerr << "usage: gz_recorder <plan.txt> <out_dir> <timeout_s>\n";
+    std::cerr << "usage: gz_recorder <plan.txt> <out_dir> <timeout_s>\n"
+                 "       gz_recorder --stream <plan.txt> <timeout_s>\n";
     return 2;
   }
-  std::ifstream plan(argv[1]);
-  const std::string out_dir = argv[2];
+  std::ifstream plan(stream ? argv[2] : argv[1]);
+  const std::string out_dir = stream ? "" : argv[2];
   const double timeout_s = std::stod(argv[3]);
   std::string world;
   size_t n_kf = 0, n_rigs = 0, n_sensors = 0;
@@ -169,7 +253,22 @@ int main(int argc, char** argv) {
       return 1;
     }
   }
-  const int64_t step_ns = 1000000;  // physics step of the generated world (1 ms)
+  if (stream) {
+    std::fwrite("RDY\n", 1, 4, stdout);
+    std::fflush(stdout);
+    std::vector<double> pose(n_rigs * 4);
+    for (size_t k = 0;; ++k) {
+      for (auto& v : pose) {
+        if (!(std::cin >> v)) return 0;  // end of input: the run is over
+      }
+      if (!StepKeyframe(node, world, rigs, pose.data(), sensors, sim_ns, timeout_s, k)) return 1;
+      for (auto& s : sensors) {
+        std::lock_guard<std::mutex> lk(s->mu);
+        std::fwrite(s->data.data(), sizeof(float), s->data.size(), stdout);
+      }
+      std::fflush(stdout);
+    }
+  }
 
   std::vector<std::FILE*> files;
   for (size_t i = 0; i < n_sensors; ++i) {
@@ -181,70 +280,10 @@ int main(int argc, char** argv) {
   }
   const auto t_rec = std::chrono::steady_clock::now();
   for (size_t k = 0; k < n_kf; ++k) {
-    // Every sensor must sit at the expected sim time before the keyframe's steps. If the world
-    // ran ahead (a step still queued), the renders of the previous keyframe would already meet
-    // the target below and be stored as this keyframe's (LOG L39).
-    for (auto& s : sensors) {
-      std::lock_guard<std::mutex> lk(s->mu);
-      if (s->stamp_ns != sim_ns) {
-        std::cerr << "gz_recorder: " << s->topic << " stamped " << s->stamp_ns
-                  << " ns before keyframe " << k << ", expected " << sim_ns << "\n";
-        return 1;
-      }
-    }
-    for (size_t r = 0; r < n_rigs; ++r) {
-      const double* p = &poses[(k * n_rigs + r) * 4];
-      gz::msgs::Pose req;
-      req.set_name(rigs[r]);
-      req.mutable_position()->set_x(p[0]);
-      req.mutable_position()->set_y(p[1]);
-      req.mutable_position()->set_z(p[2]);
-      req.mutable_orientation()->set_x(0.0);
-      req.mutable_orientation()->set_y(0.0);
-      req.mutable_orientation()->set_z(std::sin(0.5 * p[3]));
-      req.mutable_orientation()->set_w(std::cos(0.5 * p[3]));
-      gz::msgs::Boolean rep;
-      bool result = false;
-      if (!node.Request("/world/" + world + "/set_pose", req, 5000, rep, result) || !result ||
-          !rep.data()) {
-        std::cerr << "gz_recorder: set_pose failed for " << rigs[r] << " at keyframe " << k << "\n";
-        return 1;
-      }
-    }
-    const int64_t target_ns = sim_ns + kStepsPerKeyframe * step_ns;
-    if (!Step(node, world, kStepsPerKeyframe)) {
-      std::cerr << "gz_recorder: step failed at keyframe " << k << "\n";
+    if (!StepKeyframe(node, world, rigs, &poses[k * n_rigs * 4], sensors, sim_ns, timeout_s, k))
       return 1;
-    }
-    // The render of the last iteration is after the pose update, with margin.
-    const auto deadline =
-        std::chrono::steady_clock::now() + std::chrono::duration<double>(timeout_s);
-    for (;;) {
-      bool all = true;
-      for (size_t i = 0; i < n_sensors; ++i) {
-        std::lock_guard<std::mutex> lk(sensors[i]->mu);
-        all = all && sensors[i]->stamp_ns >= target_ns;
-      }
-      if (all) break;
-      if (std::chrono::steady_clock::now() > deadline) {
-        std::cerr << "gz_recorder: sensor timeout at keyframe " << k << "\n";
-        return 1;
-      }
-      std::this_thread::sleep_for(std::chrono::milliseconds(1));
-    }
-    sim_ns = target_ns;
     for (size_t i = 0; i < n_sensors; ++i) {
       std::lock_guard<std::mutex> lk(sensors[i]->mu);
-      if (sensors[i]->stamp_ns != target_ns) {  // the world ran ahead of the plan
-        std::cerr << "gz_recorder: " << sensors[i]->topic << " stamped " << sensors[i]->stamp_ns
-                  << " ns at keyframe " << k << ", expected " << target_ns << "\n";
-        return 1;
-      }
-      if (sensors[i]->data.size() != sensors[i]->n_values) {
-        std::cerr << "gz_recorder: " << sensors[i]->topic << " has " << sensors[i]->data.size()
-                  << " values, expected " << sensors[i]->n_values << "\n";
-        return 1;
-      }
       std::fwrite(sensors[i]->data.data(), sizeof(float), sensors[i]->data.size(), files[i]);
     }
     if (k % 50 == 0) {

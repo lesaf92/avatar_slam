@@ -55,6 +55,9 @@ class AgentNode(Node):
         self.create_subscription(Clock, "/clock", self._on_clock, QOS)
 
     def _on_keyframe(self, msg: Keyframe) -> None:
+        if msg.index <= self.ag.k:  # an amendment: late detections of an earlier keyframe
+            self.ag.add_detections(msg.index, keyframe_data(msg).detections)
+            return
         if msg.index != self.ag.k + 1:
             self.get_logger().warning(f"keyframe {msg.index} after {self.ag.k}: skipped")
             return

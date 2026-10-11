@@ -298,8 +298,15 @@ class AvatarAgent:
                 self.local.add_between(prev, key, kf.odom, kf.odom_sigmas)
         if kf.abs_z is not None and kf.abs_z_sigma is not None:
             self.local.add_z_prior(key, kf.abs_z, kf.abs_z_sigma)
+        self.add_detections(self.k, kf.detections)
+
+    def add_detections(self, k: int, detections: list) -> None:
+        """Observations of landmark parts from keyframe ``k`` (this one, or an earlier one: a
+        front-end that releases a landmark's detections once it has proved static sends the
+        earlier ones late, ADR-0010)."""
+        key = ("x", k)
         pose = self.local.value(key)
-        for det in kf.detections:
+        for det in detections:
             lid = self.private_landmark_id(det.part_index)
             lkey = ("l", lid)
             if not self.local.has(lkey):
@@ -325,9 +332,9 @@ class AvatarAgent:
             self.local.add_point_obs(key, lkey, det.p_body, det.sigmas)
             meta = self.meta[lid]
             meta.update(det.modality, det.class_id, det.extent, det.descriptor)
-            meta.last_k = self.k
-            if meta.first_k < 0:
-                meta.first_k = self.k
+            meta.last_k = max(meta.last_k, k)
+            if meta.first_k < 0 or k < meta.first_k:
+                meta.first_k = k
 
     # ------------------------------------------------------------------ local solve
     def solve_local(self, with_marginals: bool = True) -> None:

@@ -3,7 +3,11 @@
 One comm emulator, one free-running clock, a replay front-end and an agent node per SLAM agent,
 a gateway node per gateway. Ends when the clock does. Tier 1 (``scenario``, ``scenario_args``,
 ``seed``, ``duration_s``) or a Tier-2 recording (``run_dir``, ``tracking``, ``sonar``); with
-``out_dir`` each agent writes its estimate to ``<out_dir>/<agent>.json``.
+``out_dir`` each agent writes its estimate to ``<out_dir>/<agent>.json``. ``live`` names agents
+(comma-separated) whose front-end runs live on the recording's sensor frames (``sensor_replay`` ->
+``frontend_live``, T-S3-03) instead of replaying the offline front-end's output; with
+``gazebo:=true`` their sensor frames are rendered live by Gazebo (``gazebo_rigs``, needs Docker
+and the ``avatar-tier2`` image) instead of read from the recording.
 
     ros2 launch avatar_sim replay.launch.py run_dir:=results/tier2/harbor_fleet_seed0 \\
         tracking:=ekf rate:=5.0 out_dir:=results/ros2/seed0
@@ -27,6 +31,8 @@ ARGS = {
     "sonar": "",
     "rate": "5.0",
     "out_dir": "",
+    "live": "",
+    "gazebo": "false",
 }
 
 
@@ -54,9 +60,15 @@ def _nodes(context):
         "duration_s": float(a["duration_s"]), "run_dir": a["run_dir"],
         "tracking": a["tracking"], "sonar": a["sonar"],
     }  # fmt: skip
-    # every node but the clock listens to /clock: the emulator, a front-end and an agent per
-    # SLAM agent, a gateway node per gateway
+    live = {s for s in a["live"].split(",") if s}
+    gazebo = a["gazebo"].lower() == "true"
+    if live and not gazebo and not a["run_dir"]:
+        raise RuntimeError("live front-ends need a Tier-2 recording (run_dir) or gazebo:=true")
+    # every node but the clock and the live front-ends listens to /clock: the emulator, a
+    # front-end (or a sensor replay) and an agent per SLAM agent, a gateway node per gateway
     n_listen = 1 + sum(2 if g.role == "slam" else 1 for g in scenario.agents)
+    if gazebo and live:  # one gazebo_rigs node for the live agents in place of their replays
+        n_listen += 1 - len(live)
     clock_params = {"end_s": end_s, "rate": float(a["rate"]), "subscribers": n_listen}
     clock = Node(package="avatar_sim", executable="sim_clock", name="sim_clock",
                  parameters=[clock_params])  # fmt: skip
@@ -71,9 +83,20 @@ def _nodes(context):
     for ag in scenario.agents:
         if ag.role == "slam":
             out = f"{a['out_dir']}/{ag.name}.json" if a["out_dir"] else ""
+            if ag.name in live:
+                if not gazebo:
+                    nodes.append(Node(package="avatar_sim", executable="sensor_replay",
+                                      name=f"sensors_{ag.name}",
+                                      parameters=[common, {"agent": ag.name}]))  # fmt: skip
+                nodes.append(Node(package="avatar_sim", executable="frontend_live",
+                                  name=f"frontend_{ag.name}",
+                                  parameters=[common, {"agent": ag.name}]))  # fmt: skip
+            else:
+                nodes.append(
+                    Node(package="avatar_sim", executable="frontend_replay",
+                         name=f"frontend_{ag.name}", parameters=[common, {"agent": ag.name}])
+                )  # fmt: skip
             nodes += [
-                Node(package="avatar_sim", executable="frontend_replay", name=f"frontend_{ag.name}",
-                     parameters=[common, {"agent": ag.name}]),
                 # the last solve of a large map takes seconds: let it end before SIGTERM
                 Node(package="avatar_sim", executable="agent_node", name=f"agent_{ag.name}",
                      parameters=[common, {"agent": ag.name, "out": out, "end_s": end_s}],
@@ -83,6 +106,11 @@ def _nodes(context):
             gw = Node(package="avatar_sim", executable="gateway_node", name=f"gateway_{ag.name}",
                       parameters=[common, {"agent": ag.name}])  # fmt: skip
             nodes.append(gw)
+    if gazebo and live:
+        work = f"{a['out_dir']}/gazebo" if a["out_dir"] else f"results/ros2_gazebo/seed{seed}"
+        nodes.append(Node(package="avatar_sim", executable="gazebo_rigs", name="gazebo_rigs",
+                          parameters=[common, {"work_dir": work,
+                                               "agents": ",".join(sorted(live))}]))  # fmt: skip
     return nodes
 
 
